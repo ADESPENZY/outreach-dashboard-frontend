@@ -22,7 +22,8 @@ const ProtectedRoute = ({ children }) => {
     }
 
     try {
-      const response = await axios.post('http://127.0.0.1:8000/api/token/refresh/', { refresh });
+      const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
+      const response = await axios.post(`${BASE_URL}/token/refresh/`, { refresh });
       if (response.status === 200) {
         localStorage.setItem("access", response.data.access);
         setIsAuthorized(true);

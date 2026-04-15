@@ -1,55 +1,80 @@
 import { Bell, ChevronDown, HelpCircle, LogOut, User, UserCog } from 'lucide-react';
 import React, { useState } from 'react'
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { getMe } from '@/services/apiBlog';
 
 const Header = () => {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const navigate = useNavigate();
+
+  const { data: me, isLoading } = useQuery({
+    queryKey: ['me'],
+    queryFn: getMe,
+  });
+
+  const fullName = me?.first_name 
+    ? `${me.first_name} ${me.last_name}`.trim() 
+    : me?.username;
+
+  const handleLogout = () => {
+    localStorage.removeItem('access');
+    localStorage.removeItem('refresh');
+    navigate('/', { replace: true });
+  };
 
   return (
-    <header className="bg-white border-b border-gray-200 py-4 px-6 flex items-center justify-between font-roboto">
-        <h1 className="text-xl font-semibold text-black">Dashboard</h1>
-        <div className="flex items-baseline space-x-6">
-            <div className="relative">
-                <button className="text-gray-500 hover:text-gray-700">
-                    <Bell className="w-6 h-6" />
-                    <span className="absolute top-0 right-0 w-2 h-2 rounded-full bg-destructive"></span>
-                </button>
+    <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/85 border-b border-gray-100 py-4 px-8 flex items-center justify-between font-roboto shadow-[0_4px_24px_-8px_rgba(0,0,0,0.05)] transition-all">
+        <h1 className="text-2xl font-bold text-gray-800 tracking-tight font-montserrat">Dashboard</h1>
+        <div className="flex items-center space-x-6">
+            <div className="relative group cursor-pointer">
+                <div className="p-2 rounded-full hover:bg-gray-100 transition-colors duration-200">
+                    <Bell className="w-5 h-5 text-gray-600 group-hover:text-primary-light transition-colors" />
+                    <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-primary-light border-2 border-white"></span>
+                </div>
             </div>
 
             <div className="relative">
             <button
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-                className="flex items-center space-x-2"
+                className="flex items-center space-x-3 p-1.5 rounded-full border border-transparent hover:border-gray-200 hover:bg-gray-50 transition-all duration-300"
             >
-                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                <User className="w-5 h-5" />
+                <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary-dark to-primary-light flex items-center justify-center text-white shadow-md">
+                   <User className="w-5 h-5 drop-shadow-sm" />
                 </div>
-                <span className="text-sm font-medium text-gray-700">Emma Wilson</span>
-                <ChevronDown className="w-4 h-4" />
+                <span className="text-sm font-semibold text-gray-800 tracking-wide">
+                    {isLoading ? "Loading..." : fullName || "Admin"}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400" />
             </button>
+            
             {showProfileDropdown && (
-                <div className="absolute right-0 mt-2 w-48 bg-white shadow-lg rounded-lg overflow-hidden z-10">
+                <div className="absolute right-0 mt-3 w-56 bg-white/95 backdrop-blur-xl border border-gray-100 shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] rounded-xl overflow-hidden z-20 transition-all origin-top-right animate-in fade-in zoom-in-95 duration-200">
+                <div className="px-4 py-3 border-b border-gray-50 bg-gray-50/50">
+                    <p className="text-sm font-medium text-gray-900">{fullName || "Admin"}</p>
+                    <p className="text-xs text-gray-500 truncate">{me?.email || "No email linked"}</p>
+                </div>
                 <NavLink
                     to="/dashboard/profile-settings"
-                    className="flex items-center px-4 py-2 text-sm hover:bg-neutral-dark"
+                    className="flex items-center px-4 py-3 text-sm text-gray-600 hover:text-primary-dark hover:bg-orange-50 transition-colors"
                 >
-                    <UserCog className="w-4 h-4 mr-2" />
+                    <UserCog className="w-4 h-4 mr-3" />
                     Profile Settings
                 </NavLink>
                 <NavLink
                     to="/dashboard/help"
-                    className="flex items-center px-4 py-2 text-sm hover:bg-neutral-dark"
+                    className="flex items-center px-4 py-3 text-sm text-gray-600 hover:text-primary-dark hover:bg-orange-50 transition-colors"
                 >
-                    <HelpCircle className="w-4 h-4 mr-2" />
+                    <HelpCircle className="w-4 h-4 mr-3" />
                     Help & Support
                 </NavLink>
-                <NavLink
-                    to="/logout"
-                    className="flex items-center px-4 py-2 text-sm text-destructive border-t border-gray-100 hover:bg-neutral-dark"
+                <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center px-4 py-3 text-sm text-red-500 border-t border-gray-50 hover:bg-red-50 transition-colors"
                 >
-                    <LogOut className="w-4 h-4 mr-2" />
+                    <LogOut className="w-4 h-4 mr-3" />
                     Sign Out
-                </NavLink>
+                </button>
                 </div>
             )}
             </div>
@@ -58,4 +83,4 @@ const Header = () => {
   );
 };
 
-export default Header
+export default Header;
