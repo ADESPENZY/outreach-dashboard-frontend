@@ -12,8 +12,8 @@ const ProtectedRoute = ({ children }) => {
 
   useEffect(() => {
     authorize().catch(() => setIsAuthorized(false));
-  }, [location]); 
-
+  }, [location]);
+  
   async function refreshToken() {
     const refresh = localStorage.getItem("refresh");
     if (!refresh) {
@@ -22,7 +22,7 @@ const ProtectedRoute = ({ children }) => {
     }
 
     try {
-      const response = await axios.post('https://outreach-dashboard-backend-jmkb.onrender.com/api/token/refresh/', { refresh });
+      const response = await axios.post('http://127.0.0.1:8000/api/token/refresh/', { refresh });
       if (response.status === 200) {
         localStorage.setItem("access", response.data.access);
         setIsAuthorized(true);

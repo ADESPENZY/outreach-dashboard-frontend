@@ -123,12 +123,7 @@ const LoginPage = () => {
             <li>✅ Inbox rotation & warm-up</li>
             <li>✅ Real-time analytics</li>
           </ul>
-          <div className="mt-6">
-            <span className="inline-block text-xs text-gray-500 mb-1">Don't have an account?</span>
-            <a href="/signup" className="text-[#FF5B2E] font-semibold text-sm hover:underline">
-              Create one
-            </a>
-          </div>
+
         </div>
       </div>
     </section>
