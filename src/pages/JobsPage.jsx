@@ -22,6 +22,10 @@ const JobsPage = () => {
     });
     const [scoring, setScoring] = useState(false);
     const [scraping, setScraping] = useState(false);
+    
+    // Pagination states
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
 
     useEffect(() => {
         fetchJobs();
@@ -124,6 +128,16 @@ const JobsPage = () => {
         }
     };
 
+    // Calculate pagination
+    const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const paginatedJobs = filteredJobs.slice(startIndex, startIndex + itemsPerPage);
+
+    // Reset pagination when search or filter changes
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchQuery, filterTab]);
+
     return (
         <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in font-roboto">
             {/* Header section */}
@@ -212,7 +226,7 @@ const JobsPage = () => {
                                     </td>
                                 </tr>
                             ) : (
-                                filteredJobs.map(job => (
+                                paginatedJobs.map(job => (
                                     <tr key={job.id} className="group hover:bg-gray-50/50 transition-colors flex flex-col md:table-row py-3 md:py-0 border-b border-gray-100 md:border-b-0">
                                         <td className="p-4 pl-6 align-top">
                                             <div className="flex items-start gap-4">
@@ -295,6 +309,38 @@ const JobsPage = () => {
                         </tbody>
                     </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {!loading && filteredJobs.length > 0 && (
+                    <div className="border-t border-gray-100 bg-gray-50 p-4 flex flex-col md:flex-row items-center justify-between gap-4">
+                        <span className="text-sm text-gray-500">
+                            Showing <span className="font-medium text-gray-900">{startIndex + 1}</span> to{' '}
+                            <span className="font-medium text-gray-900">
+                                {Math.min(startIndex + itemsPerPage, filteredJobs.length)}
+                            </span>{' '}
+                            of <span className="font-medium text-gray-900">{filteredJobs.length}</span> results
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                                disabled={currentPage === 1}
+                                className="px-3 py-1 border border-gray-200 rounded-lg text-sm bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                            >
+                                Previous
+                            </button>
+                            <span className="text-sm text-gray-600 font-medium px-2">
+                                Page {currentPage} of {totalPages}
+                            </span>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                                disabled={currentPage === totalPages}
+                                className="px-3 py-1 border border-gray-200 rounded-lg text-sm bg-white text-gray-600 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                            >
+                                Next
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Scrape Modal */}
