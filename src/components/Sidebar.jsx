@@ -22,6 +22,7 @@ const Sidebar = () => {
     { name: 'Inboxes', icon: Mail, path: '/dashboard/inboxes' },
     { name: 'Job Tracker', icon: Briefcase, path: '/dashboard/job-tracker' },
     { name: 'Analytics', icon: BarChart, path: '/dashboard/analytics' },
+    { name: 'Jobs', icon: Briefcase, path: '/dashboard/jobs' },
     { name: 'Warmup Manager', icon: Flame, path: '/dashboard/warmup' },
     { name: 'Settings', icon: Settings, path: '/dashboard/settings' },
     { name: 'Connected Accounts', icon: User, path: '/dashboard/connectedAccounts' },
