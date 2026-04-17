@@ -8,6 +8,7 @@ import {
   Flame,
   Settings,
   User,
+  UserCircle,
   Plus,
   MoreHorizontal
 } from 'lucide-react';
@@ -26,6 +27,7 @@ const Sidebar = () => {
     { name: 'Warmup Manager', icon: Flame, path: '/dashboard/warmup' },
     { name: 'Settings', icon: Settings, path: '/dashboard/settings' },
     { name: 'Connected Accounts', icon: User, path: '/dashboard/connectedAccounts' },
+    { name: 'Profile', icon: UserCircle, path: '/dashboard/profile' },
   ];
 
   const { data, isLoading, isError, error } = useQuery({

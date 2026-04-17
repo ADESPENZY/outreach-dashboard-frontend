@@ -106,3 +106,39 @@ export async function patchJobStatus(id, status, subStatus = "") {
 export async function deleteJob(id) {
   await api.delete(`/dashboard/jobs/${id}/delete/`);
 }
+
+// ---------------------------------------------------------------------------
+// User Profile
+// ---------------------------------------------------------------------------
+
+export async function getProfile() {
+  try {
+    const response = await api.get('/dashboard/profile/');
+    return response.data;
+  } catch (err) {
+    if (err.response?.status === 404) return null;
+    throw new Error(err.message);
+  }
+}
+
+export async function createProfile(data) {
+  const response = await api.post('/dashboard/profile/', data);
+  return response.data;
+}
+
+export async function updateProfile(data) {
+  const response = await api.patch('/dashboard/profile/', data);
+  return response.data;
+}
+
+export async function uploadCV(formData) {
+  const response = await api.post('/dashboard/profile/upload-cv/', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return response.data;
+}
+
+export async function extractSkills() {
+  const response = await api.post('/dashboard/profile/extract-skills/');
+  return response.data;
+}
