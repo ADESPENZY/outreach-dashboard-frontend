@@ -10,7 +10,8 @@ import {
   User,
   UserCircle,
   Plus,
-  MoreHorizontal
+  MoreHorizontal,
+  Send
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getGmailAccounts } from '@/services/apiBlog';
@@ -24,6 +25,7 @@ const Sidebar = () => {
     { name: 'Job Tracker', icon: Briefcase, path: '/dashboard/job-tracker' },
     { name: 'Analytics', icon: BarChart, path: '/dashboard/analytics' },
     { name: 'Jobs', icon: Briefcase, path: '/dashboard/jobs' },
+    { name: 'Outreach', icon: Send, path: '/dashboard/outreach' },
     { name: 'Warmup Manager', icon: Flame, path: '/dashboard/warmup' },
     { name: 'Settings', icon: Settings, path: '/dashboard/settings' },
     { name: 'Connected Accounts', icon: User, path: '/dashboard/connectedAccounts' },

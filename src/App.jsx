@@ -11,6 +11,7 @@ import { ToastContainer } from 'react-toastify';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import JobsPage from './pages/JobsPage';
+import OutreachPage from './pages/OutreachPage';
 import ConnectedAccounts from './components/ConnectedAccounts';
 import Onboarding from './pages/Onboarding';
 import ProfilePage from './pages/ProfilePage';
@@ -71,6 +72,7 @@ function App() {
           <Route path="inboxes"           element={<Inboxes />} />
           <Route path="job-tracker"       element={<JobTracker />} />
           <Route path="jobs"              element={<JobsPage />} />
+          <Route path="outreach"          element={<OutreachPage />} />
           <Route path="warmup"            element={<WarmUp />} />
           <Route path="settings"          element={<Settings />} />
           <Route path="connectedAccounts" element={<ConnectedAccounts />} />
