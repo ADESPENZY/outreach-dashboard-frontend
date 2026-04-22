@@ -4,7 +4,7 @@ import {
   Send, Users, FileText, CheckCircle, XCircle, Search,
   Building, Briefcase, Mail, ExternalLink, Loader2, ChevronDown,
   ChevronUp, Sparkles, Eye, Pencil, X, UserCheck, Clock,
-  MailOpen, MessageSquare, AlertCircle
+  MailOpen, MessageSquare, AlertCircle, ShieldCheck
 } from 'lucide-react';
 import api from '../api';
 
@@ -58,6 +58,7 @@ const OutreachPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   // Action states
+  const [hunterQuota, setHunterQuota]         = useState(null);
   const [findingContacts, setFindingContacts] = useState(false);
   const [generatingAll, setGeneratingAll]     = useState(false);
   const [generatingFor, setGeneratingFor]     = useState(null); // job_id
@@ -91,11 +92,18 @@ const OutreachPage = () => {
     } catch { /* handled by empty state */ }
   }, []);
 
+  const fetchHunterQuota = useCallback(async () => {
+    try {
+      const res = await api.get('/api/outreach/hunter-quota/');
+      setHunterQuota(res.data);
+    } catch { /* non-critical */ }
+  }, []);
+
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    await Promise.all([fetchContacts(), fetchDrafts(), fetchSent()]);
+    await Promise.all([fetchContacts(), fetchDrafts(), fetchSent(), fetchHunterQuota()]);
     setLoading(false);
-  }, [fetchContacts, fetchDrafts, fetchSent]);
+  }, [fetchContacts, fetchDrafts, fetchSent, fetchHunterQuota]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -253,6 +261,7 @@ const OutreachPage = () => {
                   onGenerateEmail={handleGenerateEmail}
                   generatingFor={generatingFor}
                   hasEmailForJob={hasEmailForJob}
+                  hunterQuota={hunterQuota}
                 />
               )}
               {activeTab === 'drafts' && (
@@ -292,9 +301,29 @@ const OutreachPage = () => {
 // TAB 1 — CONTACTS
 // ═════════════════════════════════════════════════════════════════════════════
 
-function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, findingContacts, onGenerateEmail, generatingFor, hasEmailForJob }) {
+function HunterQuotaBadge({ quota }) {
+  if (!quota) return null;
+  const { searches_remaining, searches_limit, plan, dry_run } = quota;
+  const color = searches_remaining > 10
+    ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+    : searches_remaining >= 5
+    ? 'bg-amber-50 text-amber-700 border-amber-200'
+    : 'bg-red-50 text-red-600 border-red-200';
+  return (
+    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${color}`}>
+      <ShieldCheck className="w-3.5 h-3.5" />
+      Hunter.io ({plan}): {searches_remaining}/{searches_limit} searches remaining
+      {dry_run && <span className="ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-md text-[10px] font-bold">DRY RUN</span>}
+    </div>
+  );
+}
+
+function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, findingContacts, onGenerateEmail, generatingFor, hasEmailForJob, hunterQuota }) {
   return (
     <div className="space-y-4">
+      {/* Hunter quota badge */}
+      <HunterQuotaBadge quota={hunterQuota} />
+
       {/* Top bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div className="relative w-full md:w-80">
