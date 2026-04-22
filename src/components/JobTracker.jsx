@@ -219,6 +219,13 @@ const JobTracker = () => {
     }
   }
 
+  // Close detail panel on Escape key
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') { setDetailJob(null); setJobModalOpen(false); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Kanban drag-and-drop
   // ---------------------------------------------------------------------------
@@ -385,15 +392,31 @@ const JobTracker = () => {
           Job Detail Side Panel
       ================================================================ */}
       {detailJob && (
-        <div className="fixed inset-y-0 right-0 w-96 bg-white shadow-xl z-20 flex flex-col">
+        <>
+          {/* Backdrop — click anywhere outside to close */}
+          <div
+            className="fixed inset-0 bg-black/30 z-20"
+            onClick={() => setDetailJob(null)}
+          />
+
+          {/* Side panel */}
+          <div className="fixed inset-y-0 right-0 w-96 bg-white shadow-2xl z-30 flex flex-col">
           <div className="p-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-800">Job Details</h3>
             <div className="flex items-center gap-2">
-              <button onClick={() => openEditModal(detailJob)} className="p-1.5 hover:bg-gray-100 rounded-full">
-                <Edit className="w-4 h-4 text-gray-500" />
+              <button
+                onClick={() => openEditModal(detailJob)}
+                className="p-1.5 hover:bg-gray-100 rounded-full text-gray-500 hover:text-gray-800 transition-colors"
+                title="Edit"
+              >
+                <Edit className="w-4 h-4" />
               </button>
-              <button onClick={() => setDetailJob(null)} className="p-1.5 hover:bg-gray-100 rounded-full">
-                <X className="w-5 h-5 text-gray-500" />
+              <button
+                onClick={() => setDetailJob(null)}
+                className="p-1.5 bg-gray-100 hover:bg-red-100 hover:text-red-600 rounded-full text-gray-500 transition-colors"
+                title="Close (Esc)"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
           </div>
@@ -465,8 +488,16 @@ const JobTracker = () => {
             >
               <Trash2 className="w-4 h-4" /> Delete Job
             </button>
+
+            <button
+              onClick={() => setDetailJob(null)}
+              className="w-full py-2 rounded-lg bg-gray-100 text-gray-600 text-sm font-medium hover:bg-gray-200 flex items-center justify-center gap-2 transition-colors"
+            >
+              <X className="w-4 h-4" /> Close
+            </button>
           </div>
         </div>
+        </>
       )}
 
       {/* ================================================================
