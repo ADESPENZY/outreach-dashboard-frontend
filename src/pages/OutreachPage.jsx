@@ -63,6 +63,7 @@ const OutreachPage = () => {
   const [generatingAll, setGeneratingAll]     = useState(false);
   const [generatingFor, setGeneratingFor]     = useState(null); // job_id
   const [approvingId, setApprovingId]         = useState(null);
+  const [sendingId, setSendingId]             = useState(null);
   const [editModal, setEditModal]             = useState(null); // email obj or null
 
   // ── Data fetchers ──────────────────────────────────────────────────────────
@@ -172,8 +173,17 @@ const OutreachPage = () => {
     }
   };
 
-  const handleSendPlaceholder = () => {
-    toast.info('Sending not wired yet — Resend integration coming soon!');
+  const handleSend = async (emailId) => {
+    setSendingId(emailId);
+    try {
+      await api.post(`/api/outreach/emails/${emailId}/send/`);
+      toast.success('Email sent!');
+      fetchSent();
+    } catch (err) {
+      toast.error('Send failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSendingId(null);
+    }
   };
 
   // ── Filtered ───────────────────────────────────────────────────────────────
@@ -277,7 +287,8 @@ const OutreachPage = () => {
               {activeTab === 'sent' && (
                 <SentTab
                   emails={sentEmails}
-                  onSend={handleSendPlaceholder}
+                  onSend={handleSend}
+                  sendingId={sendingId}
                 />
               )}
             </>
@@ -468,7 +479,7 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
 // TAB 3 — APPROVED / SENT
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SentTab({ emails, onSend }) {
+function SentTab({ emails, onSend, sendingId }) {
   return (
     <div className="space-y-4">
       {emails.length === 0 ? (
@@ -483,7 +494,8 @@ function SentTab({ emails, onSend }) {
             <EmailCard
               key={email.id}
               email={email}
-              onSend={onSend}
+              onSend={() => onSend(email.id)}
+              sending={sendingId === email.id}
               showSend={email.status === 'approved'}
               showTimestamps
             />
@@ -498,7 +510,7 @@ function SentTab({ emails, onSend }) {
 // EMAIL CARD (shared between Drafts and Sent tabs)
 // ═════════════════════════════════════════════════════════════════════════════
 
-function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, showSend, showTimestamps }) {
+function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, sending, showSend, showTimestamps }) {
   const [expanded, setExpanded] = useState(false);
 
   const bodyLines = (email.body || '').split('\n');
@@ -596,9 +608,11 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
         {showSend && (
           <button
             onClick={onSend}
-            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-sm hover:from-emerald-600 hover:to-emerald-700 transition-all"
+            disabled={sending}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-sm hover:from-emerald-600 hover:to-emerald-700 transition-all disabled:opacity-60"
           >
-            <Send className="w-3.5 h-3.5" /> Send Email
+            {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+            {sending ? 'Sending...' : 'Send Email'}
           </button>
         )}
       </div>
