@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { toast } from 'react-toastify';
 import {
-  Send, Users, FileText, CheckCircle, XCircle, Search,
-  Building, Briefcase, Mail, ExternalLink, Loader2, ChevronDown,
-  ChevronUp, Sparkles, Eye, Pencil, X, UserCheck, Clock,
-  MailOpen, MessageSquare, AlertCircle, ShieldCheck
+  Send, Users, FileText, CheckCircle, Search,
+  Building, Mail, Loader2, ChevronDown,
+  ChevronUp, Sparkles, Pencil, X, UserCheck,
+  MailOpen, MessageSquare, ShieldCheck
 } from 'lucide-react';
 import api from '../api';
 
@@ -64,6 +64,8 @@ const OutreachPage = () => {
   const [generatingFor, setGeneratingFor]     = useState(null); // job_id
   const [approvingId, setApprovingId]         = useState(null);
   const [sendingId, setSendingId]             = useState(null);
+  const [replyingId, setReplyingId]           = useState(null);
+  const [runningFollowups, setRunningFollowups] = useState(false);
   const [editModal, setEditModal]             = useState(null); // email obj or null
 
   // ── Data fetchers ──────────────────────────────────────────────────────────
@@ -170,6 +172,33 @@ const OutreachPage = () => {
       toast.error('Failed to approve: ' + (err.response?.data?.error || err.message));
     } finally {
       setApprovingId(null);
+    }
+  };
+
+  const handleRunFollowups = async () => {
+    setRunningFollowups(true);
+    try {
+      const res = await api.post('/api/outreach/followups/run/');
+      const d = res.data;
+      toast.success(`Follow-ups: ${d.sent} sent, ${d.errors} errors, ${d.skipped} skipped`);
+      fetchSent();
+    } catch (err) {
+      toast.error('Follow-up run failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setRunningFollowups(false);
+    }
+  };
+
+  const handleMarkReplied = async (emailId) => {
+    setReplyingId(emailId);
+    try {
+      await api.patch(`/api/outreach/emails/${emailId}/mark-replied/`);
+      toast.success('Marked as replied!');
+      fetchSent();
+    } catch (err) {
+      toast.error('Failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setReplyingId(null);
     }
   };
 
@@ -289,6 +318,10 @@ const OutreachPage = () => {
                   emails={sentEmails}
                   onSend={handleSend}
                   sendingId={sendingId}
+                  onMarkReplied={handleMarkReplied}
+                  replyingId={replyingId}
+                  onRunFollowups={handleRunFollowups}
+                  runningFollowups={runningFollowups}
                 />
               )}
             </>
@@ -479,9 +512,34 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
 // TAB 3 — APPROVED / SENT
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SentTab({ emails, onSend, sendingId }) {
+function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFollowups, runningFollowups }) {
+  const dueCount = emails.filter(e =>
+    ['sent', 'opened'].includes(e.status) &&
+    e.next_followup_at &&
+    new Date(e.next_followup_at) <= new Date()
+  ).length;
+
   return (
     <div className="space-y-4">
+      {/* Follow-up action bar */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {dueCount > 0 && (
+            <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-semibold">
+              {dueCount} follow-up{dueCount > 1 ? 's' : ''} due now
+            </span>
+          )}
+        </div>
+        <button
+          onClick={onRunFollowups}
+          disabled={runningFollowups}
+          className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-violet-200 transition-all active:scale-95 disabled:opacity-70"
+        >
+          {runningFollowups ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          {runningFollowups ? 'Sending...' : 'Run Follow-ups'}
+        </button>
+      </div>
+
       {emails.length === 0 ? (
         <EmptyState
           icon={Send}
@@ -497,6 +555,9 @@ function SentTab({ emails, onSend, sendingId }) {
               onSend={() => onSend(email.id)}
               sending={sendingId === email.id}
               showSend={email.status === 'approved'}
+              onMarkReplied={() => onMarkReplied(email.id)}
+              markingReplied={replyingId === email.id}
+              showMarkReplied={['sent', 'opened'].includes(email.status)}
               showTimestamps
             />
           ))}
@@ -510,7 +571,7 @@ function SentTab({ emails, onSend, sendingId }) {
 // EMAIL CARD (shared between Drafts and Sent tabs)
 // ═════════════════════════════════════════════════════════════════════════════
 
-function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, sending, showSend, showTimestamps }) {
+function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, sending, showSend, onMarkReplied, markingReplied, showMarkReplied, showTimestamps }) {
   const [expanded, setExpanded] = useState(false);
 
   const bodyLines = (email.body || '').split('\n');
@@ -536,7 +597,12 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          {email.followup_count > 0 && (
+            <span className="px-2 py-0.5 bg-violet-50 text-violet-600 border border-violet-200 rounded-full text-[10px] font-bold uppercase tracking-wider">
+              Follow-up {email.followup_count}
+            </span>
+          )}
           <StatusBadge status={email.status} />
         </div>
       </div>
@@ -582,6 +648,15 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
               <MessageSquare className="w-3 h-3" /> Replied: {new Date(email.replied_at).toLocaleString()}
             </span>
           )}
+          {email.next_followup_at && !email.replied_at && (
+            <span className={`flex items-center gap-1 text-xs font-medium ${
+              new Date(email.next_followup_at) <= new Date()
+                ? 'text-amber-600'
+                : 'text-gray-400'
+            }`}>
+              ⏰ Follow-up {new Date(email.next_followup_at) <= new Date() ? 'due now' : `due ${new Date(email.next_followup_at).toLocaleDateString()}`}
+            </span>
+          )}
         </div>
       )}
 
@@ -613,6 +688,16 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
           >
             {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
             {sending ? 'Sending...' : 'Send Email'}
+          </button>
+        )}
+        {showMarkReplied && (
+          <button
+            onClick={onMarkReplied}
+            disabled={markingReplied}
+            className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-green-500 to-green-600 rounded-xl shadow-sm hover:from-green-600 hover:to-green-700 transition-all disabled:opacity-60"
+          >
+            {markingReplied ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+            {markingReplied ? 'Marking...' : 'Mark Replied'}
           </button>
         )}
       </div>

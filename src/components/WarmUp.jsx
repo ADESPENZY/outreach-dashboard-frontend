@@ -1,76 +1,103 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Mail, Plus, ChevronDown, MoreHorizontal, User, Download, Settings, Pause, Calendar, Sliders, CheckSquare, XCircle, Send, Flame, MailOpen, FileText, Trash2, Upload, LogOut, HelpCircle, UserCog, Bell
+  Mail, Plus, ChevronDown, MoreHorizontal, Download, Settings, Pause, Play,
+  Calendar, CheckSquare, XCircle, Send, X,
 } from 'lucide-react';
 import * as echarts from 'echarts';
+import api from '../api';
 
 const WarmUp = () => {
+  const [sessions, setSessions] = useState([]);
+  const [statsData, setStatsData] = useState(null);
+  const [availableAccounts, setAvailableAccounts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [togglingId, setTogglingId] = useState(null);
   const [activeTab, setActiveTab] = useState('delivery');
+  const [dateRange, setDateRange] = useState(30);
   const [dateRangeDropdownOpen, setDateRangeDropdownOpen] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(true);
+  const [dailyIncrease, setDailyIncrease] = useState(3);
+  const [newSession, setNewSession] = useState({
+    account_id: '',
+    strategy: 'balanced',
+    initial_daily_limit: 5,
+    max_daily_limit: 50,
+    daily_increase: 3,
+    auto_increase: true,
+  });
+  const [addError, setAddError] = useState('');
+  const [addLoading, setAddLoading] = useState(false);
+
   const dailySendVolumeChartRef = useRef(null);
   const deliveryMetricsChartRef = useRef(null);
-  const [dailyIncrease, setDailyIncrease] = useState(3);
-  const [settingsOpen, setSettingsOpen] = useState(true);
+  const dailyChartInstance = useRef(null);
+  const deliveryChartInstance = useRef(null);
 
-  const dateRangeItems = ['Last 7 Days', 'Last 30 Days', 'Last 90 Days', 'Custom Range'];
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const emailTypes = ['Newsletters', 'Replies', 'Forwards', 'Personal Messages'];
-
-  const emailAccounts = [
-    { email: 'alex.mitchell@gmail.com', status: 'Active', statusColor: 'bg-blue-100', dailyLimit: '25 emails', deliveryRate: '98.2%', spamIncidents: '0', progress: 85 },
-    { email: 'sarah.dev@gmail.com', status: 'Warming Up', statusColor: 'bg-yellow-100', dailyLimit: '12 emails', deliveryRate: '95.7%', spamIncidents: '1', progress: 40 },
-    { email: 'michael.tech@gmail.com', status: 'Active', statusColor: 'bg-blue-100', dailyLimit: '20 emails', deliveryRate: '97.5%', spamIncidents: '0', progress: 75 },
+  const dateRangeOptions = [
+    { label: 'Last 7 Days', value: 7 },
+    { label: 'Last 30 Days', value: 30 },
+    { label: 'Last 90 Days', value: 90 },
   ];
 
-  const analyticsData = {
-    delivery: [
-      { email: 'alex.mitchell@gmail.com', sent: 725, delivered: 712, inbox: '98.2%', spam: '0.3%', bounced: '1.5%', status: 'Healthy', statusColor: 'bg-blue-100 text-blue-800' },
-      { email: 'sarah.dev@gmail.com', sent: 230, delivered: 220, inbox: '95.7%', spam: '2.1%', bounced: '2.2%', status: 'Warming', statusColor: 'bg-yellow-100 text-yellow-800' },
-      { email: 'michael.tech@gmail.com', sent: 542, delivered: 529, inbox: '97.5%', spam: '0.5%', bounced: '2.0%', status: 'Healthy', statusColor: 'bg-blue-100 text-blue-800' },
-    ],
-    engagement: [
-      { email: 'alex.mitchell@gmail.com', openRate: '42.7%', replyRate: '18.3%', clickRate: '5.2%', responseTime: '4.2 hours', status: 'Good', statusColor: 'bg-blue-100 text-blue-800' },
-      { email: 'sarah.dev@gmail.com', openRate: '35.1%', replyRate: '12.5%', clickRate: '3.8%', responseTime: '6.5 hours', status: 'Average', statusColor: 'bg-yellow-100 text-yellow-800' },
-      { email: 'michael.tech@gmail.com', openRate: '40.2%', replyRate: '16.7%', clickRate: '4.9%', responseTime: '3.8 hours', status: 'Good', statusColor: 'bg-blue-100 text-blue-800' },
-    ],
-    reputation: [
-      { email: 'alex.mitchell@gmail.com', domainScore: '9.2/10', spf: 'Pass', dkim: 'Pass', dmarc: 'Pass', status: 'Excellent', statusColor: 'bg-blue-100 text-blue-800' },
-      { email: 'sarah.dev@gmail.com', domainScore: '7.8/10', spf: 'Pass', dkim: 'Pass', dmarc: 'Neutral', status: 'Good', statusColor: 'bg-yellow-100 text-yellow-800' },
-      { email: 'michael.tech@gmail.com', domainScore: '8.9/10', spf: 'Pass', dkim: 'Pass', dmarc: 'Pass', status: 'Excellent', statusColor: 'bg-blue-100 text-blue-800' },
-    ],
-  };
+  // ── data fetching ────────────────────────────────────────────────────────
 
-  const headers = {
-    delivery: ['Email Account', 'Sent', 'Delivered', 'Inbox %', 'Spam %', 'Bounced', 'Status'],
-    engagement: ['Email Account', 'Open Rate', 'Reply Rate', 'Click Rate', 'Avg. Response Time', 'Status'],
-    reputation: ['Email Account', 'Domain Score', 'SPF', 'DKIM', 'DMARC', 'Status'],
-  };
+  const fetchData = useCallback(async () => {
+    try {
+      const [sessRes, statsRes] = await Promise.all([
+        api.get('/api/warmup/sessions/'),
+        api.get(`/api/warmup/stats/?days=${dateRange}`),
+      ]);
+      setSessions(sessRes.data);
+      setStatsData(statsRes.data);
+    } catch (err) {
+      console.error('Failed to load warmup data', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateRange]);
 
   useEffect(() => {
-    // Initialize Daily Send Volume Chart
-    const dailySendVolumeChart = echarts.init(dailySendVolumeChartRef.current);
-    const dailySendVolumeOption = {
+    setLoading(true);
+    fetchData();
+  }, [fetchData]);
+
+  // ── charts ───────────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!statsData || !dailySendVolumeChartRef.current) return;
+
+    const chart = echarts.init(dailySendVolumeChartRef.current);
+    dailyChartInstance.current = chart;
+
+    const dates = statsData.chart_data.map(d => d.date);
+    const sent  = statsData.chart_data.map(d => d.sent);
+    const maxLimit = sessions.length
+      ? Math.max(...sessions.map(s => s.current_daily_limit))
+      : 0;
+    const target = dates.map(() => maxLimit);
+
+    chart.setOption({
       animation: false,
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        backgroundColor: 'rgba(255,255,255,0.9)',
         borderWidth: 1,
         borderColor: '#e5e7eb',
         textStyle: { color: '#1f2937' },
       },
       legend: {
-        data: ['Total Emails', 'Target'],
-        right: 10,
-        top: 0,
+        data: ['Emails Sent', 'Daily Target'],
+        right: 10, top: 0,
         textStyle: { color: '#1f2937' },
       },
       grid: { left: 0, right: 0, top: 30, bottom: 30, containLabel: true },
       xAxis: {
         type: 'category',
-        data: ['Jun 3', 'Jun 10', 'Jun 17', 'Jun 24', 'Jul 1', 'Jul 8', 'Jul 15', 'Jul 22', 'Jul 29'],
+        data: dates,
         axisLine: { lineStyle: { color: '#e5e7eb' } },
-        axisLabel: { color: '#1f2937' },
+        axisLabel: { color: '#1f2937', rotate: dates.length > 14 ? 30 : 0 },
       },
       yAxis: {
         type: 'value',
@@ -81,58 +108,83 @@ const WarmUp = () => {
       },
       series: [
         {
-          name: 'Total Emails',
+          name: 'Emails Sent',
           type: 'line',
           smooth: true,
           showSymbol: false,
-          data: [12, 18, 24, 30, 36, 42, 42, 42, 42],
-          lineStyle: { width: 3, color: 'rgba(87, 181, 231, 1)' },
+          data: sent,
+          lineStyle: { width: 3, color: 'rgba(87,181,231,1)' },
           areaStyle: {
             color: {
-              type: 'linear',
-              x: 0,
-              y: 0,
-              x2: 0,
-              y2: 1,
-              colorStops: [{ offset: 0, color: 'rgba(87, 181, 231, 0.2)' }, { offset: 1, color: 'rgba(87, 181, 231, 0.01)' }],
+              type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+              colorStops: [
+                { offset: 0, color: 'rgba(87,181,231,0.2)' },
+                { offset: 1, color: 'rgba(87,181,231,0.01)' },
+              ],
             },
           },
         },
         {
-          name: 'Target',
+          name: 'Daily Target',
           type: 'line',
           smooth: true,
           showSymbol: false,
-          data: [10, 20, 30, 40, 50, 60, 70, 80, 90],
-          lineStyle: { width: 2, type: 'dashed', color: 'rgba(141, 211, 199, 1)' },
+          data: target,
+          lineStyle: { width: 2, type: 'dashed', color: 'rgba(141,211,199,1)' },
         },
       ],
-    };
-    dailySendVolumeChart.setOption(dailySendVolumeOption);
+    });
 
-    // Initialize Delivery Metrics Chart
-    const deliveryMetricsChart = echarts.init(deliveryMetricsChartRef.current);
-    const deliveryMetricsOption = {
+    const handleResize = () => chart.resize();
+    window.addEventListener('resize', handleResize);
+    return () => {
+      chart.dispose();
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [statsData, sessions]);
+
+  useEffect(() => {
+    if (!statsData || !deliveryMetricsChartRef.current) return;
+
+    const chart = echarts.init(deliveryMetricsChartRef.current);
+    deliveryChartInstance.current = chart;
+
+    const dates = statsData.chart_data.map(d => d.date);
+    const avg   = statsData.summary.avg_delivery_rate;
+
+    // Running delivery rate approximation (flat based on overall)
+    const inboxLine  = dates.map(() => avg);
+    const spamLine   = dates.map(() => parseFloat(
+      statsData.account_stats.length
+        ? statsData.account_stats.reduce((s, a) => s + parseFloat(a.spam_pct), 0) / statsData.account_stats.length
+        : 0
+    ).toFixed(1));
+    const bounceLine = dates.map(() => parseFloat(
+      statsData.account_stats.length
+        ? statsData.account_stats.reduce((s, a) => s + parseFloat(a.bounced_pct), 0) / statsData.account_stats.length
+        : 0
+    ).toFixed(1));
+
+    chart.setOption({
       animation: false,
       tooltip: {
         trigger: 'axis',
-        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+        backgroundColor: 'rgba(255,255,255,0.9)',
         borderWidth: 1,
         borderColor: '#e5e7eb',
         textStyle: { color: '#1f2937' },
       },
       legend: {
         data: ['Inbox Rate', 'Spam Rate', 'Bounce Rate'],
-        right: 10,
-        top: 0,
+        right: 10, top: 0,
         textStyle: { color: '#1f2937' },
       },
       grid: { left: 0, right: 0, top: 30, bottom: 30, containLabel: true },
       xAxis: {
         type: 'category',
-        data: ['Jun 3', 'Jun 10', 'Jun 17', 'Jun 24', 'Jul 1', 'Jul 8', 'Jul 15', 'Jul 22', 'Jul 29'],
+        data: dates,
         axisLine: { lineStyle: { color: '#e5e7eb' } },
-        axisLabel: { color: '#1f2937' },
+        axisLabel: { color: '#1f2937', rotate: dates.length > 14 ? 30 : 0 },
       },
       yAxis: {
         type: 'value',
@@ -145,49 +197,119 @@ const WarmUp = () => {
       series: [
         {
           name: 'Inbox Rate',
-          type: 'line',
-          smooth: true,
-          showSymbol: false,
-          data: [90.2, 92.5, 94.1, 95.3, 96.2, 96.8, 96.9, 97.1, 97.2],
-          lineStyle: { width: 3, color: 'rgba(87, 181, 231, 1)' },
+          type: 'line', smooth: true, showSymbol: false,
+          data: inboxLine,
+          lineStyle: { width: 3, color: 'rgba(87,181,231,1)' },
         },
         {
           name: 'Spam Rate',
-          type: 'line',
-          smooth: true,
-          showSymbol: false,
-          data: [6.5, 4.8, 3.2, 2.5, 1.8, 1.2, 1.1, 0.9, 0.8],
-          lineStyle: { width: 3, color: 'rgba(251, 191, 114, 1)' },
+          type: 'line', smooth: true, showSymbol: false,
+          data: spamLine,
+          lineStyle: { width: 3, color: 'rgba(251,191,114,1)' },
         },
         {
           name: 'Bounce Rate',
-          type: 'line',
-          smooth: true,
-          showSymbol: false,
-          data: [3.3, 2.7, 2.7, 2.2, 2.0, 2.0, 2.0, 2.0, 2.0],
-          lineStyle: { width: 3, color: 'rgba(252, 141, 98, 1)' },
+          type: 'line', smooth: true, showSymbol: false,
+          data: bounceLine,
+          lineStyle: { width: 3, color: 'rgba(252,141,98,1)' },
         },
       ],
-    };
-    deliveryMetricsChart.setOption(deliveryMetricsOption);
+    });
 
-    // Resize charts on window resize
-    const handleResize = () => {
-      dailySendVolumeChart.resize();
-      deliveryMetricsChart.resize();
-    };
+    const handleResize = () => chart.resize();
     window.addEventListener('resize', handleResize);
-
     return () => {
-      dailySendVolumeChart.dispose();
-      deliveryMetricsChart.dispose();
+      chart.dispose();
       window.removeEventListener('resize', handleResize);
     };
-  }, []);
+  }, [statsData]);
+
+  // ── actions ──────────────────────────────────────────────────────────────
+
+  const handleOpenModal = async () => {
+    setAddError('');
+    try {
+      const res = await api.get('/api/warmup/available-accounts/');
+      setAvailableAccounts(res.data);
+      setNewSession({ account_id: res.data[0]?.id || '', strategy: 'balanced', initial_daily_limit: 5, max_daily_limit: 50, daily_increase: 3, auto_increase: true });
+    } catch {
+      setAvailableAccounts([]);
+    }
+    setEmailModalOpen(true);
+  };
+
+  const handleAddAccount = async () => {
+    if (!newSession.account_id) {
+      setAddError('Please select an account.');
+      return;
+    }
+    setAddLoading(true);
+    setAddError('');
+    try {
+      await api.post('/api/warmup/sessions/', newSession);
+      setEmailModalOpen(false);
+      fetchData();
+    } catch (err) {
+      setAddError(err.response?.data?.error || 'Failed to create warmup session.');
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  const handleToggle = async (sessionId) => {
+    setTogglingId(sessionId);
+    try {
+      await api.post(`/api/warmup/sessions/${sessionId}/toggle/`);
+      fetchData();
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleRunWarmup = async () => {
+    setRunning(true);
+    try {
+      await api.post('/api/warmup/run/');
+      fetchData();
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  // ── derived data for analytics table ─────────────────────────────────────
+
+  const analyticsData = {
+    delivery: (statsData?.account_stats || []).map(a => ({
+      email: a.email,
+      sent: a.sent,
+      delivered: a.delivered,
+      inbox: a.inbox_pct,
+      spam: a.spam_pct,
+      bounced: a.bounced_pct,
+      status: a.is_active ? 'Active' : 'Paused',
+      statusColor: a.is_active ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-600',
+    })),
+  };
+
+  const headers = {
+    delivery: ['Email Account', 'Sent', 'Delivered', 'Inbox %', 'Spam %', 'Bounced', 'Status'],
+  };
+
+  const summary = statsData?.summary;
+
+  // ── render ────────────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <main className="flex-1 flex items-center justify-center bg-neutral">
+        <p className="text-gray-500 text-sm">Loading warmup data…</p>
+      </main>
+    );
+  }
 
   return (
     <main className="flex-1 overflow-y-auto p-6 bg-neutral font-roboto">
-      {/* Controls Section */}
+      {/* Controls */}
       <section className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -198,13 +320,21 @@ const WarmUp = () => {
               <input
                 type="text"
                 className="w-full pl-10 pr-4 py-2 border-none bg-white rounded-lg shadow-sm text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
-                placeholder="Search email accounts..."
+                placeholder="Search email accounts…"
               />
             </div>
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setEmailModalOpen(true)}
+              onClick={handleRunWarmup}
+              disabled={running}
+              className="px-3 py-2 text-sm font-medium rounded-button border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 flex items-center whitespace-nowrap disabled:opacity-50"
+            >
+              <Send className="w-4 h-4 mr-1.5" />
+              {running ? 'Sending…' : 'Run Warmup Now'}
+            </button>
+            <button
+              onClick={handleOpenModal}
               className="px-3 py-2 text-sm font-medium rounded-button bg-primary-light hover:bg-primary-light/90 text-white flex items-center whitespace-nowrap"
             >
               <Plus className="w-4 h-4 mr-1.5" />
@@ -213,7 +343,8 @@ const WarmUp = () => {
           </div>
         </div>
       </section>
-      {/* Metrics Section */}
+
+      {/* Metrics */}
       <section className="mb-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
@@ -223,126 +354,149 @@ const WarmUp = () => {
                 <Mail className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">3</p>
-            <div className="flex items-center mt-1">
-              <span className="text-xs text-chart-5 font-medium">+1</span>
-              <span className="text-xs text-gray-500 ml-1">vs last week</span>
-            </div>
+            <p className="text-2xl font-semibold text-gray-800">{summary?.active_sessions ?? 0}</p>
+            <p className="text-xs text-gray-500 mt-1">{summary?.total_sessions ?? 0} total sessions</p>
           </div>
+
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-500">Average Delivery Rate</h3>
+              <h3 className="text-sm font-medium text-gray-500">Avg Delivery Rate</h3>
               <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
                 <CheckSquare className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">96.8%</p>
-            <div className="flex items-center mt-1">
-              <span className="text-xs text-chart-5 font-medium">+2.3%</span>
-              <span className="text-xs text-gray-500 ml-1">vs last week</span>
-            </div>
+            <p className="text-2xl font-semibold text-gray-800">
+              {summary ? `${summary.avg_delivery_rate}%` : '—'}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">across all accounts</p>
           </div>
+
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-500">Spam Score</h3>
+              <h3 className="text-sm font-medium text-gray-500">Bounced</h3>
               <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
                 <XCircle className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">1.2</p>
-            <div className="flex items-center mt-1">
-              <span className="text-xs text-destructive font-medium">-0.5</span>
-              <span className="text-xs text-gray-500 ml-1">vs last week</span>
-            </div>
+            <p className="text-2xl font-semibold text-gray-800">{summary?.bounced ?? 0}</p>
+            <p className="text-xs text-gray-500 mt-1">last {dateRange} days</p>
           </div>
+
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-500">Daily Volume</h3>
+              <h3 className="text-sm font-medium text-gray-500">Sent Today</h3>
               <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                 <Send className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">42</p>
-            <div className="flex items-center mt-1">
-              <span className="text-xs text-chart-5 font-medium">+8</span>
-              <span className="text-xs text-gray-500 ml-1">vs last week</span>
-            </div>
+            <p className="text-2xl font-semibold text-gray-800">{summary?.sent_today ?? 0}</p>
+            <p className="text-xs text-gray-500 mt-1">warmup emails today</p>
           </div>
         </div>
       </section>
-      {/* Email Accounts Section */}
+
+      {/* Account Cards */}
       <section className="mb-8">
         <h2 className="text-lg font-semibold text-gray-800 mb-4">Connected Email Accounts</h2>
-        <div className="flex overflow-x-auto pb-2 space-x-4">
-          {emailAccounts.map((account, index) => (
-            <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 min-w-[300px] flex-shrink-0">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center">
-                  <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 mr-3">
-                    <Mail className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-gray-800">{account.email}</h3>
-                    <div className="flex items-center">
-                      <span className={`w-2 h-2 rounded-full ${account.statusColor} mr-1`}></span>
-                      <span className="text-xs text-gray-500">{account.status}</span>
+        {sessions.length === 0 ? (
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500 text-sm">
+            No warmup sessions yet.{' '}
+            <button onClick={handleOpenModal} className="text-primary-light underline">Add an account</button> to get started.
+          </div>
+        ) : (
+          <div className="flex overflow-x-auto pb-2 space-x-4">
+            {sessions.map(s => (
+              <div key={s.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 min-w-[300px] flex-shrink-0">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center">
+                    <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 mr-3">
+                      <Mail className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-800">{s.email}</h3>
+                      <div className="flex items-center">
+                        <span className={`w-2 h-2 rounded-full mr-1 ${s.is_active ? 'bg-green-400' : 'bg-gray-300'}`}></span>
+                        <span className="text-xs text-gray-500">{s.is_active ? 'Active' : 'Paused'}</span>
+                      </div>
                     </div>
                   </div>
+                  <button className="p-1 rounded hover:bg-gray-100">
+                    <MoreHorizontal className="w-5 h-5 text-gray-500" />
+                  </button>
                 </div>
-                <button className="p-1 rounded hover:bg-gray-100">
-                  <MoreHorizontal className="w-5 h-5 text-gray-500" />
-                </button>
+
+                <div className="space-y-3 mb-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Daily limit:</span>
+                    <span className="text-xs font-medium text-gray-800">{s.current_daily_limit} / {s.max_daily_limit} emails</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Delivery rate:</span>
+                    <span className="text-xs font-medium text-gray-800">{s.delivery_rate}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Strategy:</span>
+                    <span className="text-xs font-medium text-gray-800 capitalize">{s.strategy}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs text-gray-500">Days running:</span>
+                    <span className="text-xs font-medium text-gray-800">{s.days_running}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-1.5">
+                    <div
+                      className={`h-1.5 rounded-full ${s.is_active ? 'bg-blue-500' : 'bg-gray-400'}`}
+                      style={{ width: `${s.progress}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>Progress to max</span>
+                    <span>{s.progress}%</span>
+                  </div>
+                </div>
+
+                <div className="flex space-x-2">
+                  <button className="flex-1 px-3 py-1.5 text-xs font-medium rounded-button bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center whitespace-nowrap">
+                    <Settings className="w-3.5 h-3.5 mr-1" />
+                    Settings
+                  </button>
+                  <button
+                    onClick={() => handleToggle(s.id)}
+                    disabled={togglingId === s.id}
+                    className="flex-1 px-3 py-1.5 text-xs font-medium rounded-button bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center whitespace-nowrap disabled:opacity-50"
+                  >
+                    {s.is_active ? <Pause className="w-3.5 h-3.5 mr-1" /> : <Play className="w-3.5 h-3.5 mr-1" />}
+                    {togglingId === s.id ? '…' : s.is_active ? 'Pause' : 'Resume'}
+                  </button>
+                </div>
               </div>
-              <div className="space-y-3 mb-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Daily limit:</span>
-                  <span className="text-xs font-medium text-gray-800">{account.dailyLimit}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Delivery rate:</span>
-                  <span className="text-xs font-medium text-gray-800">{account.deliveryRate}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500">Spam incidents:</span>
-                  <span className="text-xs font-medium text-gray-800">{account.spamIncidents}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5">
-                  <div className={`bg-${account.statusColor.split('-')[1]}-500 h-1.5 rounded-full`} style={{ width: `${account.progress}%` }}></div>
-                </div>
-              </div>
-              <div className="flex space-x-2">
-                <button className="flex-1 px-3 py-1.5 text-xs font-medium rounded-button bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center whitespace-nowrap">
-                  <Settings className="w-3.5 h-3.5 mr-1" />
-                  Settings
-                </button>
-                <button className="flex-1 px-3 py-1.5 text-xs font-medium rounded-button bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center whitespace-nowrap">
-                  <Pause className="w-3.5 h-3.5 mr-1" />
-                  Pause
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
-      {/* Warmup Progress Section */}
+
+      {/* Charts */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Warmup Progress</h2>
           <div className="relative">
             <button
               onClick={() => setDateRangeDropdownOpen(!dateRangeDropdownOpen)}
-              className="px-3 py-2 text-sm font-medium rounded-button border border-gray-300 bg-white hover:bg-neutral-dark text-gray-700 flex items-center whitespace-nowrap"
+              className="px-3 py-2 text-sm font-medium rounded-button border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 flex items-center whitespace-nowrap"
             >
               <Calendar className="w-4 h-4 mr-1.5" />
-              Last 30 Days
+              Last {dateRange} Days
               <ChevronDown className="w-4 h-4 ml-1.5" />
             </button>
             {dateRangeDropdownOpen && (
               <div className="absolute mt-1 w-40 right-0 bg-white shadow-lg rounded-lg overflow-hidden z-10">
-                {dateRangeItems.map((item, index) => (
-                  <button key={index} className="flex items-center px-4 py-2 text-sm hover:bg-neutral-dark w-full text-left">
+                {dateRangeOptions.map(opt => (
+                  <button
+                    key={opt.value}
+                    onClick={() => { setDateRange(opt.value); setDateRangeDropdownOpen(false); }}
+                    className="flex items-center px-4 py-2 text-sm hover:bg-gray-50 w-full text-left"
+                  >
                     <Calendar className="w-4 h-4 mr-2" />
-                    {item}
+                    {opt.label}
                   </button>
                 ))}
               </div>
@@ -360,12 +514,16 @@ const WarmUp = () => {
           </div>
         </div>
       </section>
-      {/* Settings Panel */}
+
+      {/* Settings */}
       <section className="mb-8">
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between cursor-pointer" onClick={() => setSettingsOpen(!settingsOpen)}>
+          <div
+            className="p-4 border-b border-gray-200 flex items-center justify-between cursor-pointer"
+            onClick={() => setSettingsOpen(!settingsOpen)}
+          >
             <h2 className="text-lg font-semibold text-gray-800">Warmup Settings</h2>
-            <ChevronDown className={`w-6 h-6 text-gray-500 transform ${settingsOpen ? 'rotate-180' : ''}`} />
+            <ChevronDown className={`w-6 h-6 text-gray-500 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
           </div>
           {settingsOpen && (
             <div className="p-6">
@@ -377,11 +535,8 @@ const WarmUp = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Daily Increase Rate</label>
                       <div className="flex items-center">
                         <input
-                          type="range"
-                          min="1"
-                          max="10"
-                          value={dailyIncrease}
-                          onChange={(e) => setDailyIncrease(e.target.value)}
+                          type="range" min="1" max="10" value={dailyIncrease}
+                          onChange={e => setDailyIncrease(e.target.value)}
                           className="flex-1 mr-3"
                         />
                         <span className="text-sm font-medium text-gray-800 min-w-[30px]">{dailyIncrease}</span>
@@ -391,10 +546,7 @@ const WarmUp = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Daily Limit</label>
                       <input
-                        type="number"
-                        min="10"
-                        max="100"
-                        defaultValue="50"
+                        type="number" min="10" max="100" defaultValue="50"
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
                       />
                       <p className="text-xs text-gray-500 mt-1">Maximum emails to send per day</p>
@@ -403,9 +555,9 @@ const WarmUp = () => {
                       <label className="block text-sm font-medium text-gray-700 mb-1">Apply Settings To</label>
                       <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none pr-8">
                         <option value="all">All Email Accounts</option>
-                        <option value="alex">alex.mitchell@gmail.com</option>
-                        <option value="sarah">sarah.dev@gmail.com</option>
-                        <option value="michael">michael.tech@gmail.com</option>
+                        {sessions.map(s => (
+                          <option key={s.id} value={s.id}>{s.email}</option>
+                        ))}
                       </select>
                     </div>
                   </div>
@@ -416,16 +568,11 @@ const WarmUp = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Warmup Schedule</label>
                       <div className="grid grid-cols-7 gap-1">
-                        {days.map((day, index) => (
-                          <div key={index} className="text-center">
+                        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map((day, i) => (
+                          <div key={i} className="text-center">
                             <div className="text-xs text-gray-500 mb-1">{day}</div>
-                            <div className="w-8 h-8 mx-auto rounded-full bg-primary-light/10 flex items-center justify-center cursor-pointer">
-                              <input type="checkbox" defaultChecked className="hidden" id={`day-${day.toLowerCase()}`} />
-                              <label htmlFor={`day-${day.toLowerCase()}`} className="w-full h-full flex items-center justify-center cursor-pointer">
-                                <div className="w-6 h-6 rounded-full bg-primary-light flex items-center justify-center text-white">
-                                  <CheckSquare className="w-4 h-4" />
-                                </div>
-                              </label>
+                            <div className="w-8 h-8 mx-auto rounded-full bg-primary-light flex items-center justify-center">
+                              <CheckSquare className="w-4 h-4 text-white" />
                             </div>
                           </div>
                         ))}
@@ -434,10 +581,10 @@ const WarmUp = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Email Types</label>
                       <div className="space-y-2">
-                        {emailTypes.map((type, index) => (
-                          <div key={index} className="flex items-center">
-                            <input type="checkbox" defaultChecked id={`type-${type.toLowerCase().replace(' ', '-')}`} />
-                            <label htmlFor={`type-${type.toLowerCase().replace(' ', '-')}`} className="ml-2 text-sm text-gray-700">{type}</label>
+                        {['Newsletters', 'Replies', 'Forwards', 'Personal Messages'].map(type => (
+                          <div key={type} className="flex items-center">
+                            <input type="checkbox" defaultChecked id={`type-${type}`} />
+                            <label htmlFor={`type-${type}`} className="ml-2 text-sm text-gray-700">{type}</label>
                           </div>
                         ))}
                       </div>
@@ -454,30 +601,22 @@ const WarmUp = () => {
           )}
         </div>
       </section>
+
       {/* Analytics Table */}
       <section className="mb-8">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-800">Detailed Analytics</h2>
-          <div className="flex items-center">
-            <div className="bg-white rounded-full p-1 flex items-center border border-gray-200 mr-2">
-              <button
-                className={`px-3 py-1 text-sm font-medium rounded-full ${activeTab === 'delivery' ? 'bg-primary-light text-white' : 'text-gray-700 hover:bg-neutral-dark'}`}
-                onClick={() => setActiveTab('delivery')}
-              >
-                Delivery
-              </button>
-              <button
-                className={`px-3 py-1 text-sm font-medium rounded-full ${activeTab === 'engagement' ? 'bg-primary-light text-white' : 'text-gray-700 hover:bg-neutral-dark'}`}
-                onClick={() => setActiveTab('engagement')}
-              >
-                Engagement
-              </button>
-              <button
-                className={`px-3 py-1 text-sm font-medium rounded-full ${activeTab === 'reputation' ? 'bg-primary-light text-white' : 'text-gray-700 hover:bg-neutral-dark'}`}
-                onClick={() => setActiveTab('reputation')}
-              >
-                Reputation
-              </button>
+          <div className="flex items-center gap-2">
+            <div className="bg-white rounded-full p-1 flex items-center border border-gray-200">
+              {['delivery'].map(tab => (
+                <button
+                  key={tab}
+                  className={`px-3 py-1 text-sm font-medium rounded-full capitalize ${activeTab === tab ? 'bg-primary-light text-white' : 'text-gray-700 hover:bg-gray-50'}`}
+                  onClick={() => setActiveTab(tab)}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
             <button className="p-2 text-gray-500 hover:text-gray-700 bg-white rounded-full border border-gray-200">
               <Download className="w-4 h-4" />
@@ -485,90 +624,117 @@ const WarmUp = () => {
           </div>
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  {headers[activeTab].map((header, index) => (
-                    <th key={index} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{header}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {analyticsData[activeTab].map((row, index) => (
-                  <tr key={index}>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-2">
-                          <Mail className="w-5 h-5" />
-                        </div>
-                        <span className="text-sm text-gray-800">{row.email}</span>
-                      </div>
-                    </td>
-                    {Object.values(row).slice(1, -1).map((value, i) => (
-                      <td key={i} className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{value}</td>
+          {analyticsData[activeTab]?.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 text-sm">No data yet. Run a warmup to see stats here.</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    {headers[activeTab].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{h}</th>
                     ))}
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${row.statusColor}`}>{row.status}</span>
-                    </td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {analyticsData[activeTab].map((row, i) => (
+                    <tr key={i}>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 mr-2">
+                            <Mail className="w-5 h-5" />
+                          </div>
+                          <span className="text-sm text-gray-800">{row.email}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{row.sent}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{row.delivered}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{row.inbox}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{row.spam}</td>
+                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-800">{row.bounced}</td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${row.statusColor}`}>{row.status}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </section>
-      {/* Add Email Modal */}
+
+      {/* Add Account Modal */}
       {emailModalOpen && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-30">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h3 className="text-lg font-medium text-gray-800">Add New Email Account</h3>
+              <h3 className="text-lg font-medium text-gray-800">Start Email Warmup</h3>
               <button onClick={() => setEmailModalOpen(false)} className="p-1.5 rounded-full hover:bg-gray-100">
                 <X className="w-5 h-5 text-gray-500" />
               </button>
             </div>
             <div className="p-6">
+              {addError && (
+                <div className="mb-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3">{addError}</div>
+              )}
               <div className="space-y-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
-                    placeholder="Enter your email address"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Provider</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none pr-8">
-                    <option value="gmail">Gmail</option>
-                    <option value="outlook">Outlook</option>
-                    <option value="yahoo">Yahoo</option>
-                    <option value="other">Other</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Initial Daily Limit</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    defaultValue="5"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Recommended to start with 5 emails per day</p>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email Account</label>
+                  {availableAccounts.length === 0 ? (
+                    <p className="text-sm text-gray-500">All connected accounts already have a warmup session.</p>
+                  ) : (
+                    <select
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
+                      value={newSession.account_id}
+                      onChange={e => setNewSession(prev => ({ ...prev, account_id: e.target.value }))}
+                    >
+                      {availableAccounts.map(a => (
+                        <option key={a.id} value={a.id}>{a.email}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">Warmup Strategy</label>
-                  <select className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none pr-8">
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
+                    value={newSession.strategy}
+                    onChange={e => setNewSession(prev => ({ ...prev, strategy: e.target.value }))}
+                  >
                     <option value="conservative">Conservative (Slower, Safer)</option>
                     <option value="balanced">Balanced (Recommended)</option>
                     <option value="aggressive">Aggressive (Faster, Riskier)</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Initial Daily Limit</label>
+                  <input
+                    type="number" min="1" max="20"
+                    value={newSession.initial_daily_limit}
+                    onChange={e => setNewSession(prev => ({ ...prev, initial_daily_limit: parseInt(e.target.value) }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Recommended: start with 5 emails/day</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Maximum Daily Limit</label>
+                  <input
+                    type="number" min="10" max="100"
+                    value={newSession.max_daily_limit}
+                    onChange={e => setNewSession(prev => ({ ...prev, max_daily_limit: parseInt(e.target.value) }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-light focus:ring-opacity-20 focus:outline-none"
+                  />
+                </div>
                 <div className="flex items-center">
-                  <input type="checkbox" id="auto-increase" defaultChecked />
-                  <label htmlFor="auto-increase" className="ml-2 text-sm text-gray-700">Automatically increase daily limit</label>
+                  <input
+                    type="checkbox" id="auto-increase"
+                    checked={newSession.auto_increase}
+                    onChange={e => setNewSession(prev => ({ ...prev, auto_increase: e.target.checked }))}
+                  />
+                  <label htmlFor="auto-increase" className="ml-2 text-sm text-gray-700">
+                    Automatically increase daily limit
+                  </label>
                 </div>
               </div>
               <div className="flex justify-end space-x-2">
@@ -579,10 +745,11 @@ const WarmUp = () => {
                   Cancel
                 </button>
                 <button
-                  onClick={() => setEmailModalOpen(false)}
-                  className="px-4 py-2 text-sm font-medium rounded-button bg-primary-light hover:bg-primary-light/90 text-white whitespace-nowrap"
+                  onClick={handleAddAccount}
+                  disabled={addLoading || availableAccounts.length === 0}
+                  className="px-4 py-2 text-sm font-medium rounded-button bg-primary-light hover:bg-primary-light/90 text-white whitespace-nowrap disabled:opacity-50"
                 >
-                  Add Account
+                  {addLoading ? 'Starting…' : 'Start Warmup'}
                 </button>
               </div>
             </div>
