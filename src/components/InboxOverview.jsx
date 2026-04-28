@@ -57,13 +57,13 @@ const InboxOverview = () => {
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {inboxes.map((inbox, index) => (
-          <div key={index} className="bg-card rounded-lg shadow-sm border border-gray-200 p-5">
+          <div key={index} className="bg-card rounded-lg shadow-sm border border-neutral-dark p-5">
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-sm font-medium text-muted-foreground">{inbox.email}</p>
                 <div className="flex items-center mt-1">
                   <span className={`w-2 h-2 rounded-full ${inbox.statusColor} mr-1.5`}></span>
-                  <span className="text-sm font-medium text-gray-700">{inbox.status}</span>
+                  <span className="text-sm font-medium text-secondary-dark">{inbox.status}</span>
                 </div>
               </div>
               <div className="relative">
@@ -76,7 +76,7 @@ const InboxOverview = () => {
               <div>
                 <p className="text-xs font-medium text-muted-foreground">Daily Quota</p>
                 <p className="text-lg font-semibold text-black mt-1">{inbox.quota}</p>
-                <div className="w-full h-1.5 bg-gray-100 rounded-full mt-2">
+                <div className="w-full h-1.5 bg-neutral-dark rounded-full mt-2">
                   <div className="h-1.5 bg-primary rounded-full" style={{ width: `${inbox.quotaPercent}%` }}></div>
                 </div>
               </div>

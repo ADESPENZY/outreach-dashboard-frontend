@@ -59,17 +59,17 @@ const LoginPage = () => {
                 <span className="text-primary-light">Jato</span>tech
               </h2>
             </div>
-            <h2 className="font-bold text-gray-800 mb-3 ">Nice to see you again</h2>
+            <h2 className="font-bold text-black-light mb-3 ">Nice to see you again</h2>
             <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
               <div>
-                <label htmlFor="username" className="block text-xs font-medium text-gray-700">
+                <label htmlFor="username" className="block text-xs font-medium text-secondary-dark">
                   Username
                 </label>
                 <input
                   type="text"
                   id="username"
                   placeholder="Your Username"
-                  className="w-full mt-2 py-1 px-2 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#FF5B2E]"
+                  className="w-full mt-2 py-1 px-2 text-sm rounded-lg border border-secondary-dark/30 focus:outline-none focus:ring-1 focus:ring-primary-light"
                   {...register("username", { required: "Username is required" })}
                 />
                 {errors?.username?.message && (
@@ -78,14 +78,14 @@ const LoginPage = () => {
               </div>
 
               <div>
-                <label htmlFor="password" className="block text-xs font-medium text-gray-700">
+                <label htmlFor="password" className="block text-xs font-medium text-secondary-dark">
                   Password
                 </label>
                 <input
                   type="password"
                   id="password"
                   placeholder="••••••••"
-                  className="w-full mt-2 py-1 px-2 text-sm rounded-lg border border-gray-300 focus:outline-none focus:ring-1 focus:ring-[#FF5B2E]"
+                  className="w-full mt-2 py-1 px-2 text-sm rounded-lg border border-secondary-dark/30 focus:outline-none focus:ring-1 focus:ring-primary-light"
                   {...register("password", { required: "Password is required" })}
                 />
                 {errors?.password?.message && (
@@ -95,7 +95,7 @@ const LoginPage = () => {
               <button
                 type="submit"
                 disabled={mutation.isPending}
-                className="bg-[#FF5B2E] text-white py-1 rounded-lg font-semibold hover:bg-[#e04b21] transition duration-300 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                className="bg-primary-light text-white py-1 rounded-lg font-semibold hover:bg-primary-dark transition duration-300 flex justify-center items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
               >
                 {mutation.isPending ? (
                   <>
@@ -110,14 +110,14 @@ const LoginPage = () => {
 
           </div>
         </div>
-        <div className="absolute top-0 right-0 w-[40%] h-full px-8 py-20 bg-white flex flex-col justify-center border-l border-gray-100">
-          <h2 className="text-3xl font-extrabold text-center text-gray-800 mb-4 leading-tight">
+        <div className="absolute top-0 right-0 w-[40%] h-full px-8 py-20 bg-white flex flex-col justify-center border-l border-neutral-dark">
+          <h2 className="text-3xl font-extrabold text-center text-black-light mb-4 leading-tight">
             Automate Your Cold Outreach
           </h2>
-          <p className="text-sm text-gray-600 mb-6">
+          <p className="text-sm text-secondary-dark mb-6">
             Jatotech helps you scale your email campaigns with precision. No more manual follow-ups — reach leads faster and smarter.
           </p>
-          <ul className="text-sm text-gray-700 space-y-2">
+          <ul className="text-sm text-secondary-dark space-y-2">
             <li>✅ Smart personalization</li>
             <li>✅ Automated follow-ups</li>
             <li>✅ Inbox rotation & warm-up</li>

@@ -27,14 +27,14 @@ const statusColors = {
 
 function StatusBadge({ status }) {
   return (
-    <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider border shadow-sm ${statusColors[status] || 'bg-gray-100 text-gray-600 border-gray-200'}`}>
+    <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider border shadow-sm ${statusColors[status] || 'bg-neutral-dark text-secondary-dark border-neutral-dark'}`}>
       {status}
     </span>
   );
 }
 
 function ConfidenceBadge({ score }) {
-  if (score == null) return <span className="text-xs text-gray-400">—</span>;
+  if (score == null) return <span className="text-xs text-secondary-dark/60">—</span>;
   const color = score >= 80 ? 'text-green-600 bg-green-50 border-green-200'
               : score >= 50 ? 'text-yellow-600 bg-yellow-50 border-yellow-200'
               : 'text-red-500 bg-red-50 border-red-200';
@@ -241,16 +241,16 @@ const OutreachPage = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 font-montserrat">
+          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">
             Outreach
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Find contacts, generate cold emails, and send them</p>
+          <p className="text-sm text-secondary-dark mt-1">Find contacts, generate cold emails, and send them</p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="flex border-b border-gray-100">
+      <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark overflow-hidden">
+        <div className="flex border-b border-neutral-dark">
           {TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
@@ -264,14 +264,14 @@ const OutreachPage = () => {
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-4 text-sm font-semibold transition-all border-b-2 ${
                   isActive
                     ? 'text-primary-dark border-primary-light bg-primary-light/5'
-                    : 'text-gray-500 border-transparent hover:text-gray-700 hover:bg-gray-50'
+                    : 'text-secondary-dark border-transparent hover:text-black-light hover:bg-neutral'
                 }`}
               >
                 <Icon className="w-4 h-4" />
                 {tab.label}
                 {count > 0 && (
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    isActive ? 'bg-primary-light/20 text-primary-dark' : 'bg-gray-100 text-gray-500'
+                    isActive ? 'bg-primary-light/20 text-primary-dark' : 'bg-neutral-dark text-secondary-dark'
                   }`}>
                     {count}
                   </span>
@@ -286,7 +286,7 @@ const OutreachPage = () => {
           {loading ? (
             <div className="py-16 text-center">
               <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary-light" />
-              <p className="mt-3 text-sm font-medium text-gray-400 animate-pulse">Loading outreach data...</p>
+              <p className="mt-3 text-sm font-medium text-secondary-dark animate-pulse">Loading outreach data...</p>
             </div>
           ) : (
             <>
@@ -357,7 +357,7 @@ function HunterQuotaBadge({ quota }) {
     <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${color}`}>
       <ShieldCheck className="w-3.5 h-3.5" />
       Hunter.io ({plan}): {searches_remaining}/{searches_limit} searches remaining
-      {dry_run && <span className="ml-1 px-1.5 py-0.5 bg-gray-100 text-gray-500 rounded-md text-[10px] font-bold">DRY RUN</span>}
+      {dry_run && <span className="ml-1 px-1.5 py-0.5 bg-neutral-dark text-secondary-dark rounded-md text-[10px] font-bold">DRY RUN</span>}
     </div>
   );
 }
@@ -371,19 +371,19 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
       {/* Top bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div className="relative w-full md:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-dark/60 w-4 h-4" />
           <input
             type="text"
             placeholder="Search contacts..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-light/50 focus:border-primary-light transition-all outline-none text-gray-700"
+            className="w-full pl-10 pr-4 py-2 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/50 focus:border-primary-light transition-all outline-none text-secondary-dark"
           />
         </div>
         <button
           onClick={onFindContacts}
           disabled={findingContacts}
-          className="flex items-center gap-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-indigo-200 transition-all active:scale-95 disabled:opacity-75"
+          className="flex items-center gap-2 bg-gradient-to-r from-black to-black-light hover:from-black-light hover:to-black text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-black/10 transition-all active:scale-95 disabled:opacity-75"
         >
           {findingContacts ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
           Find Contacts
@@ -398,10 +398,10 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
           subtitle="Go to the Jobs page, approve some jobs, then click Find Contacts."
         />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
+        <div className="overflow-x-auto rounded-xl border border-neutral-dark">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gray-50/70 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold font-montserrat">
+              <tr className="bg-neutral/70 border-b border-neutral-dark text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat">
                 <th className="p-3.5 pl-4">Company & Role</th>
                 <th className="p-3.5 hidden lg:table-cell">Contact</th>
                 <th className="p-3.5 hidden md:table-cell">Email</th>
@@ -409,26 +409,26 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
                 <th className="p-3.5 text-right pr-4">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-neutral">
               {contacts.map(contact => (
-                <tr key={contact.id} className="group hover:bg-gray-50/50 transition-colors">
+                <tr key={contact.id} className="group hover:bg-neutral/50 transition-colors">
                   <td className="p-3.5 pl-4 align-top">
                     <div className="flex items-start gap-3">
-                      <div className="h-9 w-9 min-w-9 rounded-xl bg-gradient-to-tr from-indigo-50 to-indigo-100 flex items-center justify-center border border-indigo-200/50 shadow-sm">
-                        <Building className="w-4 h-4 text-indigo-500" />
+                      <div className="h-9 w-9 min-w-9 rounded-xl bg-gradient-to-tr from-accent-teal/10 to-accent-teal/20 flex items-center justify-center border border-accent-teal/30 shadow-sm">
+                        <Building className="w-4 h-4 text-accent-teal" />
                       </div>
                       <div>
-                        <p className="font-semibold text-gray-900 text-sm line-clamp-1">{contact.job?.company_name || '—'}</p>
-                        <p className="text-xs text-gray-500 mt-0.5 line-clamp-1">{contact.job?.title || '—'}</p>
+                        <p className="font-semibold text-black text-sm line-clamp-1">{contact.job?.company_name || '—'}</p>
+                        <p className="text-xs text-secondary-dark mt-0.5 line-clamp-1">{contact.job?.title || '—'}</p>
                       </div>
                     </div>
                   </td>
                   <td className="p-3.5 align-top hidden lg:table-cell">
-                    <p className="text-sm font-medium text-gray-800">{contact.first_name} {contact.last_name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{contact.title || '—'}</p>
+                    <p className="text-sm font-medium text-black-light">{contact.first_name} {contact.last_name}</p>
+                    <p className="text-xs text-secondary-dark mt-0.5">{contact.title || '—'}</p>
                   </td>
                   <td className="p-3.5 align-top hidden md:table-cell">
-                    <a href={`mailto:${contact.email}`} className="text-sm text-indigo-600 hover:underline font-medium">
+                    <a href={`mailto:${contact.email}`} className="text-sm text-primary-dark hover:underline font-medium">
                       {contact.email}
                     </a>
                   </td>
@@ -579,27 +579,27 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
   const hasMore = bodyLines.length > 3;
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
+    <div className="bg-white border border-neutral-dark rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-3">
+      <div className="px-5 py-4 border-b border-neutral-dark flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="h-10 w-10 min-w-10 rounded-xl bg-gradient-to-tr from-violet-50 to-violet-100 flex items-center justify-center border border-violet-200/50 shadow-sm">
-            <Mail className="w-4 h-4 text-violet-500" />
+          <div className="h-10 w-10 min-w-10 rounded-xl bg-gradient-to-tr from-primary-light/10 to-primary-light/20 flex items-center justify-center border border-primary-light/30 shadow-sm">
+            <Mail className="w-4 h-4 text-primary-light" />
           </div>
           <div className="min-w-0">
-            <p className="font-semibold text-gray-900 text-sm">{email.company_name || '—'}</p>
-            <p className="text-xs text-gray-500 mt-0.5 truncate">{email.job_title || '—'}</p>
+            <p className="font-semibold text-black text-sm">{email.company_name || '—'}</p>
+            <p className="text-xs text-secondary-dark mt-0.5 truncate">{email.job_title || '—'}</p>
             {email.contact && (
-              <p className="text-xs text-gray-400 mt-0.5">
-                To: <span className="font-medium text-gray-600">{email.contact.first_name} {email.contact.last_name}</span>
-                {' '}<span className="text-gray-400">({email.contact.email})</span>
+              <p className="text-xs text-secondary-dark/60 mt-0.5">
+                To: <span className="font-medium text-secondary-dark">{email.contact.first_name} {email.contact.last_name}</span>
+                {' '}<span className="text-secondary-dark/60">({email.contact.email})</span>
               </p>
             )}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
           {email.followup_count > 0 && (
-            <span className="px-2 py-0.5 bg-violet-50 text-violet-600 border border-violet-200 rounded-full text-[10px] font-bold uppercase tracking-wider">
+            <span className="px-2 py-0.5 bg-primary-light/10 text-primary-dark border border-primary-light/20 rounded-full text-[10px] font-bold uppercase tracking-wider">
               Follow-up {email.followup_count}
             </span>
           )}
@@ -609,14 +609,14 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
 
       {/* Subject */}
       <div className="px-5 pt-4">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Subject</p>
-        <p className="text-sm font-semibold text-gray-800">{email.subject}</p>
+        <p className="text-xs font-bold text-secondary-dark/60 uppercase tracking-wider mb-1">Subject</p>
+        <p className="text-sm font-semibold text-black-light">{email.subject}</p>
       </div>
 
       {/* Body */}
       <div className="px-5 py-3">
-        <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5">Body</p>
-        <div className="bg-gray-50 rounded-xl p-4 text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-mono border border-gray-100">
+        <p className="text-xs font-bold text-secondary-dark/60 uppercase tracking-wider mb-1.5">Body</p>
+        <div className="bg-neutral rounded-xl p-4 text-sm text-secondary-dark leading-relaxed whitespace-pre-wrap font-mono border border-neutral-dark">
           {expanded ? email.body : preview}
           {hasMore && !expanded && '...'}
         </div>
@@ -634,7 +634,7 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
       {showTimestamps && (
         <div className="px-5 pb-2 flex flex-wrap gap-3">
           {email.sent_at && (
-            <span className="flex items-center gap-1 text-xs text-gray-500">
+            <span className="flex items-center gap-1 text-xs text-secondary-dark">
               <Send className="w-3 h-3" /> Sent: {new Date(email.sent_at).toLocaleString()}
             </span>
           )}
@@ -652,7 +652,7 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
             <span className={`flex items-center gap-1 text-xs font-medium ${
               new Date(email.next_followup_at) <= new Date()
                 ? 'text-amber-600'
-                : 'text-gray-400'
+                : 'text-secondary-dark/60'
             }`}>
               ⏰ Follow-up {new Date(email.next_followup_at) <= new Date() ? 'due now' : `due ${new Date(email.next_followup_at).toLocaleDateString()}`}
             </span>
@@ -661,11 +661,11 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
       )}
 
       {/* Actions */}
-      <div className="px-5 py-3 border-t border-gray-50 flex items-center gap-2 justify-end">
+      <div className="px-5 py-3 border-t border-neutral-dark flex items-center gap-2 justify-end">
         {onEdit && (
           <button
             onClick={onEdit}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-gray-600 bg-gray-50 border border-gray-200 rounded-xl hover:bg-gray-100 transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-secondary-dark bg-neutral border border-neutral-dark rounded-xl hover:bg-neutral-dark transition-all"
           >
             <Pencil className="w-3.5 h-3.5" /> Edit
           </button>
@@ -728,51 +728,51 @@ function EditEmailModal({ email, onClose, onSaved }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl border border-gray-100 relative slide-in-bottom max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl border border-neutral-dark relative slide-in-bottom max-h-[90vh] overflow-y-auto">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-gray-400 hover:bg-gray-100 rounded-full p-1"
+          className="absolute top-4 right-4 text-secondary-dark/60 hover:bg-neutral-dark rounded-full p-1"
         >
           <X className="w-5 h-5" />
         </button>
 
-        <h2 className="text-xl font-bold font-montserrat text-gray-900 mb-5 flex items-center gap-2">
+        <h2 className="text-xl font-bold font-montserrat text-black mb-5 flex items-center gap-2">
           <Pencil className="w-5 h-5 text-primary-light" />
           Edit Email Draft
         </h2>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Subject</label>
+            <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Subject</label>
             <input
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full p-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none"
+              className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
             />
           </div>
           <div>
-            <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">Body</label>
+            <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Body</label>
             <textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
               rows={12}
-              className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 outline-none resize-none font-mono leading-relaxed"
+              className="w-full p-3 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none resize-none font-mono leading-relaxed"
             />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
             <button
               onClick={onClose}
-              className="px-4 py-2.5 text-sm font-medium text-gray-600 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 transition-all"
+              className="px-4 py-2.5 text-sm font-medium text-secondary-dark bg-white border border-neutral-dark rounded-xl hover:bg-neutral transition-all"
             >
               Cancel
             </button>
             <button
               onClick={handleSave}
               disabled={saving}
-              className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-gray-900 to-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center gap-2"
+              className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-black to-black-light rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center gap-2"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
               Save Changes
@@ -791,11 +791,11 @@ function EditEmailModal({ email, onClose, onSaved }) {
 function EmptyState({ icon: Icon, title, subtitle }) {
   return (
     <div className="py-16 text-center">
-      <div className="mx-auto w-16 h-16 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center mb-4">
-        <Icon className="w-7 h-7 text-gray-300" />
+      <div className="mx-auto w-16 h-16 rounded-2xl bg-neutral border border-neutral-dark flex items-center justify-center mb-4">
+        <Icon className="w-7 h-7 text-secondary-dark/40" />
       </div>
-      <p className="text-base font-semibold text-gray-500">{title}</p>
-      <p className="text-sm text-gray-400 mt-1 max-w-md mx-auto">{subtitle}</p>
+      <p className="text-base font-semibold text-secondary-dark">{title}</p>
+      <p className="text-sm text-secondary-dark/60 mt-1 max-w-md mx-auto">{subtitle}</p>
     </div>
   );
 }
