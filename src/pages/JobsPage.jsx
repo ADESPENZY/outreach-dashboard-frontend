@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
+import { useNavigate } from 'react-router';
 import {
   CheckCircle, XCircle, Eye, Search, Play, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2, Download, FileText, X
+  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban
 } from 'lucide-react';
 import api from '../api';
 
 const JobsPage = () => {
+    const navigate = useNavigate();
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filterTab, setFilterTab] = useState('All');
@@ -23,8 +25,9 @@ const JobsPage = () => {
     const [scoring, setScoring] = useState(false);
     const [scraping, setScraping] = useState(false);
     const [generatingCvFor, setGeneratingCvFor] = useState(null);
-    const [cvModal, setCvModal] = useState(null); // { jobId, blobUrl }
+    const [cvModal, setCvModal] = useState(null);
     const [loadingCvPreview, setLoadingCvPreview] = useState(null);
+    const [trackingId, setTrackingId] = useState(null);
 
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
@@ -91,6 +94,25 @@ const JobsPage = () => {
             toast.error('CV generation failed: ' + (err.response?.data?.error || err.message));
         } finally {
             setGeneratingCvFor(null);
+        }
+    };
+
+    const handleTrackJob = async (jobId) => {
+        setTrackingId(jobId);
+        try {
+            const res = await api.post(`/api/jobs/${jobId}/track/`);
+            if (res.data.already_tracked) {
+                toast.info('Already in your tracker — opening it now');
+            } else {
+                toast.success('Added to Job Tracker!');
+            }
+            // Refresh jobs list so is_tracked updates, then go to tracker
+            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, is_tracked: true } : j));
+            navigate('/dashboard/job-tracker');
+        } catch (err) {
+            toast.error('Failed to track: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setTrackingId(null);
         }
     };
 
@@ -329,6 +351,28 @@ const JobsPage = () => {
                                                             ? <Loader2 className="w-3 h-3 animate-spin" />
                                                             : <FileText className="w-3 h-3" />}
                                                         View CV
+                                                    </button>
+                                                )}
+                                                {job.is_tracked ? (
+                                                    <button
+                                                        onClick={() => navigate('/dashboard/job-tracker')}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold rounded-lg hover:bg-emerald-100 transition-all"
+                                                        title="In tracker — click to view"
+                                                    >
+                                                        <CheckCircle className="w-3 h-3" />
+                                                        Tracked
+                                                    </button>
+                                                ) : job.status === 'approved' && (
+                                                    <button
+                                                        onClick={() => handleTrackJob(job.id)}
+                                                        disabled={trackingId === job.id}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral text-secondary-dark border border-neutral-dark text-xs font-semibold rounded-lg hover:bg-neutral-dark transition-all disabled:opacity-60"
+                                                        title="Add to Job Tracker kanban"
+                                                    >
+                                                        {trackingId === job.id
+                                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                            : <Kanban className="w-3 h-3" />}
+                                                        Track
                                                     </button>
                                                 )}
                                                 {job.status === 'approved' && (
