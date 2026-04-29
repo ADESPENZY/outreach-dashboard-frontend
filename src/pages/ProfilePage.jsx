@@ -2,21 +2,42 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   User, MapPin, Phone, Linkedin, Github, Globe,
-  FileText, Pencil, Loader2, ChevronDown, ChevronUp,
+  FileText, Pencil, Loader2, ChevronDown, ChevronUp, Download,
 } from 'lucide-react';
 import { getProfile } from '../services/apiBlog';
+import api from '../api';
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const [profile, setProfile]     = useState(null);
-  const [loading, setLoading]     = useState(true);
+  const [profile, setProfile]       = useState(null);
+  const [loading, setLoading]       = useState(true);
   const [cvExpanded, setCvExpanded] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   useEffect(() => {
     getProfile()
       .then(p => setProfile(p))
       .finally(() => setLoading(false));
   }, []);
+
+  const handleDownloadPdf = async () => {
+    setDownloading(true);
+    try {
+      const res = await api.get('/dashboard/profile/resume-pdf/', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `${profile?.full_name?.replace(/\s+/g, '_') || 'resume'}_resume.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('PDF download failed:', err);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -29,7 +50,7 @@ export default function ProfilePage() {
   if (!profile) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
-        <p className="text-gray-500 text-sm">No profile found.</p>
+        <p className="text-secondary-dark text-sm">No profile found.</p>
         <button
           onClick={() => navigate('/onboarding')}
           className="px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl"
@@ -48,13 +69,13 @@ export default function ProfilePage() {
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-10">
       {/* Header card */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 flex items-start justify-between gap-4">
+      <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex items-start justify-between gap-4">
         <div className="flex items-start gap-4">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-light/20 to-primary-dark/20 flex items-center justify-center shrink-0">
             <User className="w-7 h-7 text-primary-dark" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900 font-montserrat">{profile.full_name || 'Your Name'}</h1>
+            <h1 className="text-xl font-bold text-black font-montserrat">{profile.full_name || 'Your Name'}</h1>
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5">
               {profile.location && (
                 <InfoChip icon={MapPin}>{profile.location}</InfoChip>
@@ -85,12 +106,24 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-        <button
-          onClick={() => navigate('/onboarding?edit=true')}
-          className="flex items-center gap-2 px-4 py-2 bg-primary-light/10 text-primary-dark text-sm font-semibold rounded-xl hover:bg-primary-light/20 transition-all shrink-0"
-        >
-          <Pencil className="w-4 h-4" /> Edit
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleDownloadPdf}
+            disabled={downloading}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-60"
+          >
+            {downloading
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <Download className="w-4 h-4" />}
+            {downloading ? 'Generating…' : 'Download PDF'}
+          </button>
+          <button
+            onClick={() => navigate('/onboarding?edit=true')}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-light/10 text-primary-dark text-sm font-semibold rounded-xl hover:bg-primary-light/20 transition-all"
+          >
+            <Pencil className="w-4 h-4" /> Edit
+          </button>
+        </div>
       </div>
 
       {/* Skills */}
@@ -106,8 +139,8 @@ export default function ProfilePage() {
             <TagGroup label="Best Fit Roles" tags={fitTitles} color="orange" />
           )}
           {profile.skills_extracted?.years_experience && (
-            <p className="text-sm text-gray-500 mt-2">
-              <span className="font-semibold text-gray-700">{profile.skills_extracted.years_experience}</span> years of experience
+            <p className="text-sm text-secondary-dark mt-2">
+              <span className="font-semibold text-black-light">{profile.skills_extracted.years_experience}</span> years of experience
             </p>
           )}
         </Section>
@@ -130,8 +163,8 @@ export default function ProfilePage() {
       {profile.cv_raw_text && (
         <Section title="CV / Resume">
           <div className="flex items-center gap-2 mb-3">
-            <FileText className="w-4 h-4 text-gray-400" />
-            <span className="text-xs text-gray-500">{profile.cv_raw_text.length.toLocaleString()} characters</span>
+            <FileText className="w-4 h-4 text-secondary-dark/60" />
+            <span className="text-xs text-secondary-dark">{profile.cv_raw_text.length.toLocaleString()} characters</span>
             <button
               onClick={() => setCvExpanded(v => !v)}
               className="ml-auto flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors"
@@ -139,7 +172,7 @@ export default function ProfilePage() {
               {cvExpanded ? <><ChevronUp className="w-3.5 h-3.5" /> Collapse</> : <><ChevronDown className="w-3.5 h-3.5" /> Expand</>}
             </button>
           </div>
-          <div className={`bg-gray-50 rounded-xl p-4 text-xs text-gray-600 leading-relaxed whitespace-pre-wrap font-mono overflow-auto transition-all ${
+          <div className={`bg-neutral rounded-xl p-4 text-xs text-secondary-dark leading-relaxed whitespace-pre-wrap font-mono overflow-auto transition-all ${
             cvExpanded ? 'max-h-none' : 'max-h-40'
           }`}>
             {profile.cv_raw_text}
@@ -154,8 +187,8 @@ export default function ProfilePage() {
 
 function Section({ title, children }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-      <h2 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-4">{title}</h2>
+    <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-6">
+      <h2 className="text-sm font-bold text-secondary-dark/60 uppercase tracking-widest mb-4">{title}</h2>
       {children}
     </div>
   );
@@ -163,7 +196,7 @@ function Section({ title, children }) {
 
 function InfoChip({ icon: Icon, children, link }) {
   return (
-    <span className={`flex items-center gap-1 text-xs font-medium ${link ? 'text-primary-dark hover:underline cursor-pointer' : 'text-gray-500'}`}>
+    <span className={`flex items-center gap-1 text-xs font-medium ${link ? 'text-primary-dark hover:underline cursor-pointer' : 'text-secondary-dark'}`}>
       <Icon className="w-3.5 h-3.5" />
       {children}
     </span>
@@ -178,7 +211,7 @@ function TagGroup({ label, tags, color }) {
   };
   return (
     <div className="mb-3">
-      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">{label}</p>
+      <p className="text-xs font-bold text-secondary-dark/60 uppercase tracking-wider mb-2">{label}</p>
       <div className="flex flex-wrap gap-2">
         {tags.map(tag => (
           <span key={tag} className={`px-2.5 py-1 text-xs font-semibold rounded-full border ${colorMap[color]}`}>
@@ -193,9 +226,9 @@ function TagGroup({ label, tags, color }) {
 function PrefItem({ label, value, capitalize }) {
   if (!value) return null;
   return (
-    <div className="bg-gray-50 rounded-xl px-4 py-3">
-      <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">{label}</p>
-      <p className={`text-sm font-semibold text-gray-700 ${capitalize ? 'capitalize' : ''}`}>{value}</p>
+    <div className="bg-neutral rounded-xl px-4 py-3">
+      <p className="text-[10px] font-bold text-secondary-dark/60 uppercase tracking-wider mb-0.5">{label}</p>
+      <p className={`text-sm font-semibold text-black-light ${capitalize ? 'capitalize' : ''}`}>{value}</p>
     </div>
   );
 }
