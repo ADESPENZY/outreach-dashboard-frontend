@@ -205,21 +205,27 @@ const Settings = () => {
 
 function AccountTab() {
   const [me, setMe]           = useState(null);
-  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
 
-  const [fullName,     setFullName]     = useState('');
-  const [jobTitle,     setJobTitle]     = useState('');
-  const [targetRoles,  setTargetRoles]  = useState('');
+  const [fullName,      setFullName]      = useState('');
+  const [contactEmail,  setContactEmail]  = useState('');
+  const [phone,         setPhone]         = useState('');
+  const [location,      setLocation]      = useState('');
+  const [linkedinUrl,   setLinkedinUrl]   = useState('');
+  const [githubUrl,     setGithubUrl]     = useState('');
+  const [portfolioUrl,  setPortfolioUrl]  = useState('');
 
   useEffect(() => {
     Promise.all([getMe(), getProfile()]).then(([meData, profileData]) => {
       setMe(meData);
-      setProfile(profileData);
       setFullName(profileData?.full_name || '');
-      setJobTitle(profileData?.job_title || '');
-      setTargetRoles((profileData?.target_roles || []).join(', '));
+      setContactEmail(profileData?.contact_email || '');
+      setPhone(profileData?.phone || '');
+      setLocation(profileData?.location || '');
+      setLinkedinUrl(profileData?.linkedin_url || '');
+      setGithubUrl(profileData?.github_url || '');
+      setPortfolioUrl(profileData?.portfolio_url || '');
     }).catch(() => {
       toast.error('Failed to load account info');
     }).finally(() => setLoading(false));
@@ -228,8 +234,15 @@ function AccountTab() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const rolesArr = targetRoles.split(',').map(r => r.trim()).filter(Boolean);
-      await updateProfile({ full_name: fullName, job_title: jobTitle, target_roles: rolesArr });
+      await updateProfile({
+        full_name:     fullName,
+        contact_email: contactEmail,
+        phone,
+        location,
+        linkedin_url:  linkedinUrl,
+        github_url:    githubUrl,
+        portfolio_url: portfolioUrl,
+      });
       toast.success('Profile updated');
     } catch {
       toast.error('Failed to save profile');
@@ -245,6 +258,7 @@ function AccountTab() {
   );
 
   const initials = (fullName || me?.username || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+  const displayEmail = contactEmail || me?.email || '';
 
   return (
     <div className="space-y-5">
@@ -255,49 +269,83 @@ function AccountTab() {
         </div>
         <div>
           <p className="text-lg font-bold text-black font-montserrat">{fullName || me?.username}</p>
-          <p className="text-sm text-secondary-dark">{me?.email || 'No email set'}</p>
+          <p className="text-sm text-secondary-dark">{displayEmail}</p>
           <p className="text-xs text-secondary-dark/60 mt-0.5">@{me?.username}</p>
         </div>
       </div>
 
       {/* Auth info — read only */}
-      <SectionCard title="Login Details" description="Your account credentials — managed by your admin.">
+      <SectionCard title="Login Details" description="Your system username — contact admin to change.">
         <FieldRow label="Username">
           <InputField value={me?.username || ''} readOnly />
         </FieldRow>
-        <FieldRow label="Email">
-          <InputField value={me?.email || ''} readOnly />
-        </FieldRow>
       </SectionCard>
 
-      {/* Editable profile */}
+      {/* Contact info — used in CVs and outreach */}
       <SectionCard
-        title="Profile"
-        description="How you appear across the platform."
+        title="Contact Info"
+        description="Shown on your generated CVs and used in outreach signatures."
         onSave={handleSave}
         saving={saving}
       >
-        <FieldRow label="Full Name" hint="Used in email signatures">
+        <FieldRow label="Full Name" hint="Used in CV header and signatures">
           <InputField
             value={fullName}
             onChange={e => setFullName(e.target.value)}
             placeholder="e.g. Joshua Atoyebi"
           />
         </FieldRow>
-        <FieldRow label="Job Title" hint="Your current or target role">
+        <FieldRow label="Contact Email" hint="Shown on your CV (can differ from login email)">
           <InputField
-            value={jobTitle}
-            onChange={e => setJobTitle(e.target.value)}
-            placeholder="e.g. Full Stack Developer"
+            type="email"
+            value={contactEmail}
+            onChange={e => setContactEmail(e.target.value)}
+            placeholder="e.g. atoyebijoshua095@gmail.com"
           />
         </FieldRow>
-        <FieldRow label="Target Roles" hint="Comma-separated list">
+        <FieldRow label="Phone" hint="Shown on CV sidebar">
           <InputField
-            value={targetRoles}
-            onChange={e => setTargetRoles(e.target.value)}
-            placeholder="Django Developer, React Developer, ..."
+            value={phone}
+            onChange={e => setPhone(e.target.value)}
+            placeholder="e.g. +234 912 872 1745"
           />
-          <p className="text-xs text-secondary-dark/60 mt-1.5">Separate roles with a comma.</p>
+        </FieldRow>
+        <FieldRow label="Location" hint="City, Country">
+          <InputField
+            value={location}
+            onChange={e => setLocation(e.target.value)}
+            placeholder="e.g. Lagos, Nigeria"
+          />
+        </FieldRow>
+      </SectionCard>
+
+      {/* Links */}
+      <SectionCard
+        title="Links"
+        description="Shown on your CV sidebar."
+        onSave={handleSave}
+        saving={saving}
+      >
+        <FieldRow label="LinkedIn" hint="Full URL">
+          <InputField
+            value={linkedinUrl}
+            onChange={e => setLinkedinUrl(e.target.value)}
+            placeholder="https://linkedin.com/in/joshuaatoyebi"
+          />
+        </FieldRow>
+        <FieldRow label="GitHub" hint="Full URL">
+          <InputField
+            value={githubUrl}
+            onChange={e => setGithubUrl(e.target.value)}
+            placeholder="https://github.com/ADESPENZY"
+          />
+        </FieldRow>
+        <FieldRow label="Portfolio" hint="Full URL">
+          <InputField
+            value={portfolioUrl}
+            onChange={e => setPortfolioUrl(e.target.value)}
+            placeholder="https://www.gojatotech.com"
+          />
         </FieldRow>
       </SectionCard>
     </div>
