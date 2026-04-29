@@ -42,8 +42,8 @@ const JobsPage = () => {
         try {
             const res = await api.get('/api/jobs/');
             setJobs(res.data);
-        } catch (error) {
-            toast.error("Failed to fetch jobs");
+        } catch {
+            toast.error('Failed to load jobs. Please refresh.');
             console.error(error);
         } finally {
             setLoading(false);
@@ -57,8 +57,8 @@ const JobsPage = () => {
             const data = res.data;
             toast.success(`${data.approved} approved, ${data.rejected} rejected`);
             fetchJobs();
-        } catch (error) {
-            toast.error("Failed to score jobs");
+        } catch {
+            toast.error('Scoring failed. Please try again.');
             console.error(error);
         } finally {
             setScoring(false);
@@ -71,8 +71,8 @@ const JobsPage = () => {
             toast.success(`Job marked as ${newStatus}`);
             // Update local state
             setJobs(jobs.map(job => job.id === id ? { ...job, status: newStatus } : job));
-        } catch (error) {
-            toast.error(`Failed to update status`);
+        } catch {
+            toast.error('Failed to update status. Please try again.');
         }
     };
 
@@ -90,8 +90,8 @@ const JobsPage = () => {
             window.URL.revokeObjectURL(url);
             toast.success('Tailored CV downloaded!');
             fetchJobs(); // refresh so has_cv badge appears
-        } catch (err) {
-            toast.error('CV generation failed: ' + (err.response?.data?.error || err.message));
+        } catch {
+            toast.error('CV generation failed. Please try again.');
         } finally {
             setGeneratingCvFor(null);
         }
@@ -102,15 +102,14 @@ const JobsPage = () => {
         try {
             const res = await api.post(`/api/jobs/${jobId}/track/`);
             if (res.data.already_tracked) {
-                toast.info('Already in your tracker — opening it now');
+                toast.info('Already in your tracker — taking you there');
             } else {
                 toast.success('Added to Job Tracker!');
             }
-            // Refresh jobs list so is_tracked updates, then go to tracker
             setJobs(prev => prev.map(j => j.id === jobId ? { ...j, is_tracked: true } : j));
             navigate('/dashboard/job-tracker');
-        } catch (err) {
-            toast.error('Failed to track: ' + (err.response?.data?.error || err.message));
+        } catch {
+            toast.error('Could not add to tracker. Please try again in a moment.');
         } finally {
             setTrackingId(null);
         }
@@ -123,7 +122,7 @@ const JobsPage = () => {
             const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
             setCvModal({ jobId: job.id, blobUrl, title: `${job.company_name} — ${job.title}` });
         } catch {
-            toast.error('Could not load CV preview');
+            toast.error('Could not load CV preview. Please try again.');
         } finally {
             setLoadingCvPreview(null);
         }
@@ -154,8 +153,8 @@ const JobsPage = () => {
             toast.success(`Scraped ${res.data.new_jobs} new jobs`);
             setIsScrapeModalOpen(false);
             fetchJobs();
-        } catch (error) {
-            toast.error("Scraping failed");
+        } catch {
+            toast.error('Scraping failed. Please try again.');
             console.error(error);
         } finally {
             setScraping(false);
