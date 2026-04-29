@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import {
   CheckCircle, XCircle, Eye, Search, Play, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2, Download
+  ExternalLink, Calendar, Loader2, Download, FileText, X
 } from 'lucide-react';
 import api from '../api';
 
@@ -23,6 +23,8 @@ const JobsPage = () => {
     const [scoring, setScoring] = useState(false);
     const [scraping, setScraping] = useState(false);
     const [generatingCvFor, setGeneratingCvFor] = useState(null);
+    const [cvModal, setCvModal] = useState(null); // { jobId, blobUrl }
+    const [loadingCvPreview, setLoadingCvPreview] = useState(null);
 
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
@@ -84,11 +86,30 @@ const JobsPage = () => {
             link.remove();
             window.URL.revokeObjectURL(url);
             toast.success('Tailored CV downloaded!');
+            fetchJobs(); // refresh so has_cv badge appears
         } catch (err) {
             toast.error('CV generation failed: ' + (err.response?.data?.error || err.message));
         } finally {
             setGeneratingCvFor(null);
         }
+    };
+
+    const handleViewCv = async (job) => {
+        setLoadingCvPreview(job.id);
+        try {
+            const res = await api.get(`/api/outreach/jobs/${job.id}/cv/`, { responseType: 'blob' });
+            const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            setCvModal({ jobId: job.id, blobUrl, title: `${job.company_name} — ${job.title}` });
+        } catch {
+            toast.error('Could not load CV preview');
+        } finally {
+            setLoadingCvPreview(null);
+        }
+    };
+
+    const handleCloseCvModal = () => {
+        if (cvModal?.blobUrl) window.URL.revokeObjectURL(cvModal.blobUrl);
+        setCvModal(null);
     };
 
     const handleScrape = async (e) => {
@@ -297,6 +318,19 @@ const JobsPage = () => {
 
                                         <td className="p-4 pr-6 align-top">
                                             <div className="flex items-center justify-end gap-2 pl-14 md:pl-0 pt-2 md:pt-0 flex-wrap">
+                                                {job.has_cv && (
+                                                    <button
+                                                        onClick={() => handleViewCv(job)}
+                                                        disabled={loadingCvPreview === job.id}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold rounded-lg hover:bg-violet-100 transition-all disabled:opacity-60"
+                                                        title="Preview generated CV"
+                                                    >
+                                                        {loadingCvPreview === job.id
+                                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                            : <FileText className="w-3 h-3" />}
+                                                        View CV
+                                                    </button>
+                                                )}
                                                 {job.status === 'approved' && (
                                                     <button
                                                         onClick={() => handleGenerateCv(job.id)}
@@ -307,7 +341,7 @@ const JobsPage = () => {
                                                         {generatingCvFor === job.id
                                                             ? <Loader2 className="w-3 h-3 animate-spin" />
                                                             : <Download className="w-3 h-3" />}
-                                                        {generatingCvFor === job.id ? 'Generating...' : 'CV'}
+                                                        {generatingCvFor === job.id ? 'Generating...' : 'Gen CV'}
                                                     </button>
                                                 )}
                                                 <button
@@ -492,6 +526,47 @@ const JobsPage = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* CV Preview Modal */}
+            {cvModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-neutral-dark w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
+                        {/* Modal header */}
+                        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-dark shrink-0">
+                            <div className="flex items-center gap-2.5">
+                                <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-primary-light/20 to-primary-light/10 flex items-center justify-center border border-primary-light/30">
+                                    <FileText className="w-4 h-4 text-primary-light" />
+                                </div>
+                                <div>
+                                    <p className="text-sm font-bold text-black font-montserrat">Tailored CV</p>
+                                    <p className="text-xs text-secondary-dark truncate max-w-sm">{cvModal.title}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <a
+                                    href={cvModal.blobUrl}
+                                    download={`CV_${cvModal.title?.replace(/\s/g, '_')}.pdf`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all"
+                                >
+                                    <Download className="w-3 h-3" /> Download
+                                </a>
+                                <button
+                                    onClick={handleCloseCvModal}
+                                    className="p-1.5 text-secondary-dark hover:bg-neutral-dark rounded-lg transition-colors"
+                                >
+                                    <X className="w-4 h-4" />
+                                </button>
+                            </div>
+                        </div>
+                        {/* PDF iframe */}
+                        <iframe
+                            src={cvModal.blobUrl}
+                            className="flex-1 w-full border-0"
+                            title="CV Preview"
+                        />
                     </div>
                 </div>
             )}
