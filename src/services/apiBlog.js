@@ -142,3 +142,17 @@ export async function extractSkills() {
   const response = await api.post('/dashboard/profile/extract-skills/');
   return response.data;
 }
+
+// ---------------------------------------------------------------------------
+// Inbox Stats
+// ---------------------------------------------------------------------------
+
+export async function getInboxStats() {
+  const response = await api.get('/dashboard/inbox-stats/');
+  return response.data;
+}
+
+export async function toggleGmailAccount(id) {
+  const response = await api.post(`/dashboard/gmail-accounts/${id}/toggle/`);
+  return response.data;
+}
