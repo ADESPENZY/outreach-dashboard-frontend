@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
 import {
   CheckCircle, XCircle, Eye, Search, Play, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2
+  ExternalLink, Calendar, Loader2, Download
 } from 'lucide-react';
 import api from '../api';
 
@@ -22,6 +22,7 @@ const JobsPage = () => {
     });
     const [scoring, setScoring] = useState(false);
     const [scraping, setScraping] = useState(false);
+    const [generatingCvFor, setGeneratingCvFor] = useState(null);
 
     // Pagination states
     const [currentPage, setCurrentPage] = useState(1);
@@ -67,6 +68,26 @@ const JobsPage = () => {
             setJobs(jobs.map(job => job.id === id ? { ...job, status: newStatus } : job));
         } catch (error) {
             toast.error(`Failed to update status`);
+        }
+    };
+
+    const handleGenerateCv = async (jobId) => {
+        setGeneratingCvFor(jobId);
+        try {
+            const res = await api.post(`/api/outreach/jobs/${jobId}/generate-cv/`, {}, { responseType: 'blob' });
+            const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const link = document.createElement('a');
+            link.href  = url;
+            link.setAttribute('download', `tailored_cv_${jobId}.pdf`);
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+            toast.success('Tailored CV downloaded!');
+        } catch (err) {
+            toast.error('CV generation failed: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setGeneratingCvFor(null);
         }
     };
 
@@ -275,7 +296,20 @@ const JobsPage = () => {
                                         </td>
 
                                         <td className="p-4 pr-6 align-top">
-                                            <div className="flex items-center justify-end gap-2 pl-14 md:pl-0 pt-2 md:pt-0">
+                                            <div className="flex items-center justify-end gap-2 pl-14 md:pl-0 pt-2 md:pt-0 flex-wrap">
+                                                {job.status === 'approved' && (
+                                                    <button
+                                                        onClick={() => handleGenerateCv(job.id)}
+                                                        disabled={generatingCvFor === job.id}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
+                                                        title="Generate tailored CV for this job"
+                                                    >
+                                                        {generatingCvFor === job.id
+                                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                            : <Download className="w-3 h-3" />}
+                                                        {generatingCvFor === job.id ? 'Generating...' : 'CV'}
+                                                    </button>
+                                                )}
                                                 <button
                                                     onClick={() => handleUpdateStatus(job.id, 'approved')}
                                                     className="w-8 h-8 rounded-full flex items-center justify-center bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all shadow-sm border border-green-100 hover:border-green-500"
@@ -295,7 +329,7 @@ const JobsPage = () => {
                                                         href={job.apply_url}
                                                         target="_blank"
                                                         rel="noopener noreferrer"
-                                                        className="w-8 h-8 rounded-full flex items-center justify-center bg-neutral text-secondary-dark hover:bg-black hover:text-white transition-all shadow-sm border border-neutral-dark hover:border-black ml-2"
+                                                        className="w-8 h-8 rounded-full flex items-center justify-center bg-neutral text-secondary-dark hover:bg-black hover:text-white transition-all shadow-sm border border-neutral-dark hover:border-black"
                                                         title="View Job Post"
                                                     >
                                                         <ExternalLink className="w-4 h-4" />

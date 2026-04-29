@@ -4,7 +4,7 @@ import {
   Send, Users, FileText, CheckCircle, Search,
   Building, Mail, Loader2, ChevronDown,
   ChevronUp, Sparkles, Pencil, X, UserCheck,
-  MailOpen, MessageSquare, ShieldCheck
+  MailOpen, MessageSquare, ShieldCheck, Download
 } from 'lucide-react';
 import api from '../api';
 
@@ -67,6 +67,7 @@ const OutreachPage = () => {
   const [replyingId, setReplyingId]           = useState(null);
   const [runningFollowups, setRunningFollowups] = useState(false);
   const [editModal, setEditModal]             = useState(null); // email obj or null
+  const [generatingCvFor, setGeneratingCvFor] = useState(null); // job_id
 
   // ── Data fetchers ──────────────────────────────────────────────────────────
 
@@ -215,6 +216,27 @@ const OutreachPage = () => {
     }
   };
 
+  const handleGenerateCv = async (jobId) => {
+    setGeneratingCvFor(jobId);
+    try {
+      const res = await api.post(`/api/outreach/jobs/${jobId}/generate-cv/`, {}, { responseType: 'blob' });
+      const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href  = url;
+      link.setAttribute('download', `tailored_cv_${jobId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Tailored CV downloaded!');
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message;
+      toast.error('CV generation failed: ' + msg);
+    } finally {
+      setGeneratingCvFor(null);
+    }
+  };
+
   // ── Filtered ───────────────────────────────────────────────────────────────
 
   const q = searchQuery.toLowerCase();
@@ -311,6 +333,8 @@ const OutreachPage = () => {
                   onGenerateAll={handleGenerateAllEmails}
                   generatingAll={generatingAll}
                   onEdit={(email) => setEditModal(email)}
+                  onGenerateCv={handleGenerateCv}
+                  generatingCvFor={generatingCvFor}
                 />
               )}
               {activeTab === 'sent' && (
@@ -322,6 +346,8 @@ const OutreachPage = () => {
                   replyingId={replyingId}
                   onRunFollowups={handleRunFollowups}
                   runningFollowups={runningFollowups}
+                  onGenerateCv={handleGenerateCv}
+                  generatingCvFor={generatingCvFor}
                 />
               )}
             </>
@@ -469,7 +495,7 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
 // TAB 2 — EMAIL DRAFTS
 // ═════════════════════════════════════════════════════════════════════════════
 
-function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAll, onEdit }) {
+function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAll, onEdit, onGenerateCv, generatingCvFor }) {
   return (
     <div className="space-y-4">
       {/* Top bar */}
@@ -500,6 +526,8 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
               approving={approvingId === email.id}
               onEdit={() => onEdit(email)}
               showApprove
+              onGenerateCv={onGenerateCv}
+              generatingCvFor={generatingCvFor}
             />
           ))}
         </div>
@@ -512,7 +540,7 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
 // TAB 3 — APPROVED / SENT
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFollowups, runningFollowups }) {
+function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFollowups, runningFollowups, onGenerateCv, generatingCvFor }) {
   const dueCount = emails.filter(e =>
     ['sent', 'opened'].includes(e.status) &&
     e.next_followup_at &&
@@ -559,6 +587,8 @@ function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFo
               markingReplied={replyingId === email.id}
               showMarkReplied={['sent', 'opened'].includes(email.status)}
               showTimestamps
+              onGenerateCv={onGenerateCv}
+              generatingCvFor={generatingCvFor}
             />
           ))}
         </div>
@@ -571,7 +601,7 @@ function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFo
 // EMAIL CARD (shared between Drafts and Sent tabs)
 // ═════════════════════════════════════════════════════════════════════════════
 
-function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, sending, showSend, onMarkReplied, markingReplied, showMarkReplied, showTimestamps }) {
+function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, sending, showSend, onMarkReplied, markingReplied, showMarkReplied, showTimestamps, onGenerateCv, generatingCvFor }) {
   const [expanded, setExpanded] = useState(false);
 
   const bodyLines = (email.body || '').split('\n');
@@ -661,7 +691,19 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
       )}
 
       {/* Actions */}
-      <div className="px-5 py-3 border-t border-neutral-dark flex items-center gap-2 justify-end">
+      <div className="px-5 py-3 border-t border-neutral-dark flex items-center gap-2 justify-end flex-wrap">
+        {onGenerateCv && email.job_id && (
+          <button
+            onClick={() => onGenerateCv(email.job_id)}
+            disabled={generatingCvFor === email.job_id}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
+          >
+            {generatingCvFor === email.job_id
+              ? <Loader2 className="w-3 h-3 animate-spin" />
+              : <Download className="w-3 h-3" />}
+            {generatingCvFor === email.job_id ? 'Generating...' : 'Generate CV'}
+          </button>
+        )}
         {onEdit && (
           <button
             onClick={onEdit}
