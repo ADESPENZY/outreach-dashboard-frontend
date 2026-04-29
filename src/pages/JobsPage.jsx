@@ -16,11 +16,12 @@ const JobsPage = () => {
 
     const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
     const [scrapeForm, setScrapeForm] = useState({
+        source: 'linkedin',
         keywords: '',
-        location: 'us',
-        count: 50,
-        source: 'adzuna',
-        search_url: '' // for apify
+        locations: ['remote'],
+        time_range: '24h',
+        count: 25,
+        search_url: '',
     });
     const [scoring, setScoring] = useState(false);
     const [scraping, setScraping] = useState(false);
@@ -133,29 +134,53 @@ const JobsPage = () => {
         setCvModal(null);
     };
 
+    const toggleLocation = (loc) => {
+        setScrapeForm(prev => {
+            const has = prev.locations.includes(loc);
+            return { ...prev, locations: has ? prev.locations.filter(l => l !== loc) : [...prev.locations, loc] };
+        });
+    };
+
     const handleScrape = async (e) => {
         e.preventDefault();
         setScraping(true);
         try {
             let res;
-            if (scrapeForm.source === 'adzuna') {
-                res = await api.post('/api/jobs/scrape/adzuna/', {
+            if (scrapeForm.source === 'linkedin') {
+                if (scrapeForm.locations.length === 0) {
+                    toast.error('Select at least one location');
+                    setScraping(false);
+                    return;
+                }
+                res = await api.post('/api/jobs/scrape/linkedin/', {
+                    keywords:   scrapeForm.keywords,
+                    locations:  scrapeForm.locations,
+                    time_range: scrapeForm.time_range,
+                    count:      parseInt(scrapeForm.count),
+                });
+            } else if (scrapeForm.source === 'remote') {
+                if (!scrapeForm.keywords.trim()) {
+                    toast.error('Keywords are required');
+                    setScraping(false);
+                    return;
+                }
+                res = await api.post('/api/jobs/scrape/remote/', {
                     keywords: scrapeForm.keywords,
-                    location: scrapeForm.location,
-                    count: parseInt(scrapeForm.count)
                 });
             } else {
                 res = await api.post('/api/jobs/scrape/apify/', {
                     search_url: scrapeForm.search_url,
-                    count: parseInt(scrapeForm.count)
+                    count:      parseInt(scrapeForm.count),
                 });
             }
-            toast.success(`Scraped ${res.data.new_jobs} new jobs`);
+            const count = typeof res.data.new_jobs === 'object'
+                ? Object.values(res.data.new_jobs).reduce((a, b) => a + b, 0)
+                : res.data.new_jobs;
+            toast.success(`Scraped ${count} new jobs`);
             setIsScrapeModalOpen(false);
             fetchJobs();
         } catch {
             toast.error('Scraping failed. Please try again.');
-            console.error(error);
         } finally {
             setScraping(false);
         }
@@ -457,115 +482,166 @@ const JobsPage = () => {
             {/* Scrape Modal */}
             {isScrapeModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-neutral-dark relative slide-in-bottom">
-                        <button
-                            onClick={() => setIsScrapeModalOpen(false)}
-                            className="absolute top-4 right-4 text-secondary-dark/60 hover:bg-neutral-dark rounded-full p-1"
-                        >
-                            <XCircle className="w-5 h-5" />
-                        </button>
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-neutral-dark relative slide-in-bottom overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-dark">
+                            <h2 className="text-lg font-bold font-montserrat text-black flex items-center gap-2">
+                                <Plus className="w-4 h-4 text-primary-light" /> Scrape New Jobs
+                            </h2>
+                            <button onClick={() => setIsScrapeModalOpen(false)} className="p-1.5 text-secondary-dark hover:bg-neutral-dark rounded-lg transition-colors">
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
 
-                        <h2 className="text-xl font-bold font-montserrat text-black mb-5 flex items-center gap-2">
-                            <Plus className="w-5 h-5 text-primary-light" />
-                            Scrape New Jobs
-                        </h2>
+                        <form onSubmit={handleScrape} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
 
-                        <form onSubmit={handleScrape} className="space-y-4">
+                            {/* Source picker */}
                             <div>
-                                <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Source</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <label className={`cursor-pointer border rounded-xl p-3 flex items-center gap-2 transition-all ${scrapeForm.source === 'adzuna' ? 'bg-primary-light/10 border-primary-light/20 text-primary-dark' : 'bg-white border-neutral-dark hover:bg-neutral'}`}>
-                                        <input
-                                            type="radio"
-                                            name="source"
-                                            value="adzuna"
-                                            checked={scrapeForm.source === 'adzuna'}
-                                            onChange={(e) => setScrapeForm({...scrapeForm, source: e.target.value})}
-                                            className="hidden"
-                                        />
-                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${scrapeForm.source === 'adzuna' ? 'border-primary-light' : 'border-secondary-dark/30'}`}>
-                                            {scrapeForm.source === 'adzuna' && <div className="w-2 h-2 rounded-full bg-primary-light"></div>}
-                                        </div>
-                                        <span className="font-medium text-sm">Adzuna</span>
-                                    </label>
-                                    <label className={`cursor-pointer border rounded-xl p-3 flex items-center gap-2 transition-all ${scrapeForm.source === 'apify' ? 'bg-primary-light/10 border-primary-light/20 text-primary-dark' : 'bg-white border-neutral-dark hover:bg-neutral'}`}>
-                                        <input
-                                            type="radio"
-                                            name="source"
-                                            value="apify"
-                                            checked={scrapeForm.source === 'apify'}
-                                            onChange={(e) => setScrapeForm({...scrapeForm, source: e.target.value})}
-                                            className="hidden"
-                                        />
-                                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${scrapeForm.source === 'apify' ? 'border-primary-light' : 'border-secondary-dark/30'}`}>
-                                            {scrapeForm.source === 'apify' && <div className="w-2 h-2 rounded-full bg-primary-light"></div>}
-                                        </div>
-                                        <span className="font-medium text-sm">Apify (LI)</span>
-                                    </label>
+                                <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-2">Source</label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[
+                                        { key: 'linkedin', label: 'LinkedIn', sub: 'via Apify' },
+                                        { key: 'remote',   label: 'Remote Boards', sub: 'Remotive · WWR · more' },
+                                        { key: 'custom',   label: 'Custom URL', sub: 'paste any LI URL' },
+                                    ].map(s => (
+                                        <button
+                                            key={s.key}
+                                            type="button"
+                                            onClick={() => setScrapeForm(p => ({ ...p, source: s.key }))}
+                                            className={`rounded-xl p-3 text-left border transition-all ${scrapeForm.source === s.key ? 'bg-primary-light/10 border-primary-light/40 text-primary-dark' : 'border-neutral-dark hover:bg-neutral text-secondary-dark'}`}
+                                        >
+                                            <p className="text-xs font-bold">{s.label}</p>
+                                            <p className="text-[10px] mt-0.5 opacity-70">{s.sub}</p>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
-                            {scrapeForm.source === 'adzuna' ? (
-                                <>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Keywords</label>
-                                        <input
-                                            type="text"
-                                            required
-                                            value={scrapeForm.keywords}
-                                            onChange={(e) => setScrapeForm({...scrapeForm, keywords: e.target.value})}
-                                            placeholder="e.g. Django Developer"
-                                            className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
-                                        />
+                            {/* LinkedIn fields */}
+                            {scrapeForm.source === 'linkedin' && (<>
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Keywords</label>
+                                    <input
+                                        type="text"
+                                        value={scrapeForm.keywords}
+                                        onChange={e => setScrapeForm(p => ({ ...p, keywords: e.target.value }))}
+                                        placeholder="e.g. Django developer, Backend engineer"
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-2">
+                                        Locations <span className="text-primary-light normal-case font-normal">({scrapeForm.locations.length} selected)</span>
+                                    </label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { key: 'remote', flag: '🌍', label: 'Worldwide Remote' },
+                                            { key: 'us',     flag: '🇺🇸', label: 'United States' },
+                                            { key: 'uk',     flag: '🇬🇧', label: 'United Kingdom' },
+                                            { key: 'de',     flag: '🇩🇪', label: 'Germany' },
+                                            { key: 'nl',     flag: '🇳🇱', label: 'Netherlands' },
+                                            { key: 'ca',     flag: '🇨🇦', label: 'Canada' },
+                                            { key: 'au',     flag: '🇦🇺', label: 'Australia' },
+                                        ].map(loc => {
+                                            const active = scrapeForm.locations.includes(loc.key);
+                                            return (
+                                                <button
+                                                    key={loc.key}
+                                                    type="button"
+                                                    onClick={() => toggleLocation(loc.key)}
+                                                    className={`rounded-xl px-3 py-2.5 text-left border transition-all flex items-center gap-2 ${active ? 'bg-primary-light/10 border-primary-light/40 text-primary-dark' : 'border-neutral-dark hover:bg-neutral text-secondary-dark'}`}
+                                                >
+                                                    <span className="text-base">{loc.flag}</span>
+                                                    <span className="text-[11px] font-semibold leading-tight">{loc.label}</span>
+                                                    {active && <CheckCircle className="w-3 h-3 text-primary-light ml-auto shrink-0" />}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Location</label>
-                                        <input
-                                            type="text"
-                                            value={scrapeForm.location}
-                                            onChange={(e) => setScrapeForm({...scrapeForm, location: e.target.value})}
-                                            placeholder="us, gbr, etc"
-                                            className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
-                                        />
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-2">Time Range</label>
+                                    <div className="flex gap-2">
+                                        {[
+                                            { key: '24h', label: 'Last 24h' },
+                                            { key: '3d',  label: 'Last 3 days' },
+                                            { key: '7d',  label: 'Last 7 days' },
+                                        ].map(t => (
+                                            <button
+                                                key={t.key}
+                                                type="button"
+                                                onClick={() => setScrapeForm(p => ({ ...p, time_range: t.key }))}
+                                                className={`flex-1 py-2 rounded-xl text-xs font-semibold border transition-all ${scrapeForm.time_range === t.key ? 'bg-black text-white border-black' : 'border-neutral-dark text-secondary-dark hover:bg-neutral'}`}
+                                            >
+                                                {t.label}
+                                            </button>
+                                        ))}
                                     </div>
-                                </>
-                            ) : (
+                                </div>
+
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">
+                                        Jobs per location <span className="text-primary-light font-normal normal-case">({scrapeForm.count} × {scrapeForm.locations.length} location{scrapeForm.locations.length !== 1 ? 's' : ''} = up to {scrapeForm.count * scrapeForm.locations.length} total)</span>
+                                    </label>
+                                    <input
+                                        type="number" min="5" max="100"
+                                        value={scrapeForm.count}
+                                        onChange={e => setScrapeForm(p => ({ ...p, count: e.target.value }))}
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                    />
+                                </div>
+                            </>)}
+
+                            {/* Remote boards fields */}
+                            {scrapeForm.source === 'remote' && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Keywords</label>
+                                    <input
+                                        type="text"
+                                        required
+                                        value={scrapeForm.keywords}
+                                        onChange={e => setScrapeForm(p => ({ ...p, keywords: e.target.value }))}
+                                        placeholder="e.g. Django developer"
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                    />
+                                    <p className="text-xs text-secondary-dark/60 mt-1.5">Searches Remotive, RemoteOK, Himalayas, and WeWorkRemotely simultaneously. Jobs from last 7 days.</p>
+                                </div>
+                            )}
+
+                            {/* Custom URL fields */}
+                            {scrapeForm.source === 'custom' && (<>
                                 <div>
                                     <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">LinkedIn Search URL</label>
                                     <input
                                         type="url"
                                         required
                                         value={scrapeForm.search_url}
-                                        onChange={(e) => setScrapeForm({...scrapeForm, search_url: e.target.value})}
-                                        placeholder="https://linkedin.com/jobs/..."
+                                        onChange={e => setScrapeForm(p => ({ ...p, search_url: e.target.value }))}
+                                        placeholder="https://linkedin.com/jobs/search/?..."
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                    />
+                                    <p className="text-xs text-secondary-dark/60 mt-1.5">Paste any LinkedIn jobs search URL directly.</p>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Count</label>
+                                    <input
+                                        type="number" min="5" max="100"
+                                        value={scrapeForm.count}
+                                        onChange={e => setScrapeForm(p => ({ ...p, count: e.target.value }))}
                                         className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
                                     />
                                 </div>
-                            )}
+                            </>)}
 
-                            <div>
-                                <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Counts</label>
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="200"
-                                    value={scrapeForm.count}
-                                    onChange={(e) => setScrapeForm({...scrapeForm, count: e.target.value})}
-                                    className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
-                                />
-                            </div>
-
-                            <div className="pt-3">
+                            <div className="pt-1">
                                 <button
                                     type="submit"
                                     disabled={scraping}
-                                    className="w-full bg-gradient-to-r from-black to-black-light text-white p-3 rounded-xl font-medium shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex justify-center items-center gap-2"
+                                    className="w-full bg-gradient-to-r from-primary-light to-primary-dark text-white p-3 rounded-xl font-semibold shadow-md shadow-orange-100 hover:opacity-90 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
                                 >
-                                    {scraping ? (
-                                        <><Loader2 className="w-5 h-5 animate-spin" /> Scraping Items...</>
-                                    ) : (
-                                        "Start Deep Scrape"
-                                    )}
+                                    {scraping ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping...</> : 'Start Scrape'}
                                 </button>
                             </div>
                         </form>
