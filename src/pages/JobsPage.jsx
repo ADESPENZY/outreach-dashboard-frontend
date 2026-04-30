@@ -1,126 +1,123 @@
 import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router';
 import {
   CheckCircle, XCircle, Eye, Search, Play, Plus, MapPin, Building, Briefcase,
   ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban
 } from 'lucide-react';
-import api from '../api';
+import {
+  getScrapedJobs, scoreAllJobs, updateJobStatus, trackJob,
+  scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs,
+} from '../services/apiJobs';
+import { generateJobCV, getJobCV } from '../services/apiOutreach';
 
 const JobsPage = () => {
     const navigate = useNavigate();
-    const [jobs, setJobs] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [filterTab, setFilterTab] = useState('All');
-    const [searchQuery, setSearchQuery] = useState('');
+    const queryClient = useQueryClient();
 
-    const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
-    const [scrapeForm, setScrapeForm] = useState({
-        source: 'linkedin',
-        keywords: '',
-        locations: ['remote'],
-        time_range: '24h',
-        count: 25,
-        search_url: '',
+    // ── React Query ───────────────────────────────────────────────────────────
+    const { data: jobs = [], isLoading: loading } = useQuery({
+        queryKey: ['jobs'],
+        queryFn: getScrapedJobs,
     });
-    const [scoring, setScoring] = useState(false);
-    const [scraping, setScraping] = useState(false);
-    const [generatingCvFor, setGeneratingCvFor] = useState(null);
-    const [cvModal, setCvModal] = useState(null);
-    const [loadingCvPreview, setLoadingCvPreview] = useState(null);
-    const [trackingId, setTrackingId] = useState(null);
 
-    // Pagination states
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
-
-    useEffect(() => {
-        fetchJobs();
-    }, []);
-
-    const fetchJobs = async () => {
-        setLoading(true);
-        try {
-            const res = await api.get('/api/jobs/');
-            setJobs(res.data);
-        } catch {
-            toast.error('Failed to load jobs. Please refresh.');
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleScoreAll = async () => {
-        setScoring(true);
-        try {
-            const res = await api.post('/api/jobs/score/all/');
-            const data = res.data;
+    const scoreAllMutation = useMutation({
+        mutationFn: scoreAllJobs,
+        onSuccess: (data) => {
             toast.success(`${data.approved} approved, ${data.rejected} rejected`);
-            fetchJobs();
-        } catch {
-            toast.error('Scoring failed. Please try again.');
-            console.error(error);
-        } finally {
-            setScoring(false);
-        }
-    };
+            queryClient.invalidateQueries({ queryKey: ['jobs'] });
+        },
+        onError: () => toast.error('Scoring failed. Please try again.'),
+    });
 
-    const handleUpdateStatus = async (id, newStatus) => {
-        try {
-            await api.patch(`/api/jobs/${id}/status/`, { status: newStatus });
+    const updateStatusMutation = useMutation({
+        mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
+        onSuccess: (_, { id, newStatus }) => {
             toast.success(`Job marked as ${newStatus}`);
-            // Update local state
-            setJobs(jobs.map(job => job.id === id ? { ...job, status: newStatus } : job));
-        } catch {
-            toast.error('Failed to update status. Please try again.');
-        }
-    };
+            queryClient.setQueryData(['jobs'], old => old.map(job => job.id === id ? { ...job, status: newStatus } : job));
+        },
+        onError: () => toast.error('Failed to update status. Please try again.'),
+    });
 
-    const handleGenerateCv = async (jobId) => {
-        setGeneratingCvFor(jobId);
-        try {
-            const res = await api.post(`/api/outreach/jobs/${jobId}/generate-cv/`, {}, { responseType: 'blob' });
-            const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+    const generateCvMutation = useMutation({
+        mutationFn: async (jobId) => {
+            const blob = await generateJobCV(jobId);
+            return { jobId, blob };
+        },
+        onSuccess: ({ jobId, blob }) => {
+            const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
             const link = document.createElement('a');
-            link.href  = url;
+            link.href = url;
             link.setAttribute('download', `tailored_cv_${jobId}.pdf`);
             document.body.appendChild(link);
             link.click();
             link.remove();
             window.URL.revokeObjectURL(url);
             toast.success('Tailored CV downloaded!');
-            fetchJobs(); // refresh so has_cv badge appears
-        } catch {
-            toast.error('CV generation failed. Please try again.');
-        } finally {
-            setGeneratingCvFor(null);
-        }
-    };
+            queryClient.invalidateQueries({ queryKey: ['jobs'] });
+        },
+        onError: () => toast.error('CV generation failed. Please try again.'),
+    });
 
-    const handleTrackJob = async (jobId) => {
-        setTrackingId(jobId);
-        try {
-            const res = await api.post(`/api/jobs/${jobId}/track/`);
-            if (res.data.already_tracked) {
+    const trackJobMutation = useMutation({
+        mutationFn: (jobId) => trackJob(jobId),
+        onSuccess: (data, jobId) => {
+            if (data.already_tracked) {
                 toast.info('Already in your tracker — taking you there');
             } else {
                 toast.success('Added to Job Tracker!');
             }
-            setJobs(prev => prev.map(j => j.id === jobId ? { ...j, is_tracked: true } : j));
+            queryClient.setQueryData(['jobs'], old => old.map(j => j.id === jobId ? { ...j, is_tracked: true } : j));
             navigate('/dashboard/job-tracker');
-        } catch {
-            toast.error('Could not add to tracker. Please try again in a moment.');
-        } finally {
-            setTrackingId(null);
-        }
-    };
+        },
+        onError: () => toast.error('Could not add to tracker. Please try again in a moment.'),
+    });
+
+    const scrapeMutation = useMutation({
+        mutationFn: async (form) => {
+            if (form.source === 'linkedin') {
+                return scrapeLinkedinJobs(form);
+            } else if (form.source === 'remote') {
+                return scrapeRemoteJobs(form.keywords);
+            } else {
+                return scrapeApifyJobs(form);
+            }
+        },
+        onSuccess: (data) => {
+            const count = typeof data.new_jobs === 'object'
+                ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
+                : data.new_jobs;
+            toast.success(`Scraped ${count} new jobs`);
+            setIsScrapeModalOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['jobs'] });
+        },
+        onError: () => toast.error('Scraping failed. Please try again.'),
+    });
+
+    // ── UI state ──────────────────────────────────────────────────────────────
+    const [filterTab, setFilterTab] = useState('All');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
+    const [scrapeForm, setScrapeForm] = useState({
+        source: 'linkedin', keywords: '', locations: ['remote'],
+        time_range: '24h', count: 25, search_url: '',
+    });
+    const [cvModal, setCvModal] = useState(null);
+    const [loadingCvPreview, setLoadingCvPreview] = useState(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const itemsPerPage = 10;
+
+    const handleScoreAll = () => scoreAllMutation.mutate();
+    const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
+    const handleGenerateCv = (jobId) => generateCvMutation.mutate(jobId);
+    const handleTrackJob = (jobId) => trackJobMutation.mutate(jobId);
 
     const handleViewCv = async (job) => {
         setLoadingCvPreview(job.id);
         try {
-            const res = await api.get(`/api/outreach/jobs/${job.id}/cv/`, { responseType: 'blob' });
-            const blobUrl = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+            const blob = await getJobCV(job.id);
+            const blobUrl = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
             setCvModal({ jobId: job.id, blobUrl, title: `${job.company_name} — ${job.title}` });
         } catch {
             toast.error('Could not load CV preview. Please try again.');
@@ -141,49 +138,17 @@ const JobsPage = () => {
         });
     };
 
-    const handleScrape = async (e) => {
+    const handleScrape = (e) => {
         e.preventDefault();
-        setScraping(true);
-        try {
-            let res;
-            if (scrapeForm.source === 'linkedin') {
-                if (scrapeForm.locations.length === 0) {
-                    toast.error('Select at least one location');
-                    setScraping(false);
-                    return;
-                }
-                res = await api.post('/api/jobs/scrape/linkedin/', {
-                    keywords:   scrapeForm.keywords,
-                    locations:  scrapeForm.locations,
-                    time_range: scrapeForm.time_range,
-                    count:      parseInt(scrapeForm.count),
-                });
-            } else if (scrapeForm.source === 'remote') {
-                if (!scrapeForm.keywords.trim()) {
-                    toast.error('Keywords are required');
-                    setScraping(false);
-                    return;
-                }
-                res = await api.post('/api/jobs/scrape/remote/', {
-                    keywords: scrapeForm.keywords,
-                });
-            } else {
-                res = await api.post('/api/jobs/scrape/apify/', {
-                    search_url: scrapeForm.search_url,
-                    count:      parseInt(scrapeForm.count),
-                });
-            }
-            const count = typeof res.data.new_jobs === 'object'
-                ? Object.values(res.data.new_jobs).reduce((a, b) => a + b, 0)
-                : res.data.new_jobs;
-            toast.success(`Scraped ${count} new jobs`);
-            setIsScrapeModalOpen(false);
-            fetchJobs();
-        } catch {
-            toast.error('Scraping failed. Please try again.');
-        } finally {
-            setScraping(false);
+        if (scrapeForm.source === 'linkedin' && scrapeForm.locations.length === 0) {
+            toast.error('Select at least one location');
+            return;
         }
+        if (scrapeForm.source === 'remote' && !scrapeForm.keywords.trim()) {
+            toast.error('Keywords are required');
+            return;
+        }
+        scrapeMutation.mutate(scrapeForm);
     };
 
     // Derived rendering logic
@@ -239,10 +204,10 @@ const JobsPage = () => {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleScoreAll}
-                        disabled={scoring}
+                        disabled={scoreAllMutation.isPending}
                         className="flex items-center gap-2 bg-gradient-to-r hover:bg-gradient-to-br from-black to-black-light text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-black/10 transition-all active:scale-95 disabled:opacity-75 disabled:active:scale-100"
                     >
-                        {scoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                        {scoreAllMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                         Score All
                     </button>
                     <button
@@ -368,6 +333,7 @@ const JobsPage = () => {
                                                     <button
                                                         onClick={() => handleViewCv(job)}
                                                         disabled={loadingCvPreview === job.id}
+
                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold rounded-lg hover:bg-violet-100 transition-all disabled:opacity-60"
                                                         title="Preview generated CV"
                                                     >
@@ -389,11 +355,11 @@ const JobsPage = () => {
                                                 ) : job.status === 'approved' && (
                                                     <button
                                                         onClick={() => handleTrackJob(job.id)}
-                                                        disabled={trackingId === job.id}
+                                                        disabled={trackJobMutation.isPending && trackJobMutation.variables === job.id}
                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral text-secondary-dark border border-neutral-dark text-xs font-semibold rounded-lg hover:bg-neutral-dark transition-all disabled:opacity-60"
                                                         title="Add to Job Tracker kanban"
                                                     >
-                                                        {trackingId === job.id
+                                                        {trackJobMutation.isPending && trackJobMutation.variables === job.id
                                                             ? <Loader2 className="w-3 h-3 animate-spin" />
                                                             : <Kanban className="w-3 h-3" />}
                                                         Track
@@ -402,14 +368,14 @@ const JobsPage = () => {
                                                 {job.status === 'approved' && (
                                                     <button
                                                         onClick={() => handleGenerateCv(job.id)}
-                                                        disabled={generatingCvFor === job.id}
+                                                        disabled={generateCvMutation.isPending && generateCvMutation.variables === job.id}
                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
                                                         title="Generate tailored CV for this job"
                                                     >
-                                                        {generatingCvFor === job.id
+                                                        {generateCvMutation.isPending && generateCvMutation.variables === job.id
                                                             ? <Loader2 className="w-3 h-3 animate-spin" />
                                                             : <Download className="w-3 h-3" />}
-                                                        {generatingCvFor === job.id ? 'Generating...' : 'Gen CV'}
+                                                        {generateCvMutation.isPending && generateCvMutation.variables === job.id ? 'Generating...' : 'Gen CV'}
                                                     </button>
                                                 )}
                                                 <button
@@ -638,10 +604,10 @@ const JobsPage = () => {
                             <div className="pt-1">
                                 <button
                                     type="submit"
-                                    disabled={scraping}
+                                    disabled={scrapeMutation.isPending}
                                     className="w-full bg-gradient-to-r from-primary-light to-primary-dark text-white p-3 rounded-xl font-semibold shadow-md shadow-orange-100 hover:opacity-90 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
                                 >
-                                    {scraping ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping...</> : 'Start Scrape'}
+                                    {scrapeMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping...</> : 'Start Scrape'}
                                 </button>
                             </div>
                         </form>

@@ -4,7 +4,7 @@ import {
   User, MapPin, Phone, Linkedin, Github, Globe,
   FileText, Pencil, Loader2, ChevronDown, ChevronUp, Download,
 } from 'lucide-react';
-import { getProfile } from '../services/apiBlog';
+import { getProfile } from '../services/apiProfile';
 import api from '../api';
 
 export default function ProfilePage() {

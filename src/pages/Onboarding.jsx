@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Rocket, User, FileText, Briefcase, CheckCircle, ChevronRight, ChevronLeft, Upload, Plus, X, Loader2 } from 'lucide-react';
-import { getProfile, createProfile, updateProfile, uploadCV, extractSkills } from '../services/apiBlog';
+import { getProfile, createProfile, updateProfile, uploadCV, extractSkills } from '../services/apiProfile';
 import { toast } from 'react-toastify';
 
 const STEPS = [

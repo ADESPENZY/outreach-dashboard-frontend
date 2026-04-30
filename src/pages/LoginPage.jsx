@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import SmallSpinner from '../components/SmallSpinner';
-import { login } from '../services/apiBlog';
+import { login } from '../services/apiAuth';
 
 const LoginPage = () => {
   const { register, handleSubmit, formState } =useForm();

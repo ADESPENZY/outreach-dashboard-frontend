@@ -16,7 +16,7 @@ import ConnectedAccounts from './components/ConnectedAccounts';
 import Onboarding from './pages/Onboarding';
 import ProfilePage from './pages/ProfilePage';
 import Spinner from './components/Spinner';
-import { getProfile } from './services/apiBlog';
+import { getProfile } from './services/apiProfile';
 
 /**
  * Wraps Dashboard routes. After JWT auth passes, checks if the user has

@@ -2,7 +2,7 @@ import { Bell, ChevronDown, HelpCircle, LogOut, User, UserCog } from 'lucide-rea
 import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getMe } from '@/services/apiBlog';
+import { getMe } from '@/services/apiAuth';
 
 const Header = () => {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);

@@ -7,7 +7,7 @@ import { useNavigate } from "react-router-dom";
 import SmallSpinner from "./SmallSpinner";
 import SmallSpinnerText from "./SmallSpinnerText";
 import { Trash2, User } from "lucide-react";
-import { createGmailAccount, deleteGmailAccount, getGmailAccounts } from "@/services/apiBlog";
+import { createGmailAccount, deleteGmailAccount, getGmailAccounts } from "@/services/apiGmail";
 import { useState } from "react";
 
 

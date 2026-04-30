@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   Send, Users, FileText, CheckCircle, Search,
@@ -6,7 +7,11 @@ import {
   ChevronUp, Sparkles, Pencil, X, UserCheck,
   MailOpen, MessageSquare, ShieldCheck, Download
 } from 'lucide-react';
-import api from '../api';
+import {
+  getContacts, getDraftEmails, getSentEmails, getHunterQuota,
+  findContacts, generateEmail, approveEmail, sendEmail,
+  markEmailReplied, runFollowups, generateJobCV, editEmail,
+} from '../services/apiOutreach';
 
 // ─── Tabs ────────────────────────────────────────────────────────────────────
 const TABS = [
@@ -50,78 +55,61 @@ function ConfidenceBadge({ score }) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 const OutreachPage = () => {
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab]   = useState('contacts');
-  const [contacts, setContacts]     = useState([]);
-  const [drafts, setDrafts]         = useState([]);
-  const [sentEmails, setSentEmails] = useState([]);
-  const [loading, setLoading]       = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [editModal, setEditModal]   = useState(null);
 
-  // Action states
-  const [hunterQuota, setHunterQuota]         = useState(null);
+  // Action loading states (per-item)
   const [findingContacts, setFindingContacts] = useState(false);
   const [generatingAll, setGeneratingAll]     = useState(false);
-  const [generatingFor, setGeneratingFor]     = useState(null); // job_id
+  const [generatingFor, setGeneratingFor]     = useState(null);
   const [approvingId, setApprovingId]         = useState(null);
   const [sendingId, setSendingId]             = useState(null);
   const [replyingId, setReplyingId]           = useState(null);
   const [runningFollowups, setRunningFollowups] = useState(false);
-  const [editModal, setEditModal]             = useState(null); // email obj or null
-  const [generatingCvFor, setGeneratingCvFor] = useState(null); // job_id
+  const [generatingCvFor, setGeneratingCvFor] = useState(null);
 
-  // ── Data fetchers ──────────────────────────────────────────────────────────
+  // ── Queries ────────────────────────────────────────────────────────────────
 
-  const fetchContacts = useCallback(async () => {
-    try {
-      const res = await api.get('/api/outreach/contacts/');
-      setContacts(res.data);
-    } catch { /* handled by empty state */ }
-  }, []);
+  const { data: contacts = [], isLoading: loadingContacts } = useQuery({
+    queryKey: ['outreach-contacts'],
+    queryFn: getContacts,
+  });
 
-  const fetchDrafts = useCallback(async () => {
-    try {
-      const res = await api.get('/api/outreach/emails/', { params: { status: 'draft' } });
-      setDrafts(res.data);
-    } catch { /* handled by empty state */ }
-  }, []);
+  const { data: drafts = [], isLoading: loadingDrafts } = useQuery({
+    queryKey: ['outreach-drafts'],
+    queryFn: getDraftEmails,
+  });
 
-  const fetchSent = useCallback(async () => {
-    try {
-      const res = await api.get('/api/outreach/emails/', { params: { status: 'approved' } });
-      // Also fetch sent, opened, replied, bounced
-      const sentRes = await api.get('/api/outreach/emails/', { params: { status: 'sent' } });
-      const openedRes = await api.get('/api/outreach/emails/', { params: { status: 'opened' } });
-      const repliedRes = await api.get('/api/outreach/emails/', { params: { status: 'replied' } });
-      setSentEmails([...res.data, ...sentRes.data, ...openedRes.data, ...repliedRes.data]);
-    } catch { /* handled by empty state */ }
-  }, []);
+  const { data: sentEmails = [], isLoading: loadingSent } = useQuery({
+    queryKey: ['outreach-sent'],
+    queryFn: getSentEmails,
+  });
 
-  const fetchHunterQuota = useCallback(async () => {
-    try {
-      const res = await api.get('/api/outreach/hunter-quota/');
-      setHunterQuota(res.data);
-    } catch { /* non-critical */ }
-  }, []);
+  const { data: hunterQuota = null } = useQuery({
+    queryKey: ['hunter-quota'],
+    queryFn: () => getHunterQuota().catch(() => null),
+  });
 
-  const fetchAll = useCallback(async () => {
-    setLoading(true);
-    await Promise.all([fetchContacts(), fetchDrafts(), fetchSent(), fetchHunterQuota()]);
-    setLoading(false);
-  }, [fetchContacts, fetchDrafts, fetchSent, fetchHunterQuota]);
-
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  const loading = loadingContacts && loadingDrafts && loadingSent;
 
   // ── Actions ────────────────────────────────────────────────────────────────
+
+  const invalidateAll = () => {
+    queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+    queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+    queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+  };
 
   const handleFindContacts = async () => {
     setFindingContacts(true);
     try {
-      const res = await api.post('/api/outreach/find-contacts/all/', { max_searches: 10 });
-      const d = res.data;
+      const d = await findContacts(10);
       toast.success(`Processed ${d.processed} jobs — ${d.contacts_found} contacts found, ${d.manual_apply} manual apply`);
-      fetchContacts();
+      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
     } catch (err) {
-      toast.error('Failed to find contacts: ' + (err.response?.data?.error || err.message));
+      toast.error('Failed to find contacts: ' + err.message);
     } finally {
       setFindingContacts(false);
     }
@@ -130,12 +118,12 @@ const OutreachPage = () => {
   const handleGenerateEmail = async (jobId) => {
     setGeneratingFor(jobId);
     try {
-      await api.post('/api/outreach/generate-email/', { job_id: jobId });
+      await generateEmail(jobId);
       toast.success('Email draft generated!');
-      fetchDrafts();
-      fetchContacts(); // refresh to show email generated status
+      queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
     } catch (err) {
-      toast.error('Failed to generate email: ' + (err.response?.data?.error || err.message));
+      toast.error('Failed to generate email: ' + err.message);
     } finally {
       setGeneratingFor(null);
     }
@@ -144,33 +132,32 @@ const OutreachPage = () => {
   const handleGenerateAllEmails = async () => {
     setGeneratingAll(true);
     let success = 0, fail = 0;
-    // Generate for contacts that don't have emails yet
     const contactsWithoutEmails = contacts.filter(c => {
       return !drafts.some(d => d.job_id === c.job?.id) &&
              !sentEmails.some(s => s.job_id === c.job?.id);
     });
     for (const contact of contactsWithoutEmails) {
       try {
-        await api.post('/api/outreach/generate-email/', { job_id: contact.job?.id });
+        await generateEmail(contact.job?.id);
         success++;
       } catch {
         fail++;
       }
     }
     toast.success(`Generated ${success} emails${fail > 0 ? `, ${fail} failed` : ''}`);
-    fetchDrafts();
+    queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
     setGeneratingAll(false);
   };
 
   const handleApprove = async (emailId) => {
     setApprovingId(emailId);
     try {
-      await api.patch(`/api/outreach/emails/${emailId}/approve/`);
+      await approveEmail(emailId);
       toast.success('Email approved!');
-      fetchDrafts();
-      fetchSent();
+      queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) {
-      toast.error('Failed to approve: ' + (err.response?.data?.error || err.message));
+      toast.error('Failed to approve: ' + err.message);
     } finally {
       setApprovingId(null);
     }
@@ -179,12 +166,11 @@ const OutreachPage = () => {
   const handleRunFollowups = async () => {
     setRunningFollowups(true);
     try {
-      const res = await api.post('/api/outreach/followups/run/');
-      const d = res.data;
+      const d = await runFollowups();
       toast.success(`Follow-ups: ${d.sent} sent, ${d.errors} errors, ${d.skipped} skipped`);
-      fetchSent();
+      queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) {
-      toast.error('Follow-up run failed: ' + (err.response?.data?.error || err.message));
+      toast.error('Follow-up run failed: ' + err.message);
     } finally {
       setRunningFollowups(false);
     }
@@ -193,11 +179,11 @@ const OutreachPage = () => {
   const handleMarkReplied = async (emailId) => {
     setReplyingId(emailId);
     try {
-      await api.patch(`/api/outreach/emails/${emailId}/mark-replied/`);
+      await markEmailReplied(emailId);
       toast.success('Marked as replied!');
-      fetchSent();
+      queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) {
-      toast.error('Failed: ' + (err.response?.data?.error || err.message));
+      toast.error('Failed: ' + err.message);
     } finally {
       setReplyingId(null);
     }
@@ -206,11 +192,11 @@ const OutreachPage = () => {
   const handleSend = async (emailId) => {
     setSendingId(emailId);
     try {
-      await api.post(`/api/outreach/emails/${emailId}/send/`);
+      await sendEmail(emailId);
       toast.success('Email sent!');
-      fetchSent();
+      queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) {
-      toast.error('Send failed: ' + (err.response?.data?.error || err.message));
+      toast.error('Send failed: ' + err.message);
     } finally {
       setSendingId(null);
     }
@@ -219,10 +205,10 @@ const OutreachPage = () => {
   const handleGenerateCv = async (jobId) => {
     setGeneratingCvFor(jobId);
     try {
-      const res = await api.post(`/api/outreach/jobs/${jobId}/generate-cv/`, {}, { responseType: 'blob' });
-      const url  = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const blob = await generateJobCV(jobId);
+      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
       const link = document.createElement('a');
-      link.href  = url;
+      link.href = url;
       link.setAttribute('download', `tailored_cv_${jobId}.pdf`);
       document.body.appendChild(link);
       link.click();
@@ -230,8 +216,7 @@ const OutreachPage = () => {
       window.URL.revokeObjectURL(url);
       toast.success('Tailored CV downloaded!');
     } catch (err) {
-      const msg = err.response?.data?.error || err.message;
-      toast.error('CV generation failed: ' + msg);
+      toast.error('CV generation failed: ' + err.message);
     } finally {
       setGeneratingCvFor(null);
     }
@@ -360,7 +345,7 @@ const OutreachPage = () => {
         <EditEmailModal
           email={editModal}
           onClose={() => setEditModal(null)}
-          onSaved={() => { setEditModal(null); fetchDrafts(); }}
+          onSaved={() => { setEditModal(null); queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] }); }}
         />
       )}
     </div>
@@ -759,7 +744,7 @@ function EditEmailModal({ email, onClose, onSaved }) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.patch(`/api/outreach/emails/${email.id}/edit/`, { subject, body });
+      await editEmail(email.id, { subject, body });
       toast.success('Email updated');
       onSaved();
     } catch (err) {

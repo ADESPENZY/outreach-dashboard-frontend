@@ -1,18 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  getWarmupSessions, getWarmupStats, createWarmupSession,
+  toggleWarmupSession, runWarmup, getAvailableAccounts,
+} from '../services/apiWarmup';
 import {
   Mail, Plus, ChevronDown, MoreHorizontal, Download, Settings, Pause, Play,
   Calendar, CheckSquare, XCircle, Send, X,
 } from 'lucide-react';
 import * as echarts from 'echarts';
-import api from '../api';
 
 const WarmUp = () => {
-  const [sessions, setSessions] = useState([]);
-  const [statsData, setStatsData] = useState(null);
+  const queryClient = useQueryClient();
   const [availableAccounts, setAvailableAccounts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [togglingId, setTogglingId] = useState(null);
   const [activeTab, setActiveTab] = useState('delivery');
   const [dateRange, setDateRange] = useState(30);
   const [dateRangeDropdownOpen, setDateRangeDropdownOpen] = useState(false);
@@ -28,7 +28,6 @@ const WarmUp = () => {
     auto_increase: true,
   });
   const [addError, setAddError] = useState('');
-  const [addLoading, setAddLoading] = useState(false);
 
   const dailySendVolumeChartRef = useRef(null);
   const deliveryMetricsChartRef = useRef(null);
@@ -43,25 +42,34 @@ const WarmUp = () => {
 
   // ── data fetching ────────────────────────────────────────────────────────
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [sessRes, statsRes] = await Promise.all([
-        api.get('/api/warmup/sessions/'),
-        api.get(`/api/warmup/stats/?days=${dateRange}`),
-      ]);
-      setSessions(sessRes.data);
-      setStatsData(statsRes.data);
-    } catch (err) {
-      console.error('Failed to load warmup data', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [dateRange]);
+  const { data: sessions = [], isLoading: loading } = useQuery({
+    queryKey: ['warmup-sessions'],
+    queryFn: getWarmupSessions,
+  });
 
-  useEffect(() => {
-    setLoading(true);
-    fetchData();
-  }, [fetchData]);
+  const { data: statsData } = useQuery({
+    queryKey: ['warmup-stats', dateRange],
+    queryFn: () => getWarmupStats(dateRange),
+  });
+
+  const toggleMutation = useMutation({
+    mutationFn: (sessionId) => toggleWarmupSession(sessionId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warmup-sessions'] }),
+  });
+
+  const runWarmupMutation = useMutation({
+    mutationFn: runWarmup,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['warmup-sessions'] }),
+  });
+
+  const addAccountMutation = useMutation({
+    mutationFn: (sessionData) => createWarmupSession(sessionData),
+    onSuccess: () => {
+      setEmailModalOpen(false);
+      queryClient.invalidateQueries({ queryKey: ['warmup-sessions'] });
+    },
+    onError: (err) => setAddError(err.message || 'Failed to create warmup session.'),
+  });
 
   // ── charts ───────────────────────────────────────────────────────────────
 
@@ -229,52 +237,27 @@ const WarmUp = () => {
   const handleOpenModal = async () => {
     setAddError('');
     try {
-      const res = await api.get('/api/warmup/available-accounts/');
-      setAvailableAccounts(res.data);
-      setNewSession({ account_id: res.data[0]?.id || '', strategy: 'balanced', initial_daily_limit: 5, max_daily_limit: 50, daily_increase: 3, auto_increase: true });
+      const accounts = await getAvailableAccounts();
+      setAvailableAccounts(accounts);
+      setNewSession({ account_id: accounts[0]?.id || '', strategy: 'balanced', initial_daily_limit: 5, max_daily_limit: 50, daily_increase: 3, auto_increase: true });
     } catch {
       setAvailableAccounts([]);
     }
     setEmailModalOpen(true);
   };
 
-  const handleAddAccount = async () => {
+  const handleAddAccount = () => {
     if (!newSession.account_id) {
       setAddError('Please select an account.');
       return;
     }
-    setAddLoading(true);
     setAddError('');
-    try {
-      await api.post('/api/warmup/sessions/', newSession);
-      setEmailModalOpen(false);
-      fetchData();
-    } catch (err) {
-      setAddError(err.response?.data?.error || 'Failed to create warmup session.');
-    } finally {
-      setAddLoading(false);
-    }
+    addAccountMutation.mutate(newSession);
   };
 
-  const handleToggle = async (sessionId) => {
-    setTogglingId(sessionId);
-    try {
-      await api.post(`/api/warmup/sessions/${sessionId}/toggle/`);
-      fetchData();
-    } finally {
-      setTogglingId(null);
-    }
-  };
+  const handleToggle = (sessionId) => toggleMutation.mutate(sessionId);
 
-  const handleRunWarmup = async () => {
-    setRunning(true);
-    try {
-      await api.post('/api/warmup/run/');
-      fetchData();
-    } finally {
-      setRunning(false);
-    }
-  };
+  const handleRunWarmup = () => runWarmupMutation.mutate();
 
   // ── derived data for analytics table ─────────────────────────────────────
 
@@ -327,11 +310,11 @@ const WarmUp = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={handleRunWarmup}
-              disabled={running}
+              disabled={runWarmupMutation.isPending}
               className="px-3 py-2 text-sm font-medium rounded-button border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 flex items-center whitespace-nowrap disabled:opacity-50"
             >
               <Send className="w-4 h-4 mr-1.5" />
-              {running ? 'Sending…' : 'Run Warmup Now'}
+              {runWarmupMutation.isPending ? 'Sending…' : 'Run Warmup Now'}
             </button>
             <button
               onClick={handleOpenModal}
@@ -461,11 +444,11 @@ const WarmUp = () => {
                   </button>
                   <button
                     onClick={() => handleToggle(s.id)}
-                    disabled={togglingId === s.id}
+                    disabled={toggleMutation.isPending && toggleMutation.variables === s.id}
                     className="flex-1 px-3 py-1.5 text-xs font-medium rounded-button bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center whitespace-nowrap disabled:opacity-50"
                   >
                     {s.is_active ? <Pause className="w-3.5 h-3.5 mr-1" /> : <Play className="w-3.5 h-3.5 mr-1" />}
-                    {togglingId === s.id ? '…' : s.is_active ? 'Pause' : 'Resume'}
+                    {toggleMutation.isPending && toggleMutation.variables === s.id ? '…' : s.is_active ? 'Pause' : 'Resume'}
                   </button>
                 </div>
               </div>
@@ -746,10 +729,10 @@ const WarmUp = () => {
                 </button>
                 <button
                   onClick={handleAddAccount}
-                  disabled={addLoading || availableAccounts.length === 0}
+                  disabled={addAccountMutation.isPending || availableAccounts.length === 0}
                   className="px-4 py-2 text-sm font-medium rounded-button bg-primary-light hover:bg-primary-light/90 text-white whitespace-nowrap disabled:opacity-50"
                 >
-                  {addLoading ? 'Starting…' : 'Start Warmup'}
+                  {addAccountMutation.isPending ? 'Starting…' : 'Start Warmup'}
                 </button>
               </div>
             </div>

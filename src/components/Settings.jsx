@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   User, Send, Flame, Zap, AlertTriangle, LogOut, Save,
@@ -7,8 +8,10 @@ import {
   Key, RefreshCw, Briefcase, Target
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import api from '../api';
-import { getMe, getProfile, updateProfile, getGmailAccounts } from '@/services/apiBlog';
+import { getMe } from '@/services/apiAuth';
+import { getProfile, updateProfile } from '@/services/apiProfile';
+import { getGmailAccounts } from '@/services/apiGmail';
+import { getHunterQuota } from '@/services/apiOutreach';
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 const TABS = [
@@ -204,9 +207,7 @@ const Settings = () => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function AccountTab() {
-  const [me, setMe]           = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
+  const queryClient = useQueryClient();
 
   const [fullName,      setFullName]      = useState('');
   const [contactEmail,  setContactEmail]  = useState('');
@@ -216,40 +217,39 @@ function AccountTab() {
   const [githubUrl,     setGithubUrl]     = useState('');
   const [portfolioUrl,  setPortfolioUrl]  = useState('');
 
-  useEffect(() => {
-    Promise.all([getMe(), getProfile()]).then(([meData, profileData]) => {
-      setMe(meData);
-      setFullName(profileData?.full_name || '');
-      setContactEmail(profileData?.contact_email || '');
-      setPhone(profileData?.phone || '');
-      setLocation(profileData?.location || '');
-      setLinkedinUrl(profileData?.linkedin_url || '');
-      setGithubUrl(profileData?.github_url || '');
-      setPortfolioUrl(profileData?.portfolio_url || '');
-    }).catch(() => {
-      toast.error('Failed to load account info');
-    }).finally(() => setLoading(false));
-  }, []);
+  const { data: accountData, isLoading: loading } = useQuery({
+    queryKey: ['account-settings'],
+    queryFn: () => Promise.all([getMe(), getProfile()]).then(([me, profile]) => ({ me, profile })),
+  });
 
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await updateProfile({
-        full_name:     fullName,
-        contact_email: contactEmail,
-        phone,
-        location,
-        linkedin_url:  linkedinUrl,
-        github_url:    githubUrl,
-        portfolio_url: portfolioUrl,
-      });
+  useEffect(() => {
+    if (!accountData) return;
+    const { profile } = accountData;
+    setFullName(profile?.full_name || '');
+    setContactEmail(profile?.contact_email || '');
+    setPhone(profile?.phone || '');
+    setLocation(profile?.location || '');
+    setLinkedinUrl(profile?.linkedin_url || '');
+    setGithubUrl(profile?.github_url || '');
+    setPortfolioUrl(profile?.portfolio_url || '');
+  }, [accountData]);
+
+  const saveMutation = useMutation({
+    mutationFn: (profileData) => updateProfile(profileData),
+    onSuccess: () => {
       toast.success('Profile updated');
-    } catch {
-      toast.error('Failed to save profile');
-    } finally {
-      setSaving(false);
-    }
-  };
+      queryClient.invalidateQueries({ queryKey: ['account-settings'] });
+    },
+    onError: () => toast.error('Failed to save profile'),
+  });
+
+  const handleSave = () => saveMutation.mutate({
+    full_name: fullName, contact_email: contactEmail,
+    phone, location,
+    linkedin_url: linkedinUrl, github_url: githubUrl, portfolio_url: portfolioUrl,
+  });
+
+  const me = accountData?.me;
 
   if (loading) return (
     <div className="flex items-center justify-center py-20">
@@ -286,7 +286,7 @@ function AccountTab() {
         title="Contact Info"
         description="Shown on your generated CVs and used in outreach signatures."
         onSave={handleSave}
-        saving={saving}
+        saving={saveMutation.isPending}
       >
         <FieldRow label="Full Name" hint="Used in CV header and signatures">
           <InputField
@@ -324,7 +324,7 @@ function AccountTab() {
         title="Links"
         description="Shown on your CV sidebar."
         onSave={handleSave}
-        saving={saving}
+        saving={saveMutation.isPending}
       >
         <FieldRow label="LinkedIn" hint="Full URL">
           <InputField
@@ -365,23 +365,24 @@ const OUTREACH_DEFAULTS = {
 };
 
 function OutreachTab() {
-  const [accounts,  setAccounts]  = useState([]);
-  const [quota,     setQuota]     = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [prefs,     setPrefs]     = useState(OUTREACH_DEFAULTS);
-
-  useEffect(() => {
+  const [prefs, setPrefs] = useState(() => {
     const saved = localStorage.getItem('outreach_prefs');
-    if (saved) setPrefs({ ...OUTREACH_DEFAULTS, ...JSON.parse(saved) });
+    return saved ? { ...OUTREACH_DEFAULTS, ...JSON.parse(saved) } : OUTREACH_DEFAULTS;
+  });
 
-    Promise.all([
-      getGmailAccounts(),
-      api.get('/api/outreach/hunter-quota/').catch(() => null),
-    ]).then(([accsData, quotaRes]) => {
-      setAccounts(accsData?.results ?? []);
-      if (quotaRes) setQuota(quotaRes.data);
-    }).finally(() => setLoading(false));
-  }, []);
+  const { data: outreachSettingsData, isLoading: loading } = useQuery({
+    queryKey: ['outreach-tab-settings'],
+    queryFn: async () => {
+      const [accsData, quota] = await Promise.all([
+        getGmailAccounts(),
+        getHunterQuota().catch(() => null),
+      ]);
+      return { accounts: accsData?.results ?? [], quota };
+    },
+  });
+
+  const accounts = outreachSettingsData?.accounts ?? [];
+  const quota    = outreachSettingsData?.quota ?? null;
 
   const set = (key, val) => setPrefs(p => ({ ...p, [key]: val }));
 

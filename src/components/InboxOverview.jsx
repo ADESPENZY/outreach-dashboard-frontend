@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { MoreHorizontal, RefreshCw, Loader2 } from 'lucide-react';
-import { getInboxStats } from '../services/apiBlog';
+import { getInboxStats } from '../services/apiInboxes';
 
 function timeAgo(date) {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);

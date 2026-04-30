@@ -1,9 +1,11 @@
-import React, { Fragment, useState, useEffect, useCallback } from 'react';
+import React, { Fragment, useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Mail, Send, MailOpen, MessageSquare, ChevronDown, ChevronUp,
   Search, Pause, Play, RefreshCw, Loader2, AlertCircle, Users,
 } from 'lucide-react';
-import { getInboxStats, toggleGmailAccount } from '../services/apiBlog';
+import { getInboxStats } from '../services/apiInboxes';
+import { toggleGmailAccount } from '../services/apiGmail';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -51,37 +53,25 @@ function formatDate(iso) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const Inboxes = () => {
-  const [data, setData]             = useState(null);
-  const [loading, setLoading]       = useState(true);
-  const [toggling, setToggling]     = useState(null);
+  const queryClient = useQueryClient();
   const [search, setSearch]         = useState('');
   const [statusFilter, setStatus]   = useState('All');
   const [filterOpen, setFilterOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState([]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await getInboxStats();
-      setData(res);
-    } catch (err) {
-      console.error('Inboxes fetch failed:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, isLoading: loading, isFetching, refetch: fetchData } = useQuery({
+    queryKey: ['inboxes'],
+    queryFn: () => getInboxStats(),
+  });
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const toggleMutation = useMutation({
+    mutationFn: (id) => toggleGmailAccount(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inboxes'] }),
+  });
 
-  const handleToggle = async (e, id) => {
+  const handleToggle = (e, id) => {
     e.stopPropagation();
-    setToggling(id);
-    try {
-      await toggleGmailAccount(id);
-      await fetchData();
-    } finally {
-      setToggling(null);
-    }
+    toggleMutation.mutate(id);
   };
 
   const toggleRow = (id) => {
@@ -99,7 +89,7 @@ const Inboxes = () => {
     return matchSearch && matchStatus;
   });
 
-  if (loading && !data) {
+  if (loading) {
     return (
       <main className="p-6 flex items-center justify-center min-h-[60vh]">
         <Loader2 className="w-8 h-8 animate-spin text-primary-light" />
@@ -121,11 +111,11 @@ const Inboxes = () => {
           </p>
         </div>
         <button
-          onClick={fetchData}
-          disabled={loading}
+          onClick={() => fetchData()}
+          disabled={isFetching}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm hover:bg-neutral transition-all disabled:opacity-50"
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
           Refresh
         </button>
       </div>
@@ -246,11 +236,11 @@ const Inboxes = () => {
                           <div className="flex items-center justify-end gap-2">
                             <button
                               onClick={e => handleToggle(e, account.id)}
-                              disabled={toggling === account.id}
+                              disabled={toggleMutation.isPending && toggleMutation.variables === account.id}
                               title={account.is_active ? 'Pause account' : 'Activate account'}
                               className="w-8 h-8 flex items-center justify-center rounded-full text-secondary-dark hover:bg-neutral-dark disabled:opacity-50 transition-colors"
                             >
-                              {toggling === account.id
+                              {toggleMutation.isPending && toggleMutation.variables === account.id
                                 ? <Loader2 className="w-4 h-4 animate-spin" />
                                 : account.is_active
                                   ? <Pause className="w-4 h-4" />

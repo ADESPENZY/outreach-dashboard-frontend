@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ArrowUp, ArrowDown, Send, Mail, MailOpen, MessageSquare,
   AlertCircle, FileText, Users, Briefcase, Loader2, RefreshCw
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
-import api from '../api';
+import { getAnalytics } from '../services/apiAnalytics';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -49,23 +50,12 @@ function StatusBadge({ status }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const Analytics = () => {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [days, setDays]       = useState(30);
+  const [days, setDays] = useState(30);
 
-  const fetchAnalytics = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await api.get('/api/outreach/analytics/', { params: { days } });
-      setData(res.data);
-    } catch (err) {
-      console.error('Analytics fetch failed:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [days]);
-
-  useEffect(() => { fetchAnalytics(); }, [fetchAnalytics]);
+  const { data, isLoading: loading, refetch: fetchAnalytics } = useQuery({
+    queryKey: ['analytics', days],
+    queryFn: () => getAnalytics(days),
+  });
 
   if (loading) {
     return (

@@ -9,8 +9,8 @@ import {
 import * as echarts from 'echarts';
 import {
   getJobs, getJobStats, createJob, patchJobStatus, deleteJob, updateJob,
-  getGmailAccounts,
-} from '@/services/apiBlog';
+} from '@/services/apiJobTracker';
+import { getGmailAccounts } from '@/services/apiGmail';
 import SmallSpinner from './SmallSpinner';
 
 // ---------------------------------------------------------------------------
