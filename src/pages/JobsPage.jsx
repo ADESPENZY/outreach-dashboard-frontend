@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router';
 import {
-  CheckCircle, XCircle, Eye, Search, Play, Plus, MapPin, Building, Briefcase,
+  CheckCircle, XCircle, Search, Play, Plus, MapPin, Building, Briefcase,
   ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban
 } from 'lucide-react';
 import {
@@ -25,7 +25,11 @@ const JobsPage = () => {
     const scoreAllMutation = useMutation({
         mutationFn: scoreAllJobs,
         onSuccess: (data) => {
-            toast.success(`${data.approved} approved, ${data.rejected} rejected`);
+            if (data.approved > 0) {
+                toast.success(`Done! ${data.approved} approved, ${data.rejected} rejected. Go to Outreach to generate emails.`, { autoClose: 6000 });
+            } else {
+                toast.info(`Scoring complete — ${data.rejected} jobs rejected. Try scraping with different keywords.`, { autoClose: 6000 });
+            }
             queryClient.invalidateQueries({ queryKey: ['jobs'] });
         },
         onError: () => toast.error('Scoring failed. Please try again.'),
@@ -88,7 +92,11 @@ const JobsPage = () => {
             const count = typeof data.new_jobs === 'object'
                 ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
                 : data.new_jobs;
-            toast.success(`Scraped ${count} new jobs`);
+            if (count > 0) {
+                toast.success(`${count} new jobs scraped! Now press "Score All" to find your best matches.`, { autoClose: 7000 });
+            } else {
+                toast.info('No new jobs found — they may already be in your list or try different keywords.', { autoClose: 6000 });
+            }
             setIsScrapeModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['jobs'] });
         },
@@ -181,6 +189,11 @@ const JobsPage = () => {
         }
     };
 
+    // Derived counts for UX nudges
+    const unscoredCount  = jobs.filter(j => j.fit_score == null).length;
+    const approvedCount  = jobs.filter(j => j.status === 'approved').length;
+    const estScoreMin    = Math.max(1, Math.ceil(unscoredCount * 4 / 60)); // ~4s per job
+
     // Calculate pagination
     const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
     const startIndex = (currentPage - 1) * itemsPerPage;
@@ -204,11 +217,19 @@ const JobsPage = () => {
                 <div className="flex items-center gap-3">
                     <button
                         onClick={handleScoreAll}
-                        disabled={scoreAllMutation.isPending}
-                        className="flex items-center gap-2 bg-gradient-to-r hover:bg-gradient-to-br from-black to-black-light text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-black/10 transition-all active:scale-95 disabled:opacity-75 disabled:active:scale-100"
+                        disabled={scoreAllMutation.isPending || unscoredCount === 0}
+                        className="flex flex-col items-center gap-0.5 bg-gradient-to-r hover:bg-gradient-to-br from-black to-black-light text-white px-5 py-2 rounded-xl font-medium shadow-md shadow-black/10 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 min-w-[130px]"
                     >
-                        {scoreAllMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                        Score All
+                        <span className="flex items-center gap-2 text-sm">
+                            {scoreAllMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                            {scoreAllMutation.isPending ? 'Scoring...' : `Score All${unscoredCount > 0 ? ` (${unscoredCount})` : ''}`}
+                        </span>
+                        {unscoredCount > 0 && !scoreAllMutation.isPending && (
+                            <span className="text-[10px] text-white/60 font-normal">~{estScoreMin} min</span>
+                        )}
+                        {scoreAllMutation.isPending && (
+                            <span className="text-[10px] text-white/60 font-normal">please wait...</span>
+                        )}
                     </button>
                     <button
                         onClick={() => setIsScrapeModalOpen(true)}
@@ -219,6 +240,35 @@ const JobsPage = () => {
                     </button>
                 </div>
             </div>
+
+            {/* ── Step nudge banners ─────────────────────────────────────────── */}
+            {scoreAllMutation.isPending && (
+                <div className="flex items-start gap-3 bg-black text-white px-5 py-3.5 rounded-2xl shadow-sm">
+                    <Loader2 className="w-4 h-4 animate-spin mt-0.5 shrink-0 text-primary-light" />
+                    <div>
+                        <p className="text-sm font-semibold">Scoring {unscoredCount} jobs with AI...</p>
+                        <p className="text-xs text-white/60 mt-0.5">This usually takes {estScoreMin}–{estScoreMin + 1} minutes. You can leave this page and come back.</p>
+                    </div>
+                </div>
+            )}
+            {!scoreAllMutation.isPending && unscoredCount > 0 && (
+                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 px-5 py-3.5 rounded-2xl">
+                    <Play className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
+                    <div>
+                        <p className="text-sm font-semibold text-amber-800">{unscoredCount} jobs waiting to be scored</p>
+                        <p className="text-xs text-amber-600 mt-0.5">Press "Score All" to let AI approve the best matches. Takes ~{estScoreMin} minute{estScoreMin > 1 ? 's' : ''}.</p>
+                    </div>
+                </div>
+            )}
+            {!scoreAllMutation.isPending && unscoredCount === 0 && approvedCount > 0 && (
+                <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 px-5 py-3.5 rounded-2xl">
+                    <CheckCircle className="w-4 h-4 mt-0.5 shrink-0 text-emerald-500" />
+                    <div>
+                        <p className="text-sm font-semibold text-emerald-800">{approvedCount} approved jobs ready</p>
+                        <p className="text-xs text-emerald-600 mt-0.5">Go to <button onClick={() => navigate('/dashboard/outreach')} className="underline font-semibold">Outreach</button> to find contacts and generate emails.</p>
+                    </div>
+                </div>
+            )}
 
             {/* Filters & Search */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-neutral-dark flex flex-col md:flex-row justify-between items-center gap-4">
