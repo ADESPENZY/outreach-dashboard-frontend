@@ -112,6 +112,33 @@ export async function sendEmail(emailId) {
   }
 }
 
+export async function queueEmail(emailId) {
+  try {
+    const response = await api.post(`/api/outreach/emails/${emailId}/queue/`);
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function queueAllEmails() {
+  try {
+    const response = await api.post('/api/outreach/emails/queue-all/');
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function processQueue() {
+  try {
+    const response = await api.post('/api/outreach/emails/process-queue/');
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function markEmailReplied(emailId) {
   try {
     const response = await api.patch(

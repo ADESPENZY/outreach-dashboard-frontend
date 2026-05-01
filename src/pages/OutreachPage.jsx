@@ -1,26 +1,28 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   Send, Users, FileText, CheckCircle, Search,
   Building, Mail, Loader2, ChevronDown,
   ChevronUp, Sparkles, Pencil, X, UserCheck,
-  MailOpen, MessageSquare, ShieldCheck, Download
+  MailOpen, MessageSquare, ShieldCheck, Download,
+  Clock, ListOrdered,
 } from 'lucide-react';
 import {
   getContacts, getDraftEmails, getSentEmails, getHunterQuota,
   findContacts, generateEmail, approveEmail, sendEmail,
   markEmailReplied, runFollowups, generateJobCV, editEmail,
+  queueEmail, queueAllEmails,
 } from '../services/apiOutreach';
 
 // ─── Tabs ────────────────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'contacts', label: 'Contacts', icon: Users },
-  { key: 'drafts',   label: 'Email Drafts', icon: FileText },
+  { key: 'contacts', label: 'Contacts',       icon: Users },
+  { key: 'drafts',   label: 'Email Drafts',   icon: FileText },
   { key: 'sent',     label: 'Approved / Sent', icon: Send },
 ];
 
-// ─── Status badge helper ─────────────────────────────────────────────────────
+// ─── Status badge ─────────────────────────────────────────────────────────────
 const statusColors = {
   draft:    'bg-amber-50 text-amber-700 border-amber-200',
   approved: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -50,6 +52,40 @@ function ConfidenceBadge({ score }) {
   );
 }
 
+// ─── Queue status pill ────────────────────────────────────────────────────────
+function QueueStatusPill({ email }) {
+  if (email.status === 'sent') {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+        <CheckCircle className="w-3.5 h-3.5" /> Sent {email.sent_at ? new Date(email.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
+      </span>
+    );
+  }
+  if (email.status === 'opened') {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-purple-600">
+        <MailOpen className="w-3.5 h-3.5" /> Opened
+      </span>
+    );
+  }
+  if (email.status === 'replied') {
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-blue-600">
+        <MessageSquare className="w-3.5 h-3.5" /> Replied
+      </span>
+    );
+  }
+  if (email.is_queued && email.scheduled_send_at) {
+    const t = new Date(email.scheduled_send_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return (
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-secondary-dark">
+        <Clock className="w-3.5 h-3.5 text-secondary-dark/60" /> Queued — sends at {t}
+      </span>
+    );
+  }
+  return null;
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
@@ -60,12 +96,10 @@ const OutreachPage = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editModal, setEditModal]   = useState(null);
 
-  // Action loading states (per-item)
   const [findingContacts, setFindingContacts] = useState(false);
   const [generatingAll, setGeneratingAll]     = useState(false);
   const [generatingFor, setGeneratingFor]     = useState(null);
   const [approvingId, setApprovingId]         = useState(null);
-  const [sendingId, setSendingId]             = useState(null);
   const [replyingId, setReplyingId]           = useState(null);
   const [runningFollowups, setRunningFollowups] = useState(false);
   const [generatingCvFor, setGeneratingCvFor] = useState(null);
@@ -94,13 +128,44 @@ const OutreachPage = () => {
 
   const loading = loadingContacts && loadingDrafts && loadingSent;
 
-  // ── Actions ────────────────────────────────────────────────────────────────
+  // ── Queue mutations ────────────────────────────────────────────────────────
 
-  const invalidateAll = () => {
-    queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
-    queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
-    queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
-  };
+  const queueSingleMutation = useMutation({
+    mutationFn: (emailId) => queueEmail(emailId),
+    onSuccess: (data, emailId) => {
+      if (data.status === 'already_sent') {
+        toast.info('This email was already sent.');
+      } else if (data.status === 'already_queued') {
+        const t = data.scheduled_send_at
+          ? new Date(data.scheduled_send_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          : '';
+        toast.info(`Already queued${t ? ` — sends at ${t}` : ''}`);
+      } else {
+        const t = new Date(data.scheduled_send_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        toast.success(`Queued! Sends at ${t}`);
+        queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      }
+    },
+    onError: (err) => toast.error('Queue failed: ' + err.message),
+  });
+
+  const queueAllMutation = useMutation({
+    mutationFn: queueAllEmails,
+    onSuccess: (data) => {
+      if (data.queued === 0) {
+        toast.info('No approved emails to queue.');
+      } else {
+        toast.success(
+          `${data.queued} email${data.queued > 1 ? 's' : ''} queued. Last one sends at ${data.estimated_completion}.`,
+          { autoClose: 7000 }
+        );
+        queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      }
+    },
+    onError: (err) => toast.error('Queue all failed: ' + err.message),
+  });
+
+  // ── Other actions ──────────────────────────────────────────────────────────
 
   const handleFindContacts = async () => {
     setFindingContacts(true);
@@ -132,17 +197,13 @@ const OutreachPage = () => {
   const handleGenerateAllEmails = async () => {
     setGeneratingAll(true);
     let success = 0, fail = 0;
-    const contactsWithoutEmails = contacts.filter(c => {
-      return !drafts.some(d => d.job_id === c.job?.id) &&
-             !sentEmails.some(s => s.job_id === c.job?.id);
-    });
+    const contactsWithoutEmails = contacts.filter(c =>
+      !drafts.some(d => d.job_id === c.job?.id) &&
+      !sentEmails.some(s => s.job_id === c.job?.id)
+    );
     for (const contact of contactsWithoutEmails) {
-      try {
-        await generateEmail(contact.job?.id);
-        success++;
-      } catch {
-        fail++;
-      }
+      try { await generateEmail(contact.job?.id); success++; }
+      catch { fail++; }
     }
     toast.success(`Generated ${success} emails${fail > 0 ? `, ${fail} failed` : ''}`);
     queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
@@ -153,7 +214,7 @@ const OutreachPage = () => {
     setApprovingId(emailId);
     try {
       await approveEmail(emailId);
-      toast.success('Email approved!');
+      toast.success('Email approved — go to Approved / Sent tab to queue it.');
       queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) {
@@ -189,24 +250,11 @@ const OutreachPage = () => {
     }
   };
 
-  const handleSend = async (emailId) => {
-    setSendingId(emailId);
-    try {
-      await sendEmail(emailId);
-      toast.success('Email sent!');
-      queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
-    } catch (err) {
-      toast.error('Send failed: ' + err.message);
-    } finally {
-      setSendingId(null);
-    }
-  };
-
   const handleGenerateCv = async (jobId) => {
     setGeneratingCvFor(jobId);
     try {
       const blob = await generateJobCV(jobId);
-      const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      const url  = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;
       link.setAttribute('download', `tailored_cv_${jobId}.pdf`);
@@ -222,7 +270,7 @@ const OutreachPage = () => {
     }
   };
 
-  // ── Filtered ───────────────────────────────────────────────────────────────
+  // ── Filtered contacts ──────────────────────────────────────────────────────
 
   const q = searchQuery.toLowerCase();
   const filteredContacts = contacts.filter(c => {
@@ -234,28 +282,22 @@ const OutreachPage = () => {
            (c.email || '').toLowerCase().includes(q);
   });
 
-  // ── Check if email exists for a job ────────────────────────────────────────
-
-  const hasEmailForJob = (jobId) => {
-    return drafts.some(d => d.job_id === jobId) ||
-           sentEmails.some(s => s.job_id === jobId);
-  };
+  const hasEmailForJob = (jobId) =>
+    drafts.some(d => d.job_id === jobId) || sentEmails.some(s => s.job_id === jobId);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in font-roboto">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">
             Outreach
           </h1>
-          <p className="text-sm text-secondary-dark mt-1">Find contacts, generate cold emails, and send them</p>
+          <p className="text-sm text-secondary-dark mt-1">Find contacts, generate cold emails, and queue them to send</p>
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark overflow-hidden">
         <div className="flex border-b border-neutral-dark">
           {TABS.map(tab => {
@@ -288,7 +330,6 @@ const OutreachPage = () => {
           })}
         </div>
 
-        {/* Tab content */}
         <div className="p-6">
           {loading ? (
             <div className="py-16 text-center">
@@ -325,8 +366,10 @@ const OutreachPage = () => {
               {activeTab === 'sent' && (
                 <SentTab
                   emails={sentEmails}
-                  onSend={handleSend}
-                  sendingId={sendingId}
+                  onQueueSingle={(id) => queueSingleMutation.mutate(id)}
+                  queuingId={queueSingleMutation.isPending ? queueSingleMutation.variables : null}
+                  onQueueAll={() => queueAllMutation.mutate()}
+                  queuingAll={queueAllMutation.isPending}
                   onMarkReplied={handleMarkReplied}
                   replyingId={replyingId}
                   onRunFollowups={handleRunFollowups}
@@ -340,12 +383,14 @@ const OutreachPage = () => {
         </div>
       </div>
 
-      {/* Edit Modal */}
       {editModal && (
         <EditEmailModal
           email={editModal}
           onClose={() => setEditModal(null)}
-          onSaved={() => { setEditModal(null); queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] }); }}
+          onSaved={() => {
+            setEditModal(null);
+            queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+          }}
         />
       )}
     </div>
@@ -376,10 +421,8 @@ function HunterQuotaBadge({ quota }) {
 function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, findingContacts, onGenerateEmail, generatingFor, hasEmailForJob, hunterQuota }) {
   return (
     <div className="space-y-4">
-      {/* Hunter quota badge */}
       <HunterQuotaBadge quota={hunterQuota} />
 
-      {/* Top bar */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div className="relative w-full md:w-80">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-dark/60 w-4 h-4" />
@@ -401,13 +444,8 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
         </button>
       </div>
 
-      {/* Table or empty */}
       {contacts.length === 0 ? (
-        <EmptyState
-          icon={Users}
-          title="No contacts found yet"
-          subtitle="Go to the Jobs page, approve some jobs, then click Find Contacts."
-        />
+        <EmptyState icon={Users} title="No contacts found yet" subtitle="Go to the Jobs page, approve some jobs, then click Find Contacts." />
       ) : (
         <div className="overflow-x-auto rounded-xl border border-neutral-dark">
           <table className="w-full text-left border-collapse">
@@ -457,11 +495,9 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
                         disabled={generatingFor === contact.job?.id}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
                       >
-                        {generatingFor === contact.job?.id ? (
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-3 h-3" />
-                        )}
+                        {generatingFor === contact.job?.id
+                          ? <Loader2 className="w-3 h-3 animate-spin" />
+                          : <Sparkles className="w-3 h-3" />}
                         Generate Email
                       </button>
                     )}
@@ -483,7 +519,6 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
 function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAll, onEdit, onGenerateCv, generatingCvFor }) {
   return (
     <div className="space-y-4">
-      {/* Top bar */}
       <div className="flex justify-end">
         <button
           onClick={onGenerateAll}
@@ -496,11 +531,7 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
       </div>
 
       {drafts.length === 0 ? (
-        <EmptyState
-          icon={FileText}
-          title="No email drafts"
-          subtitle="Go to the Contacts tab and click Generate Email for a contact."
-        />
+        <EmptyState icon={FileText} title="No email drafts" subtitle="Go to the Contacts tab and click Generate Email for a contact." />
       ) : (
         <div className="grid gap-4">
           {drafts.map(email => (
@@ -525,8 +556,10 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
 // TAB 3 — APPROVED / SENT
 // ═════════════════════════════════════════════════════════════════════════════
 
-function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFollowups, runningFollowups, onGenerateCv, generatingCvFor }) {
-  const dueCount = emails.filter(e =>
+function SentTab({ emails, onQueueSingle, queuingId, onQueueAll, queuingAll, onMarkReplied, replyingId, onRunFollowups, runningFollowups, onGenerateCv, generatingCvFor }) {
+  const approvedUnqueued = emails.filter(e => e.status === 'approved' && !e.is_queued).length;
+  const queuedCount      = emails.filter(e => e.is_queued && e.status === 'approved').length;
+  const dueCount         = emails.filter(e =>
     ['sent', 'opened'].includes(e.status) &&
     e.next_followup_at &&
     new Date(e.next_followup_at) <= new Date()
@@ -534,40 +567,61 @@ function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFo
 
   return (
     <div className="space-y-4">
-      {/* Follow-up action bar */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      {/* Action bar */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          {approvedUnqueued > 0 && (
+            <span className="px-2.5 py-1 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-semibold">
+              {approvedUnqueued} ready to queue
+            </span>
+          )}
+          {queuedCount > 0 && (
+            <span className="flex items-center gap-1 px-2.5 py-1 bg-neutral border border-neutral-dark rounded-full text-xs font-semibold text-secondary-dark">
+              <Clock className="w-3 h-3" /> {queuedCount} queued
+            </span>
+          )}
           {dueCount > 0 && (
             <span className="px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-xs font-semibold">
               {dueCount} follow-up{dueCount > 1 ? 's' : ''} due now
             </span>
           )}
         </div>
-        <button
-          onClick={onRunFollowups}
-          disabled={runningFollowups}
-          className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-violet-200 transition-all active:scale-95 disabled:opacity-70"
-        >
-          {runningFollowups ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {runningFollowups ? 'Sending...' : 'Run Follow-ups'}
-        </button>
+
+        <div className="flex items-center gap-2">
+          {/* Queue All Approved */}
+          {approvedUnqueued > 0 && (
+            <button
+              onClick={onQueueAll}
+              disabled={queuingAll}
+              className="flex items-center gap-2 bg-gradient-to-r from-black to-black-light text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-black/10 transition-all active:scale-95 disabled:opacity-70"
+            >
+              {queuingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListOrdered className="w-4 h-4" />}
+              {queuingAll ? 'Queuing...' : `Queue All (${approvedUnqueued})`}
+            </button>
+          )}
+          {/* Follow-ups */}
+          <button
+            onClick={onRunFollowups}
+            disabled={runningFollowups}
+            className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-violet-600 hover:from-violet-600 hover:to-violet-700 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-violet-200 transition-all active:scale-95 disabled:opacity-70"
+          >
+            {runningFollowups ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {runningFollowups ? 'Sending...' : 'Run Follow-ups'}
+          </button>
+        </div>
       </div>
 
       {emails.length === 0 ? (
-        <EmptyState
-          icon={Send}
-          title="No approved or sent emails"
-          subtitle="Approve some email drafts to see them here."
-        />
+        <EmptyState icon={Send} title="No approved or sent emails" subtitle="Approve some email drafts to see them here." />
       ) : (
         <div className="grid gap-4">
           {emails.map(email => (
             <EmailCard
               key={email.id}
               email={email}
-              onSend={() => onSend(email.id)}
-              sending={sendingId === email.id}
-              showSend={email.status === 'approved'}
+              onQueueSingle={() => onQueueSingle(email.id)}
+              queueing={queuingId === email.id}
+              showQueue={email.status === 'approved' && !email.is_queued}
               onMarkReplied={() => onMarkReplied(email.id)}
               markingReplied={replyingId === email.id}
               showMarkReplied={['sent', 'opened'].includes(email.status)}
@@ -583,15 +637,20 @@ function SentTab({ emails, onSend, sendingId, onMarkReplied, replyingId, onRunFo
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// EMAIL CARD (shared between Drafts and Sent tabs)
+// EMAIL CARD
 // ═════════════════════════════════════════════════════════════════════════════
 
-function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, sending, showSend, onMarkReplied, markingReplied, showMarkReplied, showTimestamps, onGenerateCv, generatingCvFor }) {
+function EmailCard({
+  email,
+  onApprove, approving, onEdit, showApprove,
+  onQueueSingle, queueing, showQueue,
+  onMarkReplied, markingReplied, showMarkReplied,
+  showTimestamps, onGenerateCv, generatingCvFor,
+}) {
   const [expanded, setExpanded] = useState(false);
-
   const bodyLines = (email.body || '').split('\n');
-  const preview = bodyLines.slice(0, 3).join('\n');
-  const hasMore = bodyLines.length > 3;
+  const preview   = bodyLines.slice(0, 3).join('\n');
+  const hasMore   = bodyLines.length > 3;
 
   return (
     <div className="bg-white border border-neutral-dark rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
@@ -619,6 +678,7 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
             </span>
           )}
           <StatusBadge status={email.status} />
+          <QueueStatusPill email={email} />
         </div>
       </div>
 
@@ -665,9 +725,7 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
           )}
           {email.next_followup_at && !email.replied_at && (
             <span className={`flex items-center gap-1 text-xs font-medium ${
-              new Date(email.next_followup_at) <= new Date()
-                ? 'text-amber-600'
-                : 'text-secondary-dark/60'
+              new Date(email.next_followup_at) <= new Date() ? 'text-amber-600' : 'text-secondary-dark/60'
             }`}>
               ⏰ Follow-up {new Date(email.next_followup_at) <= new Date() ? 'due now' : `due ${new Date(email.next_followup_at).toLocaleDateString()}`}
             </span>
@@ -683,9 +741,7 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
             disabled={generatingCvFor === email.job_id}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
           >
-            {generatingCvFor === email.job_id
-              ? <Loader2 className="w-3 h-3 animate-spin" />
-              : <Download className="w-3 h-3" />}
+            {generatingCvFor === email.job_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
             {generatingCvFor === email.job_id ? 'Generating...' : 'Generate CV'}
           </button>
         )}
@@ -707,15 +763,23 @@ function EmailCard({ email, onApprove, approving, onEdit, showApprove, onSend, s
             Approve
           </button>
         )}
-        {showSend && (
+        {/* Queue for Sending — replaces old Send button */}
+        {showQueue && (
           <button
-            onClick={onSend}
-            disabled={sending}
+            onClick={onQueueSingle}
+            disabled={queueing}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-xl shadow-sm hover:from-emerald-600 hover:to-emerald-700 transition-all disabled:opacity-60"
           >
-            {sending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-            {sending ? 'Sending...' : 'Send Email'}
+            {queueing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+            {queueing ? 'Queuing...' : 'Queue for Sending'}
           </button>
+        )}
+        {/* Already queued — show scheduled time, no button needed */}
+        {email.is_queued && email.status === 'approved' && email.scheduled_send_at && (
+          <span className="flex items-center gap-1.5 text-xs font-semibold text-secondary-dark px-3 py-2 bg-neutral border border-neutral-dark rounded-xl">
+            <Clock className="w-3.5 h-3.5 text-secondary-dark/50" />
+            Sends at {new Date(email.scheduled_send_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </span>
         )}
         {showMarkReplied && (
           <button
@@ -747,7 +811,7 @@ function EditEmailModal({ email, onClose, onSaved }) {
       await editEmail(email.id, { subject, body });
       toast.success('Email updated');
       onSaved();
-    } catch (err) {
+    } catch {
       toast.error('Failed to save changes');
     } finally {
       setSaving(false);
@@ -757,48 +821,33 @@ function EditEmailModal({ email, onClose, onSaved }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
       <div className="bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl border border-neutral-dark relative slide-in-bottom max-h-[90vh] overflow-y-auto">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-secondary-dark/60 hover:bg-neutral-dark rounded-full p-1"
-        >
+        <button onClick={onClose} className="absolute top-4 right-4 text-secondary-dark/60 hover:bg-neutral-dark rounded-full p-1">
           <X className="w-5 h-5" />
         </button>
-
         <h2 className="text-xl font-bold font-montserrat text-black mb-5 flex items-center gap-2">
-          <Pencil className="w-5 h-5 text-primary-light" />
-          Edit Email Draft
+          <Pencil className="w-5 h-5 text-primary-light" /> Edit Email Draft
         </h2>
-
         <div className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Subject</label>
             <input
-              type="text"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
+              type="text" value={subject} onChange={(e) => setSubject(e.target.value)}
               className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
             />
           </div>
           <div>
             <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Body</label>
             <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={12}
+              value={body} onChange={(e) => setBody(e.target.value)} rows={12}
               className="w-full p-3 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none resize-none font-mono leading-relaxed"
             />
           </div>
-
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              onClick={onClose}
-              className="px-4 py-2.5 text-sm font-medium text-secondary-dark bg-white border border-neutral-dark rounded-xl hover:bg-neutral transition-all"
-            >
+            <button onClick={onClose} className="px-4 py-2.5 text-sm font-medium text-secondary-dark bg-white border border-neutral-dark rounded-xl hover:bg-neutral transition-all">
               Cancel
             </button>
             <button
-              onClick={handleSave}
-              disabled={saving}
+              onClick={handleSave} disabled={saving}
               className="px-5 py-2.5 text-sm font-medium text-white bg-gradient-to-r from-black to-black-light rounded-xl shadow-lg hover:shadow-xl transition-all disabled:opacity-70 flex items-center gap-2"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
