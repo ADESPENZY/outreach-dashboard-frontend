@@ -4,13 +4,13 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router';
 import {
   CheckCircle, XCircle, Search, Play, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban
+  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch
 } from 'lucide-react';
 import {
   getScrapedJobs, scoreAllJobs, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs,
 } from '../services/apiJobs';
-import { generateJobCV, getJobCV } from '../services/apiOutreach';
+import { generateJobCV, getJobCV, findContactManual } from '../services/apiOutreach';
 
 const JobsPage = () => {
     const navigate = useNavigate();
@@ -76,6 +76,21 @@ const JobsPage = () => {
             navigate('/dashboard/job-tracker');
         },
         onError: () => toast.error('Could not add to tracker. Please try again in a moment.'),
+    });
+
+    const findContactMutation = useMutation({
+        mutationFn: (jobId) => findContactManual(jobId),
+        onSuccess: (data, jobId) => {
+            if (data.status === 'found') {
+                toast.success(`Contact found: ${data.contact?.email}`);
+                queryClient.invalidateQueries({ queryKey: ['jobs'] });
+            } else if (data.status === 'job_board') {
+                toast.info('This is a job board listing — apply directly on their site.');
+            } else {
+                toast.warn('No contact found for this company on Hunter.io.');
+            }
+        },
+        onError: (err) => toast.error(err.message || 'Contact search failed.'),
     });
 
     const scrapeMutation = useMutation({
@@ -374,6 +389,18 @@ const JobsPage = () => {
                                                 <span className={`px-2.5 mx-0 md:-ml-0.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider border shadow-sm ${getStatusBadgeColor(job.status)}`}>
                                                     {job.status || 'scraped'}
                                                 </span>
+                                                {/* Contact status dot */}
+                                                {job.has_contact ? (
+                                                    <span className="flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700">
+                                                        <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                                                        Contact found
+                                                    </span>
+                                                ) : (
+                                                    <span className="flex items-center gap-1.5 text-[10px] font-semibold text-secondary-dark/60">
+                                                        <span className="w-2 h-2 rounded-full bg-gray-300 shrink-0" />
+                                                        No contact
+                                                    </span>
+                                                )}
                                             </div>
                                         </td>
 
@@ -426,6 +453,20 @@ const JobsPage = () => {
                                                             ? <Loader2 className="w-3 h-3 animate-spin" />
                                                             : <Download className="w-3 h-3" />}
                                                         {generateCvMutation.isPending && generateCvMutation.variables === job.id ? 'Generating...' : 'Gen CV'}
+                                                    </button>
+                                                )}
+                                                {/* Find Contact button — only for approved jobs without a contact yet */}
+                                                {job.status === 'approved' && !job.has_contact && (
+                                                    <button
+                                                        onClick={() => findContactMutation.mutate(job.id)}
+                                                        disabled={findContactMutation.isPending && findContactMutation.variables === job.id}
+                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 text-sky-700 border border-sky-200 text-xs font-semibold rounded-lg hover:bg-sky-100 transition-all disabled:opacity-60"
+                                                        title="Search Hunter.io for a contact at this company"
+                                                    >
+                                                        {findContactMutation.isPending && findContactMutation.variables === job.id
+                                                            ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                            : <UserSearch className="w-3 h-3" />}
+                                                        Find Contact
                                                     </button>
                                                 )}
                                                 <button

@@ -34,6 +34,17 @@ export async function getHunterQuota() {
   }
 }
 
+export async function findContactManual(jobId) {
+  try {
+    const response = await api.post("/api/outreach/find-contact-manual/", {
+      job_id: jobId,
+    });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Outreach — Emails
 // ---------------------------------------------------------------------------
