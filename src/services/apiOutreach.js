@@ -139,6 +139,35 @@ export async function processQueue() {
   }
 }
 
+export async function deleteEmail(emailId) {
+  try {
+    const response = await api.delete(`/api/outreach/emails/${emailId}/delete/`);
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function unqueueEmail(emailId) {
+  try {
+    const response = await api.post(`/api/outreach/emails/${emailId}/unqueue/`);
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function rescheduleEmail(emailId, sendAt) {
+  try {
+    const response = await api.post(`/api/outreach/emails/${emailId}/reschedule/`, {
+      send_at: sendAt,
+    });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function markEmailReplied(emailId) {
   try {
     const response = await api.patch(
