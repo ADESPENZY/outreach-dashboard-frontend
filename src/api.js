@@ -1,31 +1,103 @@
-import axios from "axios"
-import { jwtDecode } from "jwt-decode";
+import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
 const api = axios.create({
-  baseURL: BASE_URL
+  baseURL: BASE_URL,
+  withCredentials: true,
 });
 
+export const clearClientAuthState = () => {
+  sessionStorage.removeItem('access');
+  sessionStorage.removeItem('csrf_token');
+  localStorage.removeItem('access');
+  localStorage.removeItem('refresh');
+};
+
+let _isRefreshing = false;
+let _refreshQueue = [];
+
+const processQueue = (error, token = null) => {
+  _refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) {
+      reject(error);
+    } else {
+      resolve(token);
+    }
+  });
+  _refreshQueue = [];
+};
 
 api.interceptors.request.use(
     (config) => {
-        const token = localStorage.getItem("access")
+        const token = sessionStorage.getItem("access");
         if(token){
-            const decoded = jwtDecode(token)
-            const expiry_date = decoded.exp
-            const current_time = Date.now() / 1000
-            if(expiry_date > current_time){
-                config.headers.Authorization = `Bearer ${token}`
-            }
+            config.headers.Authorization = `Bearer ${token}`;
         }
         return config;
     },
-
     (error) => {
-        return Promise.reject(error)
+        return Promise.reject(error);
     }
+);
 
-)
+api.interceptors.response.use(
+    (response) => response,
+    async (error) => {
+        const originalRequest = error.config;
+        
+        if (error.response?.status === 401) {
+            // Guard 1: Don't refresh the refresh endpoint itself
+            if (originalRequest.url?.includes('/auth/refresh/')) {
+                clearClientAuthState();
+                window.location.href = '/';
+                return Promise.reject(error);
+            }
+
+            // Guard 2: Don't retry the same request forever
+            if (originalRequest._retry) {
+                clearClientAuthState();
+                window.location.href = '/';
+                return Promise.reject(error);
+            }
+
+            // Guard 3: Queue multiple simultaneous 401s
+            if (_isRefreshing) {
+                return new Promise((resolve, reject) => {
+                    _refreshQueue.push({ resolve, reject });
+                }).then(token => {
+                    originalRequest.headers['Authorization'] = `Bearer ${token}`;
+                    return api(originalRequest);
+                }).catch(err => Promise.reject(err));
+            }
+
+            originalRequest._retry = true;
+            _isRefreshing = true;
+
+            try {
+                // Call refresh endpoint. The HttpOnly cookie will be sent automatically
+                const response = await axios.post(
+                    `${BASE_URL}/dashboard/auth/refresh/`,
+                    {},
+                    { withCredentials: true }
+                );
+                const newToken = response.data.access;
+                sessionStorage.setItem('access', newToken);
+                api.defaults.headers.common['Authorization'] = `Bearer ${newToken}`;
+                processQueue(null, newToken);
+                originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+                return api(originalRequest);
+            } catch (refreshError) {
+                processQueue(refreshError, null);
+                clearClientAuthState();
+                window.location.href = '/';
+                return Promise.reject(refreshError);
+            } finally {
+                _isRefreshing = false;
+            }
+        }
+        return Promise.reject(error);
+    }
+);
 
 export default api;

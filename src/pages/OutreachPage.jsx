@@ -584,7 +584,7 @@ function QueueTab({
       {/* Business hours notice */}
       <div className="flex items-center gap-2 text-xs text-secondary-dark/70 bg-neutral border border-neutral-dark rounded-xl px-4 py-2.5">
         <Clock className="w-3.5 h-3.5 shrink-0" />
-        Emails send Mon–Fri, 8:00 AM – 5:00 PM UTC · spaced 4–8 minutes apart · cron runs every 5 min
+        Emails send Mon–Fri, 8:00 AM – 5:00 PM UTC · one email per 5 minutes · never batched
       </div>
 
       {/* Not queued yet */}

@@ -3,6 +3,7 @@ import React, { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMe } from '@/services/apiAuth';
+import { useAuth } from '@/context/AuthContext';
 
 const Header = () => {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
@@ -17,9 +18,10 @@ const Header = () => {
     ? `${me.first_name} ${me.last_name}`.trim() 
     : me?.username;
 
-  const handleLogout = () => {
-    localStorage.removeItem('access');
-    localStorage.removeItem('refresh');
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
     navigate('/', { replace: true });
   };
 

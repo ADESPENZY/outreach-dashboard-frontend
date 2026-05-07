@@ -11,7 +11,7 @@ const JobTrackerOverview = () => {
   useEffect(() => {
     // Fetch job leads from Django API
     fetch('https://your-django-api.com/api/job-leads/', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('access_token')}` },
+      headers: { Authorization: `Bearer ${sessionStorage.getItem('access')}` },
     })
       .then(response => response.json())
       .then(data => setJobs(data))

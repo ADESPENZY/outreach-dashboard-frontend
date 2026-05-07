@@ -1,70 +1,25 @@
-// src/components/ProtectedRoute.js
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import Spinner from './Spinner';
 import { Navigate, useLocation } from 'react-router-dom';
-import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
-import { toast } from 'react-toastify';
+import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children }) => {
-  const [isAuthorized, setIsAuthorized] = useState(null);
+const ProtectedRoute = ({ children, requireOnboarding = false }) => {
+  const { isAuthenticated, isLoading, currentUser } = useAuth();
   const location = useLocation();
 
-  useEffect(() => {
-    authorize().catch(() => setIsAuthorized(false));
-  }, [location]);
-  
-  async function refreshToken() {
-    const refresh = localStorage.getItem("refresh");
-    if (!refresh) {
-      setIsAuthorized(false);
-      return;
-    }
-
-    try {
-      const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
-      const response = await axios.post(`${BASE_URL}/token/refresh/`, { refresh });
-      if (response.status === 200) {
-        localStorage.setItem("access", response.data.access);
-        setIsAuthorized(true);
-      } else {
-        setIsAuthorized(false);
-      }
-    } catch (err) {
-      console.error('Refresh token error:', err);
-      setIsAuthorized(false);
-    }
-  }
-
-  async function authorize() {
-    const token = localStorage.getItem("access");
-    if (!token) {
-      toast.error("You must be logged in to view this page");
-      setIsAuthorized(false);
-      return;
-    }
-
-    try {
-      const decodeToken = jwtDecode(token);
-      const expiry_date = decodeToken.exp;
-      const current_time = Date.now() / 1000;
-
-      if (current_time > expiry_date) {
-        await refreshToken();
-      } else {
-        setIsAuthorized(true);
-      }
-    } catch (err) {
-      console.error('Token decode error:', err);
-      setIsAuthorized(false);
-    }
-  }
-
-  if (isAuthorized === null) {
+  if (isLoading) {
     return <Spinner />;
   }
 
-  return isAuthorized ? children : <Navigate to="/" state={{ from: location }} replace />;
+  if (!isAuthenticated) {
+    return <Navigate to="/" state={{ from: location }} replace />;
+  }
+
+  if (requireOnboarding && currentUser && !currentUser.onboarding_complete) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  return children;
 };
 
 export default ProtectedRoute;

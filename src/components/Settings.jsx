@@ -12,6 +12,7 @@ import { getMe } from '@/services/apiAuth';
 import { getProfile, updateProfile } from '@/services/apiProfile';
 import { getGmailAccounts } from '@/services/apiGmail';
 import { getHunterQuota } from '@/services/apiOutreach';
+import { useAuth } from '@/context/AuthContext';
 
 // ─── Tab config ───────────────────────────────────────────────────────────────
 const TABS = [
@@ -712,11 +713,10 @@ function IntegrationsTab() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function DangerTab({ navigate }) {
-  const handleLogout = () => {
-    localStorage.removeItem('access');
-    localStorage.removeItem('refresh');
-    localStorage.removeItem('outreach_prefs');
-    localStorage.removeItem('warmup_defaults');
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
     toast.success('Signed out successfully');
     setTimeout(() => navigate('/', { replace: true }), 500);
   };

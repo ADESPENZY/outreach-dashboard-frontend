@@ -1,27 +1,21 @@
 import { useMutation } from '@tanstack/react-query';
 import { Cpu } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import SmallSpinner from '../components/SmallSpinner';
-import { login } from '../services/apiAuth';
+import { useAuth } from '../context/AuthContext';
 
 const LoginPage = () => {
   const { register, handleSubmit, formState } =useForm();
   const { errors } = formState;
   const location = useLocation();
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const mutation = useMutation({
     mutationFn: (data) => login(data),
-    onSuccess: (response) => {
-
-      if (!response.access || !response.refresh) {
-        toast.error('Invalid response from server');
-        return;
-      }
-      localStorage.setItem("access", response.access);
-      localStorage.setItem("refresh", response.refresh);
+    onSuccess: () => {
       toast.success("You Have Successfully Signed In!!");
       setTimeout(() => {
         const from = location?.state?.from?.pathname || "/dashboard";
@@ -36,7 +30,6 @@ const LoginPage = () => {
   function onSubmit(data) {
     mutation.mutate(data);
   }
-
 
   return (
     <section className="min-h-screen flex justify-center items-center ">
@@ -107,7 +100,13 @@ const LoginPage = () => {
                 )}
               </button>
             </form>
-
+            
+            <p className="text-xs text-center mt-4 text-secondary-dark">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-primary-dark hover:underline font-semibold">
+                Sign up
+              </Link>
+            </p>
           </div>
         </div>
         <div className="absolute top-0 right-0 w-[40%] h-full px-8 py-20 bg-white flex flex-col justify-center border-l border-neutral-dark">
