@@ -47,17 +47,19 @@ api.interceptors.response.use(
         const originalRequest = error.config;
         
         if (error.response?.status === 401) {
+            const isAuthPage = window.location.pathname === '/' || window.location.pathname === '/register';
+
             // Guard 1: Don't refresh the refresh endpoint itself
             if (originalRequest.url?.includes('/auth/refresh/')) {
                 clearClientAuthState();
-                window.location.href = '/';
+                if (!isAuthPage) window.location.href = '/';
                 return Promise.reject(error);
             }
 
             // Guard 2: Don't retry the same request forever
             if (originalRequest._retry) {
                 clearClientAuthState();
-                window.location.href = '/';
+                if (!isAuthPage) window.location.href = '/';
                 return Promise.reject(error);
             }
 
@@ -90,7 +92,7 @@ api.interceptors.response.use(
             } catch (refreshError) {
                 processQueue(refreshError, null);
                 clearClientAuthState();
-                window.location.href = '/';
+                if (!isAuthPage) window.location.href = '/';
                 return Promise.reject(refreshError);
             } finally {
                 _isRefreshing = false;

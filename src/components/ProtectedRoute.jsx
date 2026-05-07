@@ -1,9 +1,9 @@
 import React from 'react';
 import Spinner from './Spinner';
-import { Navigate, useLocation } from 'react-router-dom';
+import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const ProtectedRoute = ({ children, requireOnboarding = false }) => {
+const ProtectedRoute = ({ requireOnboarding = false }) => {
   const { isAuthenticated, isLoading, currentUser } = useAuth();
   const location = useLocation();
 
@@ -19,7 +19,7 @@ const ProtectedRoute = ({ children, requireOnboarding = false }) => {
     return <Navigate to="/onboarding" replace />;
   }
 
-  return children;
+  return <Outlet />;
 };
 
 export default ProtectedRoute;

@@ -27,34 +27,24 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
 
           {/* Onboarding — JWT protected but outside dashboard layout */}
-          <Route
-            path="/onboarding"
-            element={
-              <ProtectedRoute>
-                <Onboarding />
-              </ProtectedRoute>
-            }
-          />
+          <Route element={<ProtectedRoute requireOnboarding={false} />}>
+            <Route path="/onboarding" element={<Onboarding />} />
+          </Route>
 
           {/* Dashboard — JWT + onboarding guard */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute requireOnboarding={true}>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<DashboardPage />} />
-            <Route path="analytics"         element={<Analytics />} />
-            <Route path="inboxes"           element={<Inboxes />} />
-            <Route path="job-tracker"       element={<JobTracker />} />
-            <Route path="jobs"              element={<JobsPage />} />
-            <Route path="outreach"          element={<OutreachPage />} />
-            <Route path="warmup"            element={<WarmUp />} />
-            <Route path="settings"          element={<Settings />} />
-            <Route path="connectedAccounts" element={<ConnectedAccounts />} />
-            <Route path="profile"           element={<ProfilePage />} />
+          <Route element={<ProtectedRoute requireOnboarding={true} />}>
+            <Route path="/dashboard" element={<Dashboard />}>
+              <Route index element={<DashboardPage />} />
+              <Route path="analytics"         element={<Analytics />} />
+              <Route path="inboxes"           element={<Inboxes />} />
+              <Route path="job-tracker"       element={<JobTracker />} />
+              <Route path="jobs"              element={<JobsPage />} />
+              <Route path="outreach"          element={<OutreachPage />} />
+              <Route path="warmup"            element={<WarmUp />} />
+              <Route path="settings"          element={<Settings />} />
+              <Route path="connectedAccounts" element={<ConnectedAccounts />} />
+              <Route path="profile"           element={<ProfilePage />} />
+            </Route>
           </Route>
         </Routes>
 

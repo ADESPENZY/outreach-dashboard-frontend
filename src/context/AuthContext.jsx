@@ -12,6 +12,7 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = async () => {
+    setIsLoading(true);
     try {
       const user = await getMe();
       setCurrentUser(user);
