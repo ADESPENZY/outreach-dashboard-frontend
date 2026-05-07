@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Rocket, User, FileText, Briefcase, CheckCircle, ChevronRight, ChevronLeft, Upload, Plus, X, Loader2 } from 'lucide-react';
 import { getProfile, createProfile, updateProfile, uploadCV, extractSkills } from '../services/apiProfile';
 import { toast } from 'react-toastify';
+import { useAuth } from '../context/AuthContext';
 
 const STEPS = [
   { label: 'Personal Info', icon: User },
@@ -26,6 +27,7 @@ export default function Onboarding() {
   const navigate         = useNavigate();
   const [searchParams]   = useSearchParams();
   const isEditMode       = searchParams.get('edit') === 'true';
+  const { checkAuth }    = useAuth();
 
   const [step, setStep]           = useState(1);
   const [profileExists, setProfileExists] = useState(false);
@@ -132,6 +134,7 @@ export default function Onboarding() {
     setSaving(true);
     try {
       await saveProgress({ onboarding_complete: true });
+      await checkAuth();
       toast.success('Profile complete!');
       navigate(isEditMode ? '/dashboard/profile' : '/dashboard');
     } catch {
