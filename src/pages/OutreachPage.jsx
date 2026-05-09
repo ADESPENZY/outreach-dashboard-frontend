@@ -136,7 +136,13 @@ const OutreachPage = () => {
     setFindingContacts(true);
     try {
       const d = await findContacts(10);
-      toast.success(`${d.contacts_found} contacts found, ${d.manual_apply} manual apply`);
+      if (d.new_contacts_found === 0 && d.skipped_already_searched > 0) {
+        toast.info(`Skipped ${d.skipped_already_searched} jobs we already checked. No new contacts found.`);
+      } else if (d.new_contacts_found > 0) {
+        toast.success(`Found ${d.new_contacts_found} new decision makers! (Skipped ${d.skipped_already_searched || 0} already checked)`);
+      } else {
+        toast.success(`Search complete. No new contacts found.`);
+      }
       queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
     } catch (err) { toast.error('Failed: ' + err.message); }
     finally { setFindingContacts(false); }
@@ -409,7 +415,7 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
           className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-black/10 hover:bg-black/80 transition-all active:scale-95 disabled:opacity-60"
         >
           {findingContacts ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-          Find Contacts
+          {findingContacts ? 'Scanning LinkedIn & Hunter...' : 'Find Decision Makers'}
         </button>
       </div>
 
