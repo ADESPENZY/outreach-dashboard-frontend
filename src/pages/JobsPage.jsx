@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import {
   getScrapedJobs, scoreAllJobs, updateJobStatus, trackJob,
-  scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, scrapeAtsJobs,
+  scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
 } from '../services/apiJobs';
 import { generateJobCV, getJobCV, findContactManual } from '../services/apiOutreach';
 
@@ -100,11 +100,7 @@ const JobsPage = () => {
             } else if (form.source === 'remote') {
                 return scrapeRemoteJobs(form.keywords);
             } else if (form.source === 'ats') {
-                const urls = form.atsUrls
-                    .split('\n')
-                    .map(u => u.trim())
-                    .filter(Boolean);
-                return scrapeAtsJobs(urls);
+                return autoScrapeAts({ title: form.atsTitle, location: form.atsLocation });
             } else {
                 return scrapeApifyJobs(form);
             }
@@ -130,7 +126,7 @@ const JobsPage = () => {
     const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
     const [scrapeForm, setScrapeForm] = useState({
         source: 'linkedin', keywords: '', locations: ['remote'],
-        time_range: '24h', count: 25, search_url: '', atsUrls: '',
+        time_range: '24h', count: 25, search_url: '', atsTitle: '', atsLocation: '',
     });
     const [cvModal, setCvModal] = useState(null);
     const [loadingCvPreview, setLoadingCvPreview] = useState(null);
@@ -178,9 +174,12 @@ const JobsPage = () => {
             return;
         }
         if (scrapeForm.source === 'ats') {
-            const urls = scrapeForm.atsUrls.split('\n').map(u => u.trim()).filter(Boolean);
-            if (urls.length === 0) {
-                toast.error('Paste at least one Greenhouse or Lever URL');
+            if (!scrapeForm.atsTitle.trim()) {
+                toast.error('Job title is required');
+                return;
+            }
+            if (!scrapeForm.atsLocation.trim()) {
+                toast.error('Location is required');
                 return;
             }
         }
@@ -573,7 +572,7 @@ const JobsPage = () => {
                                         { key: 'linkedin', label: 'LinkedIn', sub: 'via Apify', icon: null },
                                         { key: 'remote',   label: 'Remote Boards', sub: 'Remotive · WWR · more', icon: null },
                                         { key: 'custom',   label: 'Custom URL', sub: 'paste any LI URL', icon: null },
-                                        { key: 'ats',      label: 'Direct ATS', sub: 'Greenhouse · Lever', icon: Link2 },
+                                        { key: 'ats',      label: 'Auto-Finder', sub: 'Greenhouse · Lever', icon: Link2 },
                                     ].map(s => (
                                         <button
                                             key={s.key}
@@ -684,24 +683,32 @@ const JobsPage = () => {
                                 </div>
                             )}
 
-                            {/* Direct ATS fields */}
-                            {scrapeForm.source === 'ats' && (
+                            {/* Direct ATS Auto-Finder fields */}
+                            {scrapeForm.source === 'ats' && (<>
                                 <div>
-                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">
-                                        Job URLs <span className="text-primary-light font-normal normal-case">(one per line)</span>
-                                    </label>
-                                    <textarea
-                                        rows={5}
-                                        value={scrapeForm.atsUrls}
-                                        onChange={e => setScrapeForm(p => ({ ...p, atsUrls: e.target.value }))}
-                                        placeholder={"https://boards.greenhouse.io/company/jobs/123\nhttps://jobs.lever.co/company/abc-def"}
-                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none resize-none font-mono text-xs leading-relaxed"
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Job Title</label>
+                                    <input
+                                        type="text"
+                                        value={scrapeForm.atsTitle}
+                                        onChange={e => setScrapeForm(p => ({ ...p, atsTitle: e.target.value }))}
+                                        placeholder="e.g. Product Manager"
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Location</label>
+                                    <input
+                                        type="text"
+                                        value={scrapeForm.atsLocation}
+                                        onChange={e => setScrapeForm(p => ({ ...p, atsLocation: e.target.value }))}
+                                        placeholder="e.g. Remote or New York"
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
                                     />
                                     <p className="text-xs text-secondary-dark/60 mt-1.5">
-                                        Paste direct job listing URLs from <span className="font-medium">boards.greenhouse.io</span> or <span className="font-medium">jobs.lever.co</span>. Each job is auto-scored by AI. Daily limit: 50 jobs.
+                                        Searches Greenhouse &amp; Lever automatically via Google. Up to 10 jobs found, scraped, and scored by AI. Daily limit: 50 jobs.
                                     </p>
                                 </div>
-                            )}
+                            </>)}
 
                             {/* Custom URL fields */}
                             {scrapeForm.source === 'custom' && (<>

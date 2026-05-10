@@ -84,3 +84,12 @@ export async function scrapeAtsJobs(urls) {
     throw new Error(parseApiError(err));
   }
 }
+
+export async function autoScrapeAts({ title, location }) {
+  try {
+    const response = await api.post("/api/jobs/scrape/ats/auto/", { title, location });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
