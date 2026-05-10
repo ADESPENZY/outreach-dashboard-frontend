@@ -4,11 +4,11 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router';
 import {
   CheckCircle, XCircle, Search, Play, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch
+  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2
 } from 'lucide-react';
 import {
   getScrapedJobs, scoreAllJobs, updateJobStatus, trackJob,
-  scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs,
+  scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, scrapeAtsJobs,
 } from '../services/apiJobs';
 import { generateJobCV, getJobCV, findContactManual } from '../services/apiOutreach';
 
@@ -99,6 +99,12 @@ const JobsPage = () => {
                 return scrapeLinkedinJobs(form);
             } else if (form.source === 'remote') {
                 return scrapeRemoteJobs(form.keywords);
+            } else if (form.source === 'ats') {
+                const urls = form.atsUrls
+                    .split('\n')
+                    .map(u => u.trim())
+                    .filter(Boolean);
+                return scrapeAtsJobs(urls);
             } else {
                 return scrapeApifyJobs(form);
             }
@@ -115,7 +121,7 @@ const JobsPage = () => {
             setIsScrapeModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['jobs'] });
         },
-        onError: () => toast.error('Scraping failed. Please try again.'),
+        onError: (err) => toast.error(err.message || 'Scraping failed. Please try again.'),
     });
 
     // ── UI state ──────────────────────────────────────────────────────────────
@@ -124,7 +130,7 @@ const JobsPage = () => {
     const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
     const [scrapeForm, setScrapeForm] = useState({
         source: 'linkedin', keywords: '', locations: ['remote'],
-        time_range: '24h', count: 25, search_url: '',
+        time_range: '24h', count: 25, search_url: '', atsUrls: '',
     });
     const [cvModal, setCvModal] = useState(null);
     const [loadingCvPreview, setLoadingCvPreview] = useState(null);
@@ -170,6 +176,13 @@ const JobsPage = () => {
         if (scrapeForm.source === 'remote' && !scrapeForm.keywords.trim()) {
             toast.error('Keywords are required');
             return;
+        }
+        if (scrapeForm.source === 'ats') {
+            const urls = scrapeForm.atsUrls.split('\n').map(u => u.trim()).filter(Boolean);
+            if (urls.length === 0) {
+                toast.error('Paste at least one Greenhouse or Lever URL');
+                return;
+            }
         }
         scrapeMutation.mutate(scrapeForm);
     };
@@ -555,11 +568,12 @@ const JobsPage = () => {
                             {/* Source picker */}
                             <div>
                                 <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-2">Source</label>
-                                <div className="grid grid-cols-3 gap-2">
+                                <div className="grid grid-cols-2 gap-2">
                                     {[
-                                        { key: 'linkedin', label: 'LinkedIn', sub: 'via Apify' },
-                                        { key: 'remote',   label: 'Remote Boards', sub: 'Remotive · WWR · more' },
-                                        { key: 'custom',   label: 'Custom URL', sub: 'paste any LI URL' },
+                                        { key: 'linkedin', label: 'LinkedIn', sub: 'via Apify', icon: null },
+                                        { key: 'remote',   label: 'Remote Boards', sub: 'Remotive · WWR · more', icon: null },
+                                        { key: 'custom',   label: 'Custom URL', sub: 'paste any LI URL', icon: null },
+                                        { key: 'ats',      label: 'Direct ATS', sub: 'Greenhouse · Lever', icon: Link2 },
                                     ].map(s => (
                                         <button
                                             key={s.key}
@@ -567,7 +581,10 @@ const JobsPage = () => {
                                             onClick={() => setScrapeForm(p => ({ ...p, source: s.key }))}
                                             className={`rounded-xl p-3 text-left border transition-all ${scrapeForm.source === s.key ? 'bg-primary-light/10 border-primary-light/40 text-primary-dark' : 'border-neutral-dark hover:bg-neutral text-secondary-dark'}`}
                                         >
-                                            <p className="text-xs font-bold">{s.label}</p>
+                                            <p className="text-xs font-bold flex items-center gap-1.5">
+                                                {s.icon && <s.icon className="w-3 h-3 shrink-0" />}
+                                                {s.label}
+                                            </p>
                                             <p className="text-[10px] mt-0.5 opacity-70">{s.sub}</p>
                                         </button>
                                     ))}
@@ -664,6 +681,25 @@ const JobsPage = () => {
                                         className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
                                     />
                                     <p className="text-xs text-secondary-dark/60 mt-1.5">Searches Remotive, RemoteOK, Himalayas, and WeWorkRemotely simultaneously. Jobs from last 7 days.</p>
+                                </div>
+                            )}
+
+                            {/* Direct ATS fields */}
+                            {scrapeForm.source === 'ats' && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">
+                                        Job URLs <span className="text-primary-light font-normal normal-case">(one per line)</span>
+                                    </label>
+                                    <textarea
+                                        rows={5}
+                                        value={scrapeForm.atsUrls}
+                                        onChange={e => setScrapeForm(p => ({ ...p, atsUrls: e.target.value }))}
+                                        placeholder={"https://boards.greenhouse.io/company/jobs/123\nhttps://jobs.lever.co/company/abc-def"}
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none resize-none font-mono text-xs leading-relaxed"
+                                    />
+                                    <p className="text-xs text-secondary-dark/60 mt-1.5">
+                                        Paste direct job listing URLs from <span className="font-medium">boards.greenhouse.io</span> or <span className="font-medium">jobs.lever.co</span>. Each job is auto-scored by AI. Daily limit: 50 jobs.
+                                    </p>
                                 </div>
                             )}
 

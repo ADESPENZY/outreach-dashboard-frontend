@@ -75,3 +75,12 @@ export async function scrapeApifyJobs({ search_url, count }) {
     throw new Error(parseApiError(err));
   }
 }
+
+export async function scrapeAtsJobs(urls) {
+  try {
+    const response = await api.post("/api/jobs/scrape/ats/", { urls });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
