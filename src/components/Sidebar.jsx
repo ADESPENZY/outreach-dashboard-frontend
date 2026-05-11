@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   Send,
   ListChecks,
+  X,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getGmailAccounts } from '@/services/apiGmail';
@@ -44,7 +45,7 @@ const NAV_GROUPS = [
   },
 ];
 
-const Sidebar = () => {
+const Sidebar = ({ isOpen, onClose }) => {
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['gmailAccounts'],
     queryFn: getGmailAccounts,
@@ -53,7 +54,28 @@ const Sidebar = () => {
   const accounts = data?.results ?? [];
 
   return (
-    <aside className="bg-white border-r border-neutral-dark h-screen flex flex-col justify-between px-4 py-7 md:w-[22%] shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto z-40 overflow-y-auto">
+    <aside
+      className={[
+        // Base (shared desktop + mobile)
+        'bg-white border-r border-neutral-dark h-screen flex flex-col justify-between px-4 py-7',
+        'shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto overflow-y-auto',
+        // Mobile: fixed drawer, slide in/out
+        'fixed inset-y-0 left-0 z-50 w-[85vw] max-w-xs',
+        'transition-transform duration-300 ease-in-out',
+        isOpen ? 'translate-x-0' : '-translate-x-full',
+        // Desktop: static, always visible, original width
+        'md:relative md:z-40 md:w-[22%] md:translate-x-0',
+      ].join(' ')}
+    >
+
+      {/* ── Mobile close button ─────────────────────────────────────── */}
+      <button
+        onClick={onClose}
+        className="md:hidden absolute top-4 right-4 p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
+        aria-label="Close menu"
+      >
+        <X className="w-5 h-5" />
+      </button>
 
       {/* ── Brand ─────────────────────────────────────────────────── */}
       <div className="space-y-6">
@@ -79,6 +101,7 @@ const Sidebar = () => {
                     key={item.name}
                     to={item.path}
                     end={item.path === '/dashboard'}
+                    onClick={onClose}
                     className={({ isActive }) =>
                       `flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 ease-out border border-transparent ${
                         isActive
@@ -149,6 +172,7 @@ const Sidebar = () => {
 
         <Link
           to="/dashboard/connectedAccounts"
+          onClick={onClose}
           className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
         >
           <Plus className="w-3.5 h-3.5 stroke-[2.5]" />

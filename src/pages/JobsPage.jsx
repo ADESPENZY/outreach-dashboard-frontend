@@ -241,7 +241,7 @@ const JobsPage = () => {
                     </h1>
                     <p className="text-sm text-secondary-dark mt-1">Manage, filter, and score scraped job listings</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <button
                         onClick={handleScoreAll}
                         disabled={scoreAllMutation.isPending || unscoredCount === 0}
@@ -329,8 +329,8 @@ const JobsPage = () => {
 
             {/* Jobs Table */}
             <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-neutral-dark overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                <div className="w-full overflow-x-auto overflow-y-hidden">
+                    <table className="w-full min-w-[800px] text-left border-collapse">
                         <thead>
                             <tr className="bg-neutral/50 border-b border-neutral-dark pb-3 text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat hidden md:table-row">
                                 <th className="p-4 pl-6 font-medium">Company & Role</th>

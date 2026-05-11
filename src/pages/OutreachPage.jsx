@@ -422,8 +422,8 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
       {contacts.length === 0 ? (
         <EmptyState icon={Users} title="No contacts yet" subtitle="Approve jobs on the Jobs page, then click Find Contacts." />
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-neutral-dark">
-          <table className="w-full text-left border-collapse">
+        <div className="w-full overflow-x-auto overflow-y-hidden border border-neutral-dark sm:rounded-xl">
+          <table className="w-full min-w-[800px] text-left border-collapse">
             <thead>
               <tr className="bg-neutral/70 border-b border-neutral-dark text-[11px] uppercase tracking-wider text-secondary-dark font-semibold font-montserrat">
                 <th className="p-3.5 pl-4">Company</th>
