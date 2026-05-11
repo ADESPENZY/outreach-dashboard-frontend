@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router';
 import {
   CheckCircle, XCircle, Search, Play, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2
+  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2, MoreHorizontal
 } from 'lucide-react';
 import {
   getScrapedJobs, scoreAllJobs, updateJobStatus, trackJob,
@@ -130,6 +130,7 @@ const JobsPage = () => {
     });
     const [cvModal, setCvModal] = useState(null);
     const [loadingCvPreview, setLoadingCvPreview] = useState(null);
+    const [mobileActionJob, setMobileActionJob] = useState(null);
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
@@ -417,12 +418,12 @@ const JobsPage = () => {
                                         </td>
 
                                         <td className="p-4 pr-6 align-top">
-                                            <div className="flex items-center justify-end gap-2 pl-14 md:pl-0 pt-2 md:pt-0 flex-wrap">
+                                            {/* ── Desktop actions (hidden on mobile) ── */}
+                                            <div className="hidden md:flex items-center justify-end gap-2 flex-wrap">
                                                 {job.has_cv && (
                                                     <button
                                                         onClick={() => handleViewCv(job)}
                                                         disabled={loadingCvPreview === job.id}
-
                                                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold rounded-lg hover:bg-violet-100 transition-all disabled:opacity-60"
                                                         title="Preview generated CV"
                                                     >
@@ -467,7 +468,6 @@ const JobsPage = () => {
                                                         {generateCvMutation.isPending && generateCvMutation.variables === job.id ? 'Generating...' : 'Gen CV'}
                                                     </button>
                                                 )}
-                                                {/* Find Contact button — only for approved jobs without a contact yet */}
                                                 {job.status === 'approved' && !job.has_contact && (
                                                     <button
                                                         onClick={() => findContactMutation.mutate(job.id)}
@@ -507,6 +507,14 @@ const JobsPage = () => {
                                                     </a>
                                                 )}
                                             </div>
+                                            {/* ── Mobile trigger (hidden on desktop) ── */}
+                                            <button
+                                                onClick={() => setMobileActionJob(job)}
+                                                className="md:hidden w-full flex items-center justify-center gap-2 py-2.5 mt-2 bg-neutral text-secondary-dark border border-neutral-dark rounded-xl font-semibold shadow-sm text-sm"
+                                            >
+                                                <MoreHorizontal className="w-4 h-4" />
+                                                Manage Job
+                                            </button>
                                         </td>
                                     </tr>
                                 ))
@@ -745,6 +753,141 @@ const JobsPage = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Mobile Action Sheet ───────────────────────────────────────── */}
+            {mobileActionJob && (
+                <div className="fixed inset-0 z-[70] bg-black/50" onClick={() => setMobileActionJob(null)}>
+                    <div
+                        className="absolute bottom-0 inset-x-0 bg-white rounded-t-3xl p-6 shadow-2xl"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Sheet handle */}
+                        <div className="w-10 h-1 rounded-full bg-neutral-dark mx-auto mb-5" />
+
+                        {/* Job identity */}
+                        <div className="flex items-start gap-3 mb-5">
+                            <div className="h-10 w-10 min-w-10 rounded-xl bg-gradient-to-tr from-accent-teal/10 to-accent-teal/20 flex items-center justify-center border border-accent-teal/30 shadow-sm">
+                                <Building className="w-4 h-4 text-accent-teal" />
+                            </div>
+                            <div>
+                                <p className="font-bold text-black font-montserrat leading-tight">{mobileActionJob.title}</p>
+                                <p className="text-sm text-secondary-dark mt-0.5">{mobileActionJob.company_name}</p>
+                            </div>
+                        </div>
+
+                        {/* Action rows */}
+                        <div className="divide-y divide-neutral border border-neutral-dark rounded-2xl overflow-hidden">
+
+                            {/* Approve */}
+                            <button
+                                onClick={() => { handleUpdateStatus(mobileActionJob.id, 'approved'); setMobileActionJob(null); }}
+                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-green-700 hover:bg-green-50 transition-colors"
+                            >
+                                <CheckCircle className="w-5 h-5 shrink-0" />
+                                Approve Job
+                            </button>
+
+                            {/* Reject */}
+                            <button
+                                onClick={() => { handleUpdateStatus(mobileActionJob.id, 'rejected'); setMobileActionJob(null); }}
+                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-red-600 hover:bg-red-50 transition-colors"
+                            >
+                                <XCircle className="w-5 h-5 shrink-0" />
+                                Reject Job
+                            </button>
+
+                            {/* Generate CV — approved only */}
+                            {mobileActionJob.status === 'approved' && (
+                                <button
+                                    onClick={() => { handleGenerateCv(mobileActionJob.id); setMobileActionJob(null); }}
+                                    disabled={generateCvMutation.isPending && generateCvMutation.variables === mobileActionJob.id}
+                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-primary-dark hover:bg-primary-light/5 transition-colors disabled:opacity-60"
+                                >
+                                    {generateCvMutation.isPending && generateCvMutation.variables === mobileActionJob.id
+                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                        : <Download className="w-5 h-5 shrink-0" />}
+                                    Generate Tailored CV
+                                </button>
+                            )}
+
+                            {/* View CV — only if already generated */}
+                            {mobileActionJob.has_cv && (
+                                <button
+                                    onClick={() => { handleViewCv(mobileActionJob); setMobileActionJob(null); }}
+                                    disabled={loadingCvPreview === mobileActionJob.id}
+                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-60"
+                                >
+                                    {loadingCvPreview === mobileActionJob.id
+                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                        : <FileText className="w-5 h-5 shrink-0" />}
+                                    Preview CV
+                                </button>
+                            )}
+
+                            {/* Find Contact — approved + no contact */}
+                            {mobileActionJob.status === 'approved' && !mobileActionJob.has_contact && (
+                                <button
+                                    onClick={() => { findContactMutation.mutate(mobileActionJob.id); setMobileActionJob(null); }}
+                                    disabled={findContactMutation.isPending && findContactMutation.variables === mobileActionJob.id}
+                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-sky-700 hover:bg-sky-50 transition-colors disabled:opacity-60"
+                                >
+                                    {findContactMutation.isPending && findContactMutation.variables === mobileActionJob.id
+                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                        : <UserSearch className="w-5 h-5 shrink-0" />}
+                                    Find Contact
+                                </button>
+                            )}
+
+                            {/* Track — approved + not yet tracked */}
+                            {mobileActionJob.status === 'approved' && !mobileActionJob.is_tracked && (
+                                <button
+                                    onClick={() => { handleTrackJob(mobileActionJob.id); setMobileActionJob(null); }}
+                                    disabled={trackJobMutation.isPending && trackJobMutation.variables === mobileActionJob.id}
+                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-secondary-dark hover:bg-neutral transition-colors disabled:opacity-60"
+                                >
+                                    {trackJobMutation.isPending && trackJobMutation.variables === mobileActionJob.id
+                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                        : <Kanban className="w-5 h-5 shrink-0" />}
+                                    Add to Tracker
+                                </button>
+                            )}
+
+                            {/* View tracked — already tracked */}
+                            {mobileActionJob.is_tracked && (
+                                <button
+                                    onClick={() => { navigate('/dashboard/job-tracker'); setMobileActionJob(null); }}
+                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
+                                >
+                                    <CheckCircle className="w-5 h-5 shrink-0" />
+                                    View in Tracker
+                                </button>
+                            )}
+
+                            {/* View post */}
+                            {mobileActionJob.apply_url && (
+                                <a
+                                    href={mobileActionJob.apply_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => setMobileActionJob(null)}
+                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-secondary-dark hover:bg-neutral transition-colors"
+                                >
+                                    <ExternalLink className="w-5 h-5 shrink-0" />
+                                    View Job Post
+                                </a>
+                            )}
+                        </div>
+
+                        {/* Cancel */}
+                        <button
+                            onClick={() => setMobileActionJob(null)}
+                            className="w-full mt-3 py-3 text-sm font-semibold text-secondary-dark bg-neutral rounded-2xl border border-neutral-dark"
+                        >
+                            Cancel
+                        </button>
                     </div>
                 </div>
             )}

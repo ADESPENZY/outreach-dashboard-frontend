@@ -291,7 +291,7 @@ const WarmUp = () => {
   }
 
   return (
-    <main className="flex-1 overflow-y-auto p-6 bg-neutral font-roboto">
+    <main className="flex-1 overflow-y-auto p-2 bg-neutral font-roboto">
       {/* Controls */}
       <section className="mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
