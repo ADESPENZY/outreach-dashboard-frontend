@@ -60,7 +60,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         'bg-white border-r border-neutral-dark h-screen flex flex-col justify-between px-4 py-7',
         'shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto overflow-y-auto',
         // Mobile: fixed drawer, slide in/out
-        'fixed inset-y-0 left-0 z-50 w-[85vw] max-w-xs',
+        'fixed inset-y-0 left-0 z-[60] w-[85vw] max-w-xs',
         'transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : '-translate-x-full',
         // Desktop: static, always visible, original width
@@ -68,24 +68,24 @@ const Sidebar = ({ isOpen, onClose }) => {
       ].join(' ')}
     >
 
-      {/* ── Mobile close button ─────────────────────────────────────── */}
-      <button
-        onClick={onClose}
-        className="md:hidden absolute top-4 right-4 p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
-        aria-label="Close menu"
-      >
-        <X className="w-5 h-5" />
-      </button>
-
-      {/* ── Brand ─────────────────────────────────────────────────── */}
+      {/* ── Brand + mobile close ──────────────────────────────────── */}
       <div className="space-y-6">
-        <div className="flex items-center gap-3 px-3 mb-2">
-          <div className="bg-gradient-to-br from-primary-light to-primary-dark p-2 rounded-xl shadow-lg shadow-primary-light/30">
-            <Rocket className="text-white w-5 h-5" />
+        <div className="flex justify-between items-center w-full px-3 mb-2">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-primary-light to-primary-dark p-2 rounded-xl shadow-lg shadow-primary-light/30">
+              <Rocket className="text-white w-5 h-5" />
+            </div>
+            <h2 className="text-xl font-bold tracking-tight font-montserrat text-black">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Auto</span>Apply
+            </h2>
           </div>
-          <h2 className="text-xl font-bold tracking-tight font-montserrat text-black">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Auto</span>Apply
-          </h2>
+          <button
+            onClick={onClose}
+            className="md:hidden p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
+            aria-label="Close menu"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* ── Nav groups ──────────────────────────────────────────── */}
