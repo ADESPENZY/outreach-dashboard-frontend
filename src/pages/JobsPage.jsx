@@ -233,7 +233,7 @@ const JobsPage = () => {
     }, [searchQuery, filterTab]);
 
     return (
-        <div className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in font-roboto">
+        <div className="p-2 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in font-roboto">
             {/* Header section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
