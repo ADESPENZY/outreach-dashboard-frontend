@@ -233,7 +233,7 @@ const JobsPage = () => {
     }, [searchQuery, filterTab]);
 
     return (
-        <div className="p-2 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in font-roboto">
+        <div className="p-1 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in font-roboto">
             {/* Header section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
@@ -330,27 +330,27 @@ const JobsPage = () => {
 
             {/* Jobs Table */}
             <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.02)] border border-neutral-dark overflow-hidden">
-                <div className="w-full overflow-x-auto overflow-y-hidden">
-                    <table className="w-full min-w-[800px] text-left border-collapse">
-                        <thead>
-                            <tr className="bg-neutral/50 border-b border-neutral-dark pb-3 text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat hidden md:table-row">
+                <div className="w-full">
+                    <table className="w-full md:min-w-[800px] text-left border-collapse block md:table">
+                        <thead className="hidden md:table-header-group">
+                            <tr className="bg-neutral/50 border-b border-neutral-dark pb-3 text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat">
                                 <th className="p-4 pl-6 font-medium">Company & Role</th>
                                 <th className="p-4 font-medium hidden lg:table-cell">Location & Info</th>
                                 <th className="p-4 font-medium">Score & Status</th>
                                 <th className="p-4 pr-6 text-right font-medium">Actions</th>
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-neutral">
+                        <tbody className="block md:table-row-group divide-y divide-neutral">
                             {loading ? (
-                                <tr>
-                                    <td colSpan="4" className="p-8 text-center text-secondary-dark">
+                                <tr className="block md:table-row">
+                                    <td colSpan="4" className="block md:table-cell p-8 text-center text-secondary-dark w-full">
                                         <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary-light" />
                                         <p className="mt-3 text-sm font-medium animate-pulse">Loading opportunities...</p>
                                     </td>
                                 </tr>
                             ) : filteredJobs.length === 0 ? (
-                                <tr>
-                                    <td colSpan="4" className="p-12 text-center text-secondary-dark bg-neutral/30">
+                                <tr className="block md:table-row">
+                                    <td colSpan="4" className="block md:table-cell p-12 text-center text-secondary-dark bg-neutral/30 w-full">
                                         <Briefcase className="w-12 h-12 mx-auto text-secondary-dark/40 mb-3" />
                                         <p className="text-base font-medium text-secondary-dark">No jobs found</p>
                                         <p className="text-sm mt-1">Try adjusting your filters or scrape new ones.</p>
@@ -358,14 +358,14 @@ const JobsPage = () => {
                                 </tr>
                             ) : (
                                 paginatedJobs.map(job => (
-                                    <tr key={job.id} className="group hover:bg-neutral/50 transition-colors flex flex-col md:table-row py-3 md:py-0 border-b border-neutral-dark md:border-b-0">
-                                        <td className="p-4 pl-6 align-top">
+                                    <tr key={job.id} className="group block md:table-row py-4 md:py-0 border-b border-neutral-dark md:border-b-0 hover:bg-neutral/50 transition-colors">
+                                        <td className="block md:table-cell p-0 px-4 pt-4 md:p-4 md:pl-6 align-top mb-3 md:mb-0">
                                             <div className="flex items-start gap-4">
                                                 <div className="h-10 w-10 min-w-10 rounded-xl bg-gradient-to-tr from-accent-teal/10 to-accent-teal/20 flex items-center justify-center border border-accent-teal/30 mt-1 shadow-sm">
                                                     <Building className="w-4 h-4 text-accent-teal" />
                                                 </div>
-                                                <div>
-                                                    <h3 className="font-semibold text-black group-hover:text-primary-dark transition-colors line-clamp-1">{job.title}</h3>
+                                                <div className="min-w-0">
+                                                    <h3 className="font-semibold text-black group-hover:text-primary-dark transition-colors truncate max-w-[250px] sm:max-w-xs md:max-w-full">{job.title}</h3>
                                                     <div className="flex items-center text-sm text-secondary-dark mt-1.5 gap-2">
                                                         <span className="font-medium text-secondary-dark">{job.company_name}</span>
                                                         <span className="w-1 h-1 rounded-full bg-secondary-dark/40 hidden md:block"></span>
@@ -375,11 +375,11 @@ const JobsPage = () => {
                                             </div>
                                         </td>
 
-                                        <td className="p-4 align-top hidden md:table-cell lg:table-cell">
+                                        <td className="hidden md:table-cell p-4 align-top">
                                             <div className="space-y-2 text-sm text-secondary-dark">
                                                 <div className="flex items-center gap-2">
                                                     <MapPin className="w-3.5 h-3.5 text-secondary-dark/60 shrink-0" />
-                                                    <span className="truncate max-w-[200px]">{job.location || 'Remote / Unspecified'}</span>
+                                                    <span className="truncate max-w-[250px] sm:max-w-xs md:max-w-full">{job.location || 'Remote / Unspecified'}</span>
                                                 </div>
                                                 <div className="flex items-center gap-2">
                                                     <Calendar className="w-3.5 h-3.5 text-secondary-dark/60 shrink-0" />
@@ -393,13 +393,13 @@ const JobsPage = () => {
                                             </div>
                                         </td>
 
-                                        <td className="p-4 md:align-top">
-                                            <div className="flex md:flex-col items-center md:items-start gap-3 md:gap-2 pl-14 md:pl-0">
+                                        <td className="block md:table-cell p-0 px-4 md:p-4 align-top mb-3 md:mb-0">
+                                            <div className="flex flex-wrap items-center md:flex-col md:items-start gap-3 md:gap-2">
                                                 <div className={`px-2.5 py-1 rounded-lg text-xs font-bold font-montserrat border flex items-center gap-1.5 shadow-sm ${getScoreBadgeColor(job.fit_score)}`}>
                                                     <span>API Fit:</span>
                                                     <span className="text-sm">{job.fit_score != null ? job.fit_score : '-'}</span>
                                                 </div>
-                                                <span className={`px-2.5 mx-0 md:-ml-0.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider border shadow-sm ${getStatusBadgeColor(job.status)}`}>
+                                                <span className={`px-2.5 py-1 rounded-full text-[10px] uppercase font-bold tracking-wider border shadow-sm ${getStatusBadgeColor(job.status)}`}>
                                                     {job.status || 'scraped'}
                                                 </span>
                                                 {/* Contact status dot */}
@@ -417,7 +417,7 @@ const JobsPage = () => {
                                             </div>
                                         </td>
 
-                                        <td className="p-4 pr-6 align-top">
+                                        <td className="block md:table-cell p-0 px-4 pb-4 md:p-4 md:pr-6 align-top">
                                             {/* ── Desktop actions (hidden on mobile) ── */}
                                             <div className="hidden md:flex items-center justify-end gap-2 flex-wrap">
                                                 {job.has_cv && (
@@ -510,7 +510,7 @@ const JobsPage = () => {
                                             {/* ── Mobile trigger (hidden on desktop) ── */}
                                             <button
                                                 onClick={() => setMobileActionJob(job)}
-                                                className="md:hidden w-full flex items-center justify-center gap-2 py-2.5 mt-2 bg-neutral text-secondary-dark border border-neutral-dark rounded-xl font-semibold shadow-sm text-sm"
+                                                className="md:hidden w-full flex items-center justify-center gap-2 py-2.5 bg-neutral text-secondary-dark border border-neutral-dark rounded-xl font-semibold shadow-sm text-sm"
                                             >
                                                 <MoreHorizontal className="w-4 h-4" />
                                                 Manage Job
