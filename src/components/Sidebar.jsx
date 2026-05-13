@@ -14,6 +14,7 @@ import {
   Send,
   ListChecks,
   X,
+  Target,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { getGmailAccounts } from '@/services/apiGmail';
@@ -34,6 +35,7 @@ const NAV_GROUPS = [
       { name: 'Inboxes',        icon: Mail,    path: '/dashboard/inboxes' },
       { name: 'Analytics',      icon: BarChart, path: '/dashboard/analytics' },
       { name: 'Warmup Manager', icon: Flame,   path: '/dashboard/warmup' },
+      { name: 'Auto-Scout',     icon: Target,  path: '/dashboard/auto-scout' },
     ],
   },
   {

@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router';
+import { BrowserRouter, Route, Routes } from 'react-router';
 import Dashboard from './pages/Dashboard';
 import Analytics from './components/Analytics';
 import Inboxes from './components/Inboxes';
@@ -15,6 +15,7 @@ import ConnectedAccounts from './components/ConnectedAccounts';
 import Onboarding from './pages/Onboarding';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
+import AutoScoutSettings from './pages/AutoScoutSettings';
 import { AuthProvider } from './context/AuthContext';
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
               <Route path="outreach"          element={<OutreachPage />} />
               <Route path="warmup"            element={<WarmUp />} />
               <Route path="settings"          element={<Settings />} />
+              <Route path="auto-scout"        element={<AutoScoutSettings />} />
               <Route path="connectedAccounts" element={<ConnectedAccounts />} />
               <Route path="profile"           element={<ProfilePage />} />
             </Route>
