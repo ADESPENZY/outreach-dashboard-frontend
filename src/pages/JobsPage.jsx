@@ -26,7 +26,7 @@ const JobsPage = () => {
         mutationFn: scoreAllJobs,
         onSuccess: (data) => {
             if (data.approved > 0) {
-                toast.success(`Done! ${data.approved} approved, ${data.rejected} rejected. Go to Outreach to generate emails.`, { autoClose: 6000 });
+                toast.success(`AI Scoring Complete! ${data.approved} approved, ${data.rejected} rejected.`, { autoClose: 6000 });
             } else {
                 toast.info(`Scoring complete — ${data.rejected} jobs rejected. Try scraping with different keywords.`, { autoClose: 6000 });
             }
@@ -110,7 +110,8 @@ const JobsPage = () => {
                 ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
                 : data.new_jobs;
             if (count > 0) {
-                toast.success(`${count} new jobs scraped! Now press "Score All" to find your best matches.`, { autoClose: 7000 });
+                toast.success(`${count} new jobs scraped! AI is now evaluating your matches...`, { autoClose: 4000 });
+                scoreAllMutation.mutate();
             } else {
                 toast.info('No new jobs found — they may already be in your list or try different keywords.', { autoClose: 6000 });
             }
@@ -324,7 +325,7 @@ const JobsPage = () => {
             {/* ── Card List ─────────────────────────────────────────────────────── */}
             <div className="flex flex-col gap-4">
                 {loading ? (
-                    <div className="p-10 text-center bg-white rounded-xl border border-neutral-dark">
+                    <div className="p-10 text-center bg-white rounded-xl border border-black-light">
                         <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary-light" />
                         <p className="mt-3 text-sm font-medium animate-pulse text-secondary-dark">Loading opportunities...</p>
                     </div>
