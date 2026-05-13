@@ -325,10 +325,25 @@ const JobsPage = () => {
             {/* ── Card List ─────────────────────────────────────────────────────── */}
             <div className="flex flex-col gap-4">
                 {loading ? (
-                    <div className="p-10 text-center bg-white rounded-xl border border-black-light">
-                        <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary-light" />
-                        <p className="mt-3 text-sm font-medium animate-pulse text-secondary-dark">Loading opportunities...</p>
-                    </div>
+                    [0, 1, 2, 3, 4].map(i => (
+                        <div key={i} className="bg-white border border-neutral-dark rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 animate-pulse">
+                            {/* Left: icon + title/company bars */}
+                            <div className="flex items-start gap-4 flex-1 min-w-0">
+                                <div className="h-10 w-10 rounded-xl bg-gray-200 shrink-0" />
+                                <div className="flex-1 min-w-0 space-y-2 pt-0.5">
+                                    <div className="h-5 w-48 rounded bg-gray-200" />
+                                    <div className="h-3 w-32 rounded bg-gray-200" />
+                                </div>
+                            </div>
+                            {/* Middle: badge pills */}
+                            <div className="flex md:flex-col items-center md:items-start gap-2 shrink-0">
+                                <div className="w-16 h-6 rounded-md bg-gray-200" />
+                                <div className="w-16 h-6 rounded-md bg-gray-200" />
+                            </div>
+                            {/* Right: button shape */}
+                            <div className="hidden md:block w-24 h-8 rounded-lg bg-gray-200 shrink-0" />
+                        </div>
+                    ))
                 ) : filteredJobs.length === 0 ? (
                     <div className="p-12 text-center bg-white rounded-xl border border-neutral-dark">
                         <Briefcase className="w-12 h-12 mx-auto text-secondary-dark/40 mb-3" />
