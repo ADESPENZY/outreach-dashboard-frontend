@@ -8,7 +8,7 @@ const Dashboard = () => {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   return (
-    <section className="flex font-montserrat h-screen overflow-y-hidden">
+    <div className="flex h-screen w-full bg-neutral/20 overflow-hidden font-montserrat">
 
       {/* ── Mobile top bar (hidden on md+) ──────────────────────────── */}
       <div className="md:hidden fixed top-0 left-0 right-0 h-14 bg-white border-b border-neutral-dark flex items-center justify-between px-4 z-40 shadow-sm">
@@ -41,14 +41,12 @@ const Dashboard = () => {
       <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
       {/* ── Main content ────────────────────────────────────────────── */}
-      <article className="bg-neutral w-full md:w-[80%] overflow-y-auto pt-14 md:pt-0">
+      <main className="flex-1 w-full flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-300 relative pt-14 md:pt-0">
         <Header />
-        <div className="mt-6 mx-6">
-          <Outlet />
-        </div>
-      </article>
+        <Outlet />
+      </main>
 
-    </section>
+    </div>
   );
 };
 

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   Rocket,
@@ -67,8 +67,9 @@ const NAV_GROUPS = [
 
 const Sidebar = ({ isOpen, onClose }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [openMenus, setOpenMenus] = useState({});
+  const [openDropdown, setOpenDropdown] = useState(null);
   const location = useLocation();
+  const navRef = useRef(null);
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['gmailAccounts'],
@@ -77,39 +78,47 @@ const Sidebar = ({ isOpen, onClose }) => {
 
   const accounts = data?.results ?? [];
 
-  const toggleMenu = (id) => {
-    setOpenMenus(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleDropdown = (id) => {
+    setOpenDropdown(prev => (prev === id ? null : id));
   };
+
+  // Close floating dropdown when clicking outside the nav block
+  useEffect(() => {
+    if (!openDropdown) return;
+    const handler = (e) => {
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setOpenDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [openDropdown]);
+
+  // Close dropdown on route change
+  useEffect(() => { setOpenDropdown(null); }, [location.pathname]);
+
+  // Close dropdown when sidebar collapse state changes
+  useEffect(() => { setOpenDropdown(null); }, [isCollapsed]);
 
   const isChildActive = (children) =>
-    children.some(child => location.pathname === child.path || location.pathname.startsWith(child.path + '/'));
-
-  // When collapsed on desktop, clicking a parent icon expands the sidebar first
-  const handleParentClick = (item) => {
-    if (isCollapsed) {
-      setIsCollapsed(false);
-      return;
-    }
-    toggleMenu(item.id);
-  };
+    children.some(child =>
+      location.pathname === child.path || location.pathname.startsWith(child.path + '/')
+    );
 
   const renderNavItem = (item) => {
     if (item.children) {
       const childActive = isChildActive(item.children);
-      // Auto-open if a child route is active and user hasn't explicitly toggled
-      const menuOpen = openMenus[item.id] !== undefined
-        ? openMenus[item.id]
-        : childActive;
+      const dropdownOpen = openDropdown === item.id;
 
       return (
-        <li key={item.name}>
+        <li key={item.name} className="relative">
           <button
-            onClick={() => handleParentClick(item)}
+            onClick={() => toggleDropdown(item.id)}
             className={[
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl',
               'transition-all duration-200 border border-transparent',
               isCollapsed ? 'md:justify-center md:px-2' : '',
-              childActive
+              childActive || dropdownOpen
                 ? 'bg-primary-light/10 text-primary-dark font-semibold border-primary-light/20 shadow-sm'
                 : 'text-secondary-dark hover:bg-neutral hover:text-black-light',
             ].join(' ')}
@@ -121,26 +130,23 @@ const Sidebar = ({ isOpen, onClose }) => {
             </span>
             <ChevronDown className={[
               'w-3.5 h-3.5 shrink-0 transition-transform duration-200',
-              menuOpen ? 'rotate-180' : '',
+              dropdownOpen ? 'rotate-180' : '',
               isCollapsed ? 'md:hidden' : '',
             ].join(' ')} />
           </button>
 
-          {/* Accordion children */}
-          <div
-            className={[
-              'overflow-hidden transition-all duration-300 ease-in-out',
-              isCollapsed ? 'md:hidden' : '',
-              menuOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0',
-            ].join(' ')}
-          >
+          {/* ── Mobile: inline accordion (never visible on desktop) ── */}
+          <div className={[
+            'md:hidden overflow-hidden transition-all duration-300 ease-in-out',
+            dropdownOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0',
+          ].join(' ')}>
             <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-neutral-dark pl-3">
               {item.children.map(child => (
                 <NavLink
                   key={child.name}
                   to={child.path}
                   end={child.path === '/dashboard'}
-                  onClick={onClose}
+                  onClick={() => { onClose(); setOpenDropdown(null); }}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 border border-transparent ${
                       isActive
@@ -155,6 +161,33 @@ const Sidebar = ({ isOpen, onClose }) => {
               ))}
             </ul>
           </div>
+
+          {/* ── Desktop: floating absolute card (never visible on mobile) ── */}
+          {dropdownOpen && (
+            <div className="hidden md:block absolute left-full ml-2 top-0 bg-white shadow-lg border border-neutral-dark rounded-xl p-2 min-w-[160px] z-[70]">
+              <p className="text-[9px] font-bold uppercase tracking-widest text-secondary-dark/50 px-2.5 pt-1.5 pb-1 font-montserrat">
+                {item.name}
+              </p>
+              {item.children.map(child => (
+                <NavLink
+                  key={child.name}
+                  to={child.path}
+                  end={child.path === '/dashboard'}
+                  onClick={() => setOpenDropdown(null)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 ${
+                      isActive
+                        ? 'bg-primary-light/10 text-primary-dark font-semibold'
+                        : 'text-secondary-dark hover:bg-neutral hover:text-black-light'
+                    }`
+                  }
+                >
+                  <child.icon className="w-3.5 h-3.5 shrink-0 stroke-[1.75px]" />
+                  <span className="text-sm">{child.name}</span>
+                </NavLink>
+              ))}
+            </div>
+          )}
         </li>
       );
     }
@@ -187,17 +220,19 @@ const Sidebar = ({ isOpen, onClose }) => {
     <aside
       className={[
         'bg-white border-r border-neutral-dark h-screen flex flex-col justify-between py-7',
-        'shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto overflow-y-auto',
+        'shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto',
         // Mobile: fixed drawer, slide in/out — PRESERVED unchanged
         'fixed inset-y-0 left-0 z-[60] w-[85vw] max-w-xs px-4',
+        'overflow-y-auto',
         'transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : '-translate-x-full',
-        // Desktop: static sidebar with collapsible width
-        'md:relative md:z-40 md:translate-x-0',
+        // Desktop: static sidebar; overflow-visible lets the floating dropdown escape
+        'md:relative md:z-40 md:translate-x-0 md:overflow-visible',
         'md:transition-[width] md:duration-300 md:ease-in-out',
         isCollapsed ? 'md:w-20 md:px-2' : 'md:w-64 md:px-4',
       ].join(' ')}
     >
+
       {/* ── Top section ─────────────────────────────────────────── */}
       <div className="space-y-6">
 
@@ -224,7 +259,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         </div>
 
         {/* Nav groups */}
-        <nav className="space-y-5">
+        <nav ref={navRef} className="space-y-5">
           {NAV_GROUPS.map((group) => (
             <div key={group.label}>
               {isCollapsed ? (
@@ -320,7 +355,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         {/* Collapse toggle — desktop only */}
         <div className="hidden md:flex justify-center mt-4 pt-3 border-t border-neutral-dark">
           <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={() => setIsCollapsed(prev => !prev)}
             className="p-2 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
             aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}

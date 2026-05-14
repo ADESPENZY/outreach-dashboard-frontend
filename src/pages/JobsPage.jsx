@@ -227,7 +227,7 @@ const JobsPage = () => {
     useEffect(() => { setCurrentPage(1); }, [searchQuery, filterTab]);
 
     return (
-        <div className="p-1 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in font-roboto">
+        <div className="p-4 md:p-8 w-full max-w-[1600px] mx-auto space-y-6 animate-fade-in font-roboto">
 
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -326,7 +326,7 @@ const JobsPage = () => {
             <div className="flex flex-col gap-4">
                 {loading ? (
                     [0, 1, 2, 3, 4].map(i => (
-                        <div key={i} className="bg-white border border-neutral-dark rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 animate-pulse">
+                        <div key={i} className="w-full bg-white border border-neutral-dark rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 animate-pulse">
                             {/* Left: icon + title/company bars */}
                             <div className="flex items-start gap-4 flex-1 min-w-0">
                                 <div className="h-10 w-10 rounded-xl bg-gray-200 shrink-0" />
@@ -354,7 +354,7 @@ const JobsPage = () => {
                     paginatedJobs.map(job => (
                         <div
                             key={job.id}
-                            className="bg-white border border-neutral-dark rounded-xl p-4 md:p-5 hover:shadow-lg hover:border-primary-light/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6"
+                            className="w-full bg-white border border-neutral-dark rounded-xl p-4 md:p-5 hover:shadow-lg hover:border-primary-light/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6"
                         >
                             {/* Left: Icon + Title + Company */}
                             <div className="flex items-start gap-4 flex-1 min-w-0">
