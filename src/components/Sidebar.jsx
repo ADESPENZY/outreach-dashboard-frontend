@@ -16,8 +16,8 @@ import {
   ListChecks,
   X,
   Target,
-  ChevronLeft,
-  ChevronRight,
+  PanelLeft,
+  PanelLeftClose,
   ChevronDown,
 } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
@@ -46,7 +46,6 @@ const NAV_GROUPS = [
       { name: 'Inboxes',        icon: Mail,    path: '/dashboard/inboxes' },
       { name: 'Analytics',      icon: BarChart, path: '/dashboard/analytics' },
       { name: 'Warmup Manager', icon: Flame,   path: '/dashboard/warmup' },
-      { name: 'Auto-Scout',     icon: Target,  path: '/dashboard/auto-scout' },
     ],
   },
   {
@@ -57,8 +56,9 @@ const NAV_GROUPS = [
         icon: UserCircle,
         id: 'account',
         children: [
-          { name: 'Profile',  icon: UserCircle, path: '/dashboard/profile' },
-          { name: 'Settings', icon: Settings,   path: '/dashboard/settings' },
+          { name: 'Profile',    icon: UserCircle, path: '/dashboard/profile' },
+          { name: 'Settings',   icon: Settings,   path: '/dashboard/settings' },
+          { name: 'Auto-Scout', icon: Target,     path: '/dashboard/auto-scout' },
         ],
       },
     ],
@@ -82,7 +82,6 @@ const Sidebar = ({ isOpen, onClose }) => {
     setOpenDropdown(prev => (prev === id ? null : id));
   };
 
-  // Close floating dropdown when clicking outside the nav block
   useEffect(() => {
     if (!openDropdown) return;
     const handler = (e) => {
@@ -94,10 +93,7 @@ const Sidebar = ({ isOpen, onClose }) => {
     return () => document.removeEventListener('mousedown', handler);
   }, [openDropdown]);
 
-  // Close dropdown on route change
   useEffect(() => { setOpenDropdown(null); }, [location.pathname]);
-
-  // Close dropdown when sidebar collapse state changes
   useEffect(() => { setOpenDropdown(null); }, [isCollapsed]);
 
   const isChildActive = (children) =>
@@ -135,7 +131,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             ].join(' ')} />
           </button>
 
-          {/* ── Mobile: inline accordion (never visible on desktop) ── */}
+          {/* Mobile: inline accordion — never shown on desktop */}
           <div className={[
             'md:hidden overflow-hidden transition-all duration-300 ease-in-out',
             dropdownOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0',
@@ -162,7 +158,7 @@ const Sidebar = ({ isOpen, onClose }) => {
             </ul>
           </div>
 
-          {/* ── Desktop: floating absolute card (never visible on mobile) ── */}
+          {/* Desktop: floating absolute card — never shown on mobile */}
           {dropdownOpen && (
             <div className="hidden md:block absolute left-full ml-2 top-0 bg-white shadow-lg border border-neutral-dark rounded-xl p-2 min-w-[160px] z-[70]">
               <p className="text-[9px] font-bold uppercase tracking-widest text-secondary-dark/50 px-2.5 pt-1.5 pb-1 font-montserrat">
@@ -219,7 +215,7 @@ const Sidebar = ({ isOpen, onClose }) => {
   return (
     <aside
       className={[
-        'bg-white border-r border-neutral-dark h-screen flex flex-col justify-between py-7',
+        'bg-white border-r border-neutral-dark h-screen flex flex-col py-5',
         'shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto',
         // Mobile: fixed drawer, slide in/out — PRESERVED unchanged
         'fixed inset-y-0 left-0 z-[60] w-[85vw] max-w-xs px-4',
@@ -233,62 +229,76 @@ const Sidebar = ({ isOpen, onClose }) => {
       ].join(' ')}
     >
 
-      {/* ── Top section ─────────────────────────────────────────── */}
-      <div className="space-y-6">
+      {/* ── Header: Brand + Collapse Toggle ─────────────────────── */}
+      <div className={[
+        'flex items-center w-full px-1 justify-between',
+        isCollapsed ? 'md:justify-center' : '',
+      ].join(' ')}>
 
-        {/* Brand + mobile close */}
-        <div className={[
-          'flex items-center w-full px-1 mb-2',
-          isCollapsed ? 'md:justify-center' : 'justify-between',
-        ].join(' ')}>
-          <div className={`flex items-center gap-3 ${isCollapsed ? 'md:gap-0' : ''}`}>
-            <div className="bg-gradient-to-br from-primary-light to-primary-dark p-2 rounded-xl shadow-lg shadow-primary-light/30 shrink-0">
-              <Rocket className="text-white w-5 h-5" />
-            </div>
-            <h2 className={`text-xl font-bold tracking-tight font-montserrat text-black ${isCollapsed ? 'md:hidden' : ''}`}>
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Auto</span>Apply
-            </h2>
+        {/* Brand logo + text — hidden on desktop when collapsed */}
+        <div className={`flex items-center gap-2.5 ${isCollapsed ? 'md:hidden' : ''}`}>
+          <div className="bg-gradient-to-br from-primary-light to-primary-dark p-2 rounded-xl shadow-lg shadow-primary-light/30 shrink-0">
+            <Rocket className="text-white w-5 h-5" />
           </div>
-          <button
-            onClick={onClose}
-            className="md:hidden p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
-            aria-label="Close menu"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <h2 className="text-xl font-bold tracking-tight font-montserrat text-black">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Apply</span>DIR
+          </h2>
         </div>
 
-        {/* Nav groups */}
-        <nav ref={navRef} className="space-y-5">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label}>
-              {isCollapsed ? (
-                <div className="hidden md:block h-px bg-neutral-dark mx-1 mb-2" />
-              ) : (
-                <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-dark/60 px-3 mb-1.5 font-montserrat">
-                  {group.label}
-                </p>
-              )}
-              <ul className="space-y-0.5">
-                {group.items.map(renderNavItem)}
-              </ul>
-            </div>
-          ))}
-        </nav>
+        {/* Desktop collapse toggle — hidden on mobile */}
+        <button
+          onClick={() => setIsCollapsed(prev => !prev)}
+          className="hidden md:flex p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
+          title="Toggle Sidebar"
+          aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          {isCollapsed
+            ? <PanelLeft className="w-4 h-4" />
+            : <PanelLeftClose className="w-4 h-4" />
+          }
+        </button>
+
+        {/* Mobile drawer close — hidden on desktop */}
+        <button
+          onClick={onClose}
+          className="md:hidden p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
+          aria-label="Close menu"
+        >
+          <X className="w-5 h-5" />
+        </button>
       </div>
 
-      {/* ── Bottom section ───────────────────────────────────────── */}
-      <div>
+      {/* ── Nav — flex-1 fills all space between header and bottom ── */}
+      <nav ref={navRef} className="flex-1 flex flex-col gap-1 mt-4">
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label}>
+            {isCollapsed ? (
+              <div className="hidden md:block h-px bg-neutral-dark mx-1 mb-1" />
+            ) : (
+              <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-dark/60 px-3 mb-1 font-montserrat">
+                {group.label}
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              {group.items.map(renderNavItem)}
+            </ul>
+          </div>
+        ))}
+      </nav>
+
+      {/* ── Bottom section — mt-auto pins it to the foot of the sidebar ── */}
+      <div className="mt-auto">
+
         {/* Connected Inboxes — full view when expanded */}
-        <div className={`pt-5 border-t border-neutral-dark mt-4 ${isCollapsed ? 'md:hidden' : ''}`}>
-          <div className="flex items-center justify-between px-1 mb-3">
+        <div className={`pt-4 border-t border-neutral-dark mt-3 ${isCollapsed ? 'md:hidden' : ''}`}>
+          <div className="flex items-center justify-between px-1 mb-2">
             <h3 className="text-[10px] font-bold text-secondary-dark/60 uppercase tracking-widest font-montserrat">
               Connected Inboxes
             </h3>
             <div className="w-2 h-2 rounded-full bg-primary-light animate-pulse shadow-[0_0_8px_rgba(255,91,46,0.6)]" />
           </div>
 
-          <ul className="space-y-2 mb-3">
+          <ul className="space-y-2 mb-2">
             {isLoading ? (
               <li className="text-center text-xs text-secondary-dark/60 animate-pulse py-2">Fetching accounts...</li>
             ) : isError ? (
@@ -332,15 +342,15 @@ const Sidebar = ({ isOpen, onClose }) => {
           <Link
             to="/dashboard/connectedAccounts"
             onClick={onClose}
-            className="w-full flex items-center justify-center gap-1.5 px-4 py-2.5 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
+            className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
           >
             <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
             Add Gmail
           </Link>
         </div>
 
-        {/* Connected Inboxes — icon-only view when collapsed on desktop */}
-        <div className={`pt-5 border-t border-neutral-dark mt-4 flex-col items-center gap-3 ${isCollapsed ? 'hidden md:flex' : 'hidden'}`}>
+        {/* Connected Inboxes — icon-only when collapsed on desktop */}
+        <div className={`pt-4 border-t border-neutral-dark mt-3 flex-col items-center gap-3 ${isCollapsed ? 'hidden md:flex' : 'hidden'}`}>
           <div className="w-2 h-2 rounded-full bg-primary-light animate-pulse shadow-[0_0_8px_rgba(255,91,46,0.6)]" />
           <Link
             to="/dashboard/connectedAccounts"
@@ -352,20 +362,6 @@ const Sidebar = ({ isOpen, onClose }) => {
           </Link>
         </div>
 
-        {/* Collapse toggle — desktop only */}
-        <div className="hidden md:flex justify-center mt-4 pt-3 border-t border-neutral-dark">
-          <button
-            onClick={() => setIsCollapsed(prev => !prev)}
-            className="p-2 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
-            aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            {isCollapsed
-              ? <ChevronRight className="w-4 h-4" />
-              : <ChevronLeft className="w-4 h-4" />
-            }
-          </button>
-        </div>
       </div>
     </aside>
   );
