@@ -284,16 +284,16 @@ const WarmUp = () => {
 
   if (loading) {
     return (
-      <main className="flex-1 flex items-center justify-center bg-neutral">
-        <p className="text-gray-500 text-sm">Loading warmup data…</p>
+      <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 flex items-center justify-center min-h-[60vh] font-roboto">
+        <p className="text-secondary-dark text-sm">Loading warmup data…</p>
       </main>
     );
   }
 
   return (
-    <main className="flex-1 overflow-y-auto p-2 bg-neutral font-roboto">
+    <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-8 animate-fade-in font-roboto">
       {/* Controls */}
-      <section className="mb-6">
+      <section>
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="relative flex-grow max-w-xs">
@@ -328,68 +328,68 @@ const WarmUp = () => {
       </section>
 
       {/* Metrics */}
-      <section className="mb-8">
+      <section>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-500">Active Warmups</h3>
+              <h3 className="text-sm font-medium text-secondary-dark">Active Warmups</h3>
               <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
                 <Mail className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">{summary?.active_sessions ?? 0}</p>
+            <p className="text-2xl font-bold text-black font-montserrat">{summary?.active_sessions ?? 0}</p>
             <p className="text-xs text-gray-500 mt-1">{summary?.total_sessions ?? 0} total sessions</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-500">Avg Delivery Rate</h3>
+              <h3 className="text-sm font-medium text-secondary-dark">Avg Delivery Rate</h3>
               <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600">
                 <CheckSquare className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">
+            <p className="text-2xl font-bold text-black font-montserrat">
               {summary ? `${summary.avg_delivery_rate}%` : '—'}
             </p>
             <p className="text-xs text-gray-500 mt-1">across all accounts</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-500">Bounced</h3>
+              <h3 className="text-sm font-medium text-secondary-dark">Bounced</h3>
               <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center text-yellow-600">
                 <XCircle className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">{summary?.bounced ?? 0}</p>
+            <p className="text-2xl font-bold text-black font-montserrat">{summary?.bounced ?? 0}</p>
             <p className="text-xs text-gray-500 mt-1">last {dateRange} days</p>
           </div>
 
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-gray-500">Sent Today</h3>
+              <h3 className="text-sm font-medium text-secondary-dark">Sent Today</h3>
               <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                 <Send className="w-5 h-5" />
               </div>
             </div>
-            <p className="text-2xl font-semibold text-gray-800">{summary?.sent_today ?? 0}</p>
+            <p className="text-2xl font-bold text-black font-montserrat">{summary?.sent_today ?? 0}</p>
             <p className="text-xs text-gray-500 mt-1">warmup emails today</p>
           </div>
         </div>
       </section>
 
       {/* Account Cards */}
-      <section className="mb-8">
-        <h2 className="text-lg font-semibold text-gray-800 mb-4">Connected Email Accounts</h2>
+      <section>
+        <h2 className="text-lg font-bold text-black-light font-montserrat mb-6">Connected Email Accounts</h2>
         {sessions.length === 0 ? (
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center text-gray-500 text-sm">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-8 text-center text-secondary-dark text-sm">
             No warmup sessions yet.{' '}
             <button onClick={handleOpenModal} className="text-primary-light underline">Add an account</button> to get started.
           </div>
         ) : (
           <div className="flex overflow-x-auto pb-2 space-x-4">
             {sessions.map(s => (
-              <div key={s.id} className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 min-w-[300px] flex-shrink-0">
+              <div key={s.id} className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6 min-w-[300px] flex-shrink-0">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center">
                     <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center text-blue-600 mr-3">
@@ -458,9 +458,9 @@ const WarmUp = () => {
       </section>
 
       {/* Charts */}
-      <section className="mb-8">
+      <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">Warmup Progress</h2>
+          <h2 className="text-lg font-bold text-black-light font-montserrat">Warmup Progress</h2>
           <div className="relative">
             <button
               onClick={() => setDateRangeDropdownOpen(!dateRangeDropdownOpen)}
@@ -487,11 +487,11 @@ const WarmUp = () => {
           </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
             <h3 className="text-sm font-medium text-gray-700 mb-4">Daily Send Volume</h3>
             <div ref={dailySendVolumeChartRef} className="w-full h-64" />
           </div>
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
             <h3 className="text-sm font-medium text-gray-700 mb-4">Delivery Metrics</h3>
             <div ref={deliveryMetricsChartRef} className="w-full h-64" />
           </div>
@@ -499,13 +499,13 @@ const WarmUp = () => {
       </section>
 
       {/* Settings */}
-      <section className="mb-8">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+      <section>
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark overflow-hidden">
           <div
             className="p-4 border-b border-gray-200 flex items-center justify-between cursor-pointer"
             onClick={() => setSettingsOpen(!settingsOpen)}
           >
-            <h2 className="text-lg font-semibold text-gray-800">Warmup Settings</h2>
+            <h2 className="text-lg font-bold text-black-light font-montserrat">Warmup Settings</h2>
             <ChevronDown className={`w-6 h-6 text-gray-500 transition-transform ${settingsOpen ? 'rotate-180' : ''}`} />
           </div>
           {settingsOpen && (
@@ -586,9 +586,9 @@ const WarmUp = () => {
       </section>
 
       {/* Analytics Table */}
-      <section className="mb-8">
+      <section>
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-800">Detailed Analytics</h2>
+          <h2 className="text-lg font-bold text-black-light font-montserrat">Detailed Analytics</h2>
           <div className="flex items-center gap-2">
             <div className="bg-white rounded-full p-1 flex items-center border border-gray-200">
               {['delivery'].map(tab => (
@@ -606,7 +606,7 @@ const WarmUp = () => {
             </button>
           </div>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark overflow-hidden">
           {analyticsData[activeTab]?.length === 0 ? (
             <div className="p-8 text-center text-gray-500 text-sm">No data yet. Run a warmup to see stats here.</div>
           ) : (

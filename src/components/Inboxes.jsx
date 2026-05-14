@@ -35,7 +35,7 @@ function ProgressBar({ pct, color = 'bg-primary-light' }) {
 
 function StatCard({ label, value, icon: Icon, color }) {
   return (
-    <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5">
+    <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-6">
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${color}`}>
         <Icon className="w-5 h-5" />
       </div>
@@ -91,14 +91,14 @@ const Inboxes = () => {
 
   if (loading) {
     return (
-      <main className="p-6 flex items-center justify-center min-h-[60vh]">
+      <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 flex items-center justify-center min-h-[60vh] font-roboto">
         <Loader2 className="w-8 h-8 animate-spin text-primary-light" />
       </main>
     );
   }
 
   return (
-    <main className="p-6 md:p-8 max-w-7xl mx-auto font-roboto space-y-6">
+    <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-6 md:space-y-8 animate-fade-in font-roboto">
 
       {/* Page header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -121,7 +121,7 @@ const Inboxes = () => {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <StatCard label="Connected Inboxes" value={summary.total_accounts  ?? '—'} icon={Mail}         color="bg-blue-50 text-blue-500"    />
         <StatCard label="Active"             value={summary.active_accounts ?? '—'} icon={Users}        color="bg-emerald-50 text-emerald-500" />
         <StatCard label="Avg Open Rate"      value={`${summary.avg_open_rate ?? 0}%`}  icon={MailOpen}     color="bg-purple-50 text-purple-500" />
@@ -129,7 +129,7 @@ const Inboxes = () => {
       </div>
 
       {/* Controls */}
-      <div className="bg-white rounded-2xl border border-neutral-dark p-4 flex flex-col sm:flex-row gap-3">
+      <div className="bg-white rounded-2xl border border-neutral-dark p-5 flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-secondary-dark/50" />
           <input

@@ -269,13 +269,13 @@ const Sidebar = ({ isOpen, onClose }) => {
       </div>
 
       {/* ── Nav — flex-1 fills all space between header and bottom ── */}
-      <nav ref={navRef} className="flex-1 flex flex-col gap-1 mt-4">
+      <nav ref={navRef} className="flex-1 flex flex-col gap-2 mt-4">
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             {isCollapsed ? (
-              <div className="hidden md:block h-px bg-neutral-dark mx-1 mb-1" />
+              <div className="hidden md:block h-px bg-neutral-dark mx-1 mt-6 mb-2" />
             ) : (
-              <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-dark/60 px-3 mb-1 font-montserrat">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-dark/60 px-3 mt-6 mb-2 font-montserrat">
                 {group.label}
               </p>
             )}

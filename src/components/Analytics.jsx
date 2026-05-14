@@ -12,7 +12,7 @@ import { getAnalytics } from '../services/apiAnalytics';
 function StatCard({ label, value, sub, trend, icon: Icon, color }) {
   const isUp = trend > 0;
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-5">
+    <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
       <div className="flex items-center justify-between mb-3">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${color}`}>
           <Icon className="w-5 h-5" />
@@ -59,7 +59,7 @@ const Analytics = () => {
 
   if (loading) {
     return (
-      <main className="p-6 flex flex-col items-center justify-center min-h-[60vh]">
+      <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 flex flex-col items-center justify-center min-h-[60vh] font-roboto">
         <Loader2 className="w-8 h-8 animate-spin text-primary-light mb-3" />
         <p className="text-sm text-secondary-dark/60 animate-pulse">Loading analytics...</p>
       </main>
@@ -68,7 +68,7 @@ const Analytics = () => {
 
   if (!data) {
     return (
-      <main className="p-6 text-center text-secondary-dark/60">
+      <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 text-center text-secondary-dark/60 font-roboto">
         <AlertCircle className="w-8 h-8 mx-auto mb-2" />
         Failed to load analytics.
       </main>
@@ -146,7 +146,7 @@ const Analytics = () => {
   };
 
   return (
-    <main className="p-6 md:p-8 max-w-7xl mx-auto space-y-6 font-roboto">
+    <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-6 md:space-y-8 animate-fade-in font-roboto">
 
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -176,7 +176,7 @@ const Analytics = () => {
       </div>
 
       {/* Summary stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <StatCard label="Emails Sent"     value={summary.total_sent}      icon={Send}          color="bg-blue-50 text-blue-500" />
         <StatCard label="Open Rate"       value={`${summary.open_rate}%`}  icon={MailOpen}      color="bg-purple-50 text-purple-500" />
         <StatCard label="Reply Rate"      value={`${summary.reply_rate}%`} icon={MessageSquare} color="bg-emerald-50 text-emerald-500" />
@@ -184,7 +184,7 @@ const Analytics = () => {
       </div>
 
       {/* Secondary stat cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <StatCard label="Drafts"          value={summary.total_drafts}   icon={FileText}      color="bg-neutral-dark text-secondary-dark" />
         <StatCard label="Awaiting Send"   value={summary.total_approved} icon={Mail}          color="bg-amber-50 text-amber-500" />
         <StatCard label="Opened"          value={summary.total_opened}   icon={MailOpen}      color="bg-violet-50 text-violet-500" />
