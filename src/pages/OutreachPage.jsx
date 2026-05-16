@@ -14,6 +14,7 @@ import {
   queueEmail, queueAllEmails,
   deleteEmail, unqueueEmail, rescheduleEmail,
 } from '../services/apiOutreach';
+import TailoredCVPreview from '../components/TailoredCVPreview';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
@@ -68,6 +69,7 @@ const OutreachPage = () => {
   const [replyingId, setReplyingId]           = useState(null);
   const [runningFollowups, setRunningFollowups] = useState(false);
   const [generatingCvFor, setGeneratingCvFor] = useState(null);
+  const [cvPreviewModal, setCvPreviewModal]   = useState(null);
 
   // ── Queries ────────────────────────────────────────────────────────────────
   const { data: contacts = [],   isLoading: loadingContacts } = useQuery({ queryKey: ['outreach-contacts'], queryFn: getContacts });
@@ -208,13 +210,9 @@ const OutreachPage = () => {
   const handleGenerateCv = async (jobId) => {
     setGeneratingCvFor(jobId);
     try {
-      const blob = await generateJobCV(jobId);
-      const url  = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-      const a    = Object.assign(document.createElement('a'), { href: url });
-      a.setAttribute('download', `cv_${jobId}.pdf`);
-      document.body.appendChild(a); a.click(); a.remove();
-      window.URL.revokeObjectURL(url);
-      toast.success('CV downloaded!');
+      const cvData = await generateJobCV(jobId);
+      setCvPreviewModal({ jobId, data: cvData });
+      toast.success('CV generated — preview ready!');
     } catch (err) { toast.error('CV failed: ' + err.message); }
     finally { setGeneratingCvFor(null); }
   };
@@ -245,6 +243,15 @@ const OutreachPage = () => {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-6 md:space-y-8 animate-fade-in font-roboto">
+
+      {/* CV Preview Modal */}
+      {cvPreviewModal && (
+        <TailoredCVPreview
+          jobId={cvPreviewModal.jobId}
+          data={cvPreviewModal.data}
+          onClose={() => setCvPreviewModal(null)}
+        />
+      )}
 
       {/* Header */}
       <div>

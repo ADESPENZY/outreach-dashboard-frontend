@@ -206,11 +206,16 @@ export async function runFollowups() {
 
 export async function generateJobCV(jobId) {
   try {
-    const response = await api.post(
-      `/api/outreach/jobs/${jobId}/generate-cv/`,
-      {},
-      { responseType: "blob" }
-    );
+    const response = await api.post(`/api/outreach/jobs/${jobId}/generate-cv/`, {});
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function getJobCVJson(jobId) {
+  try {
+    const response = await api.get(`/api/outreach/jobs/${jobId}/cv/json/`);
     return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));
