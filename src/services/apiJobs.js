@@ -14,6 +14,15 @@ export async function getScrapedJobs() {
   }
 }
 
+export async function getManualApplyJobs() {
+  try {
+    const response = await api.get("/api/jobs/?status=manual_apply");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function scoreAllJobs() {
   try {
     const response = await api.post("/api/jobs/score/all/");

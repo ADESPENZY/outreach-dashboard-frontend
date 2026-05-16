@@ -5,7 +5,8 @@ import {
   Send, Users, FileText, CheckCircle, Search, Building, Mail,
   Loader2, ChevronDown, ChevronUp, Sparkles, Pencil, X, UserCheck,
   MailOpen, MessageSquare, ShieldCheck, Download, Clock, ListOrdered,
-  Trash2, CalendarClock, Ban, ExternalLink,
+  Trash2, CalendarClock, Ban, ExternalLink, AlertTriangle, MapPin,
+  DollarSign, Briefcase,
 } from 'lucide-react';
 import {
   getContacts, getDraftEmails, getSentEmails, getHunterQuota,
@@ -14,6 +15,7 @@ import {
   queueEmail, queueAllEmails,
   deleteEmail, unqueueEmail, rescheduleEmail,
 } from '../services/apiOutreach';
+import { getManualApplyJobs } from '../services/apiJobs';
 import TailoredCVPreview from '../components/TailoredCVPreview';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
@@ -21,6 +23,7 @@ const TABS = [
   { key: 'contacts', label: 'Contacts',        icon: Users },
   { key: 'drafts',   label: 'Drafts',          icon: FileText },
   { key: 'queue',    label: 'Queue & Sent',    icon: Send },
+  { key: 'manual',   label: 'Manual Apply',    icon: AlertTriangle },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,15 +75,16 @@ const OutreachPage = () => {
   const [cvPreviewModal, setCvPreviewModal]   = useState(null);
 
   // ── Queries ────────────────────────────────────────────────────────────────
-  const { data: contacts = [],   isLoading: loadingContacts } = useQuery({ queryKey: ['outreach-contacts'], queryFn: getContacts });
-  const { data: drafts = [],     isLoading: loadingDrafts }   = useQuery({ queryKey: ['outreach-drafts'],   queryFn: getDraftEmails });
-  const { data: sentEmails = [], isLoading: loadingSent }     = useQuery({ queryKey: ['outreach-sent'],     queryFn: getSentEmails });
+  const { data: contacts = [],        isLoading: loadingContacts } = useQuery({ queryKey: ['outreach-contacts'],   queryFn: getContacts });
+  const { data: drafts = [],          isLoading: loadingDrafts }   = useQuery({ queryKey: ['outreach-drafts'],     queryFn: getDraftEmails });
+  const { data: sentEmails = [],      isLoading: loadingSent }     = useQuery({ queryKey: ['outreach-sent'],       queryFn: getSentEmails });
+  const { data: manualApplyJobs = [], isLoading: loadingManual }   = useQuery({ queryKey: ['manual-apply-jobs'],   queryFn: getManualApplyJobs });
   const { data: hunterQuota = null } = useQuery({
     queryKey: ['hunter-quota'],
     queryFn: () => getHunterQuota().catch(() => null),
   });
 
-  const loading = loadingContacts || loadingDrafts || loadingSent;
+  const loading = loadingContacts || loadingDrafts || loadingSent || loadingManual;
 
   // ── Queue mutations ────────────────────────────────────────────────────────
   const queueSingleMutation = useMutation({
@@ -238,6 +242,7 @@ const OutreachPage = () => {
     sent:     sentEmails.filter(e => e.status === 'sent').length,
     opened:   sentEmails.filter(e => e.status === 'opened').length,
     replied:  sentEmails.filter(e => e.status === 'replied').length,
+    manual:   manualApplyJobs.length,
   };
 
   // ── Render ─────────────────────────────────────────────────────────────────
@@ -263,7 +268,7 @@ const OutreachPage = () => {
 
       {/* Stats bar */}
       {!loading && (
-        <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+        <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
           {[
             { label: 'Contacts', value: stats.contacts, color: 'text-accent-teal',    bg: 'bg-accent-teal/10' },
             { label: 'Drafts',   value: stats.drafts,   color: 'text-amber-600',       bg: 'bg-amber-50' },
@@ -271,8 +276,9 @@ const OutreachPage = () => {
             { label: 'Sent',     value: stats.sent,     color: 'text-emerald-600',     bg: 'bg-emerald-50' },
             { label: 'Opened',   value: stats.opened,   color: 'text-purple-600',      bg: 'bg-purple-50' },
             { label: 'Replied',  value: stats.replied,  color: 'text-green-600',       bg: 'bg-green-50' },
+            { label: 'Manual',   value: stats.manual,   color: 'text-orange-600',      bg: 'bg-orange-50', highlight: stats.manual > 0 },
           ].map(s => (
-            <div key={s.label} className={`${s.bg} rounded-2xl p-4 border border-neutral-dark flex flex-col items-center`}>
+            <div key={s.label} className={`${s.bg} rounded-2xl p-4 border ${s.highlight ? 'border-orange-300' : 'border-neutral-dark'} flex flex-col items-center`}>
               <span className={`text-2xl font-bold font-montserrat ${s.color}`}>{s.value}</span>
               <span className="text-[11px] text-secondary-dark font-medium mt-0.5">{s.label}</span>
             </div>
@@ -288,6 +294,7 @@ const OutreachPage = () => {
             const isActive = activeTab === tab.key;
             const count = tab.key === 'contacts' ? contacts.length
                         : tab.key === 'drafts'   ? drafts.length
+                        : tab.key === 'manual'   ? manualApplyJobs.length
                         : sentEmails.length;
             return (
               <button
@@ -295,8 +302,12 @@ const OutreachPage = () => {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-semibold transition-all border-b-2 ${
                   isActive
-                    ? 'text-primary-dark border-primary-light bg-primary-light/5'
-                    : 'text-secondary-dark border-transparent hover:bg-neutral'
+                    ? tab.key === 'manual'
+                      ? 'text-orange-700 border-orange-500 bg-orange-50/50'
+                      : 'text-primary-dark border-primary-light bg-primary-light/5'
+                    : tab.key === 'manual' && manualApplyJobs.length > 0
+                      ? 'text-orange-600 border-transparent hover:bg-orange-50/30'
+                      : 'text-secondary-dark border-transparent hover:bg-neutral'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -366,6 +377,9 @@ const OutreachPage = () => {
                   onGenerateCv={handleGenerateCv}
                   generatingCvFor={generatingCvFor}
                 />
+              )}
+              {activeTab === 'manual' && (
+                <ManualApplyTab jobs={manualApplyJobs} />
               )}
             </>
           )}
@@ -694,10 +708,11 @@ function EmailCard({
   showApprove, showScheduled, showTimestamps,
   onGenerateCv, generatingCvFor,
 }) {
-  const [expanded, setExpanded]       = useState(false);
-  const [confirmDelete, setConfirm]   = useState(false);
-  const [rescheduleOpen, setReschOpen] = useState(false);
-  const [rescheduleVal, setReschVal]  = useState('');
+  const [expanded, setExpanded]         = useState(false);
+  const [confirmDelete, setConfirm]     = useState(false);
+  const [rescheduleOpen, setReschOpen]  = useState(false);
+  const [rescheduleVal, setReschVal]    = useState('');
+  const [showJobDetails, setShowJobDetails] = useState(false);
 
   const lines   = (email.body || '').split('\n');
   const preview = lines.slice(0, 3).join('\n');
@@ -720,6 +735,10 @@ function EmailCard({
   const minDT = new Date(Date.now() + 60000).toISOString().slice(0, 16);
 
   return (
+    <>
+    {showJobDetails && (
+      <JobDetailsModal email={email} onClose={() => setShowJobDetails(false)} />
+    )}
     <div className="bg-white border border-neutral-dark rounded-2xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
       {/* Card header */}
       <div className="px-5 py-3.5 flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-neutral-dark">
@@ -729,7 +748,13 @@ function EmailCard({
           </div>
           <div className="min-w-0">
             <p className="font-bold text-sm text-black truncate">{email.company_name || '—'}</p>
-            <p className="text-[11px] text-secondary-dark truncate">{email.job_title || '—'}</p>
+            <button
+              onClick={() => setShowJobDetails(true)}
+              className="text-[11px] text-primary-dark hover:underline truncate text-left block max-w-full"
+              title="View job details"
+            >
+              {email.job_title || '—'}
+            </button>
             {email.contact && (
               <p className="text-[11px] text-secondary-dark/60 truncate">
                 → <span className="font-medium text-secondary-dark">{email.contact.first_name} {email.contact.last_name}</span>
@@ -917,6 +942,7 @@ function EmailCard({
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -989,6 +1015,193 @@ function EmptyState({ icon: Icon, title, subtitle }) {
       </div>
       <p className="text-base font-semibold text-secondary-dark">{title}</p>
       <p className="text-sm text-secondary-dark/60 mt-1 max-w-xs mx-auto">{subtitle}</p>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MANUAL APPLY TAB
+// ═════════════════════════════════════════════════════════════════════════════
+function ManualApplyTab({ jobs }) {
+  if (jobs.length === 0) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="No manual-apply jobs"
+        subtitle="When automated contact search can't find an email, jobs appear here so you don't lose track of them."
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Banner */}
+      <div className="flex items-start gap-3 p-4 bg-orange-50 border border-orange-200 rounded-2xl">
+        <AlertTriangle className="w-5 h-5 text-orange-500 shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-semibold text-orange-800">Automated contact search failed for these roles</p>
+          <p className="text-xs text-orange-700 mt-0.5">
+            No decision-maker email was found. Apply directly via LinkedIn or the company portal using the links below.
+          </p>
+        </div>
+      </div>
+
+      {/* Job cards */}
+      <div className="grid gap-3">
+        {jobs.map(job => (
+          <ManualApplyCard key={job.id} job={job} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ManualApplyCard({ job }) {
+  const [expanded, setExpanded] = useState(false);
+  const desc = job.description || '';
+  const shortDesc = desc.slice(0, 300);
+  const hasMore = desc.length > 300;
+
+  const scoreBg = job.fit_score >= 80 ? 'bg-green-50 text-green-700 border-green-200'
+                : job.fit_score >= 60 ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                : job.fit_score != null ? 'bg-red-50 text-red-600 border-red-200'
+                : 'bg-neutral text-secondary-dark border-neutral-dark';
+
+  return (
+    <div className="bg-white border border-orange-100 rounded-2xl shadow-sm overflow-hidden">
+      <div className="px-5 py-4 flex flex-col md:flex-row md:items-start justify-between gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div className="h-9 w-9 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0">
+            <Briefcase className="w-3.5 h-3.5 text-orange-500" />
+          </div>
+          <div className="min-w-0 space-y-1">
+            <p className="font-bold text-sm text-black">{job.title}</p>
+            <p className="text-xs font-semibold text-secondary-dark">{job.company_name}</p>
+            <div className="flex flex-wrap items-center gap-2 mt-1">
+              {job.location && (
+                <span className="flex items-center gap-1 text-[11px] text-secondary-dark">
+                  <MapPin className="w-3 h-3" /> {job.location}
+                </span>
+              )}
+              {job.salary_info && (
+                <span className="flex items-center gap-1 text-[11px] text-secondary-dark">
+                  <DollarSign className="w-3 h-3" /> {job.salary_info}
+                </span>
+              )}
+              {job.fit_score != null && (
+                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${scoreBg}`}>
+                  {job.fit_score}% match
+                </span>
+              )}
+            </div>
+            {desc && (
+              <div className="mt-2 text-[11px] text-secondary-dark leading-relaxed">
+                {expanded ? desc : shortDesc}
+                {hasMore && !expanded && '…'}
+                {hasMore && (
+                  <button
+                    onClick={() => setExpanded(v => !v)}
+                    className="ml-1.5 text-primary-dark hover:underline font-semibold"
+                  >
+                    {expanded ? 'Show less' : 'Read more'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Apply button */}
+        <div className="shrink-0">
+          {job.apply_url ? (
+            <a
+              href={job.apply_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-orange-200 whitespace-nowrap"
+            >
+              <ExternalLink className="w-3.5 h-3.5" /> Apply Now
+            </a>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-3 py-2 bg-neutral border border-neutral-dark rounded-xl text-[11px] text-secondary-dark font-medium">
+              No URL available
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// JOB DETAILS MODAL  (opened from EmailCard job-title click)
+// ═════════════════════════════════════════════════════════════════════════════
+function JobDetailsModal({ email, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-neutral-dark relative">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-secondary-dark/60 hover:bg-neutral-dark rounded-full p-1.5 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="flex items-start gap-3 mb-5">
+          <div className="h-10 w-10 rounded-xl bg-primary-light/10 border border-primary-light/20 flex items-center justify-center shrink-0">
+            <Briefcase className="w-4 h-4 text-primary-light" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-black font-montserrat leading-tight">{email.job_title || '—'}</h2>
+            <p className="text-sm text-secondary-dark mt-0.5">{email.company_name || '—'}</p>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {email.job_location && (
+            <div className="flex items-center gap-2 text-sm text-secondary-dark">
+              <MapPin className="w-4 h-4 shrink-0 text-secondary-dark/50" />
+              {email.job_location}
+            </div>
+          )}
+          {email.job_salary_info && (
+            <div className="flex items-center gap-2 text-sm text-secondary-dark">
+              <DollarSign className="w-4 h-4 shrink-0 text-secondary-dark/50" />
+              {email.job_salary_info}
+            </div>
+          )}
+          {email.job_fit_score != null && (
+            <div className="flex items-center gap-2">
+              <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                email.job_fit_score >= 80 ? 'bg-green-50 text-green-700 border-green-200'
+                : email.job_fit_score >= 60 ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                : 'bg-red-50 text-red-600 border-red-200'
+              }`}>
+                {email.job_fit_score}% AI match
+              </span>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-secondary-dark bg-white border border-neutral-dark rounded-xl hover:bg-neutral transition-colors"
+          >
+            Close
+          </button>
+          {email.job_apply_url && (
+            <a
+              href={email.job_apply_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-black hover:bg-black/80 text-white text-sm font-semibold rounded-xl transition-all"
+            >
+              <ExternalLink className="w-4 h-4" /> View Job Posting
+            </a>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
