@@ -190,7 +190,7 @@ const JobsPage = () => {
 
     // ── Derived data ──────────────────────────────────────────────────────────
     const filteredJobs = jobs.filter(job => {
-        if (filterTab !== 'All' && job.status?.toLowerCase() !== filterTab.toLowerCase()) return false;
+        if (filterTab !== 'All' && job.status?.toLowerCase() !== filterTab.toLowerCase().replace(/ /g, '_')) return false;
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             const companyMatch = job.company_name?.toLowerCase().includes(query);
@@ -211,7 +211,7 @@ const JobsPage = () => {
         switch (status?.toLowerCase()) {
             case 'approved':  return 'bg-emerald-500';
             case 'rejected':  return 'bg-red-400';
-            case 'contacted': return 'bg-purple-500';
+            case 'outreach_automated': return 'bg-teal-500';
             default:          return 'bg-gray-300';
         }
     };
@@ -296,7 +296,7 @@ const JobsPage = () => {
             {/* Filters & Search */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-neutral-dark flex flex-col md:flex-row justify-between items-center gap-4">
                 <div className="flex overflow-x-auto space-x-2 w-full md:w-auto pb-2 md:pb-0 scrollbar-hide">
-                    {['All', 'Scraped', 'Approved', 'Rejected', 'Contacted'].map(tab => (
+                    {['All', 'Scraped', 'Approved', 'Rejected', 'Outreach Automated'].map(tab => (
                         <button
                             key={tab}
                             onClick={() => setFilterTab(tab)}
