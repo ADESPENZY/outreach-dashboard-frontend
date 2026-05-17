@@ -48,17 +48,45 @@ export default function TailoredCVPreview({ jobId, data, onClose }) {
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[94vh] flex flex-col overflow-hidden">
 
-        {/* ── TOP HEADER BAR ─────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-dark bg-neutral flex-shrink-0">
-          <div>
+        {/* ── TOP HEADER BAR — title · template toggle · download · close ── */}
+        <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-neutral-dark bg-neutral flex-shrink-0">
+
+          {/* Left: title */}
+          <div className="shrink-0">
             <h2 className="font-montserrat font-bold text-black text-base leading-tight">
               Tailored CV Preview
             </h2>
             <p className="text-secondary-dark text-xs mt-0.5 font-roboto">
-              AI-rewritten · Google XYZ formula · select a layout below
+              AI-rewritten · Google XYZ bullets
             </p>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* Centre: template segmented control */}
+          <div className="flex items-center rounded-xl border-2 border-neutral-dark bg-white p-1 gap-1 shadow-sm">
+            {TEMPLATES.map(({ key, label, icon: Icon }) => {
+              const active = activeTemplate === key;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setActiveTemplate(key)}
+                  className={`
+                    flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold
+                    transition-all duration-150 select-none
+                    ${active
+                      ? 'bg-black text-white shadow'
+                      : 'text-secondary-dark hover:bg-neutral-dark hover:text-black'
+                    }
+                  `}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right: download + close */}
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={handleDownloadPdf}
               disabled={downloading}
@@ -79,42 +107,8 @@ export default function TailoredCVPreview({ jobId, data, onClose }) {
           </div>
         </div>
 
-        {/* ── TEMPLATE TOGGLE ────────────────────────────────────────── */}
-        <div className="flex-shrink-0 px-6 py-3 border-b border-neutral-dark bg-white">
-          <div className="inline-flex rounded-xl border border-neutral-dark bg-neutral p-1 gap-1">
-            {TEMPLATES.map(({ key, label, icon: Icon, description }) => {
-              const active = activeTemplate === key;
-              return (
-                <button
-                  key={key}
-                  onClick={() => setActiveTemplate(key)}
-                  className={`
-                    relative flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-semibold
-                    transition-all duration-200
-                    ${active
-                      ? 'bg-white text-black shadow-sm border border-neutral-dark'
-                      : 'text-secondary-dark hover:text-black'
-                    }
-                  `}
-                >
-                  {/* Active indicator dot */}
-                  {active && (
-                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary-light" />
-                  )}
-                  <Icon className={`w-3.5 h-3.5 ${active ? 'text-primary-light' : ''}`} />
-                  <span className="font-montserrat">{label}</span>
-                  <span className={`hidden sm:inline text-[9px] font-normal font-roboto ${active ? 'text-secondary-dark' : 'text-secondary-dark/60'}`}>
-                    — {description}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
         {/* ── TEMPLATE CANVAS ────────────────────────────────────────── */}
         <div className="overflow-y-auto flex-1 bg-neutral-dark/10">
-          {/* Paper shadow wrapper to mimic a document preview */}
           <div className="max-w-[720px] mx-auto my-6 shadow-xl rounded overflow-hidden ring-1 ring-black/10">
             {activeTemplate === 'modern'
               ? <ModernCVTemplate cvData={data} />

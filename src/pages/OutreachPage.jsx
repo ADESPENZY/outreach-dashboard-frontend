@@ -421,7 +421,11 @@ const OutreachPage = () => {
                 />
               )}
               {activeTab === 'manual' && (
-                <ManualApplyTab jobs={manualApplyJobs} />
+                <ManualApplyTab
+                  jobs={manualApplyJobs}
+                  onGenerateCv={handleGenerateCv}
+                  generatingCvFor={generatingCvFor}
+                />
               )}
             </>
           )}
@@ -1275,7 +1279,7 @@ function BulkSearchResultModal({ result, onClose, onGoToContacts, onGoToManual }
 // ═════════════════════════════════════════════════════════════════════════════
 // MANUAL APPLY TAB
 // ═════════════════════════════════════════════════════════════════════════════
-function ManualApplyTab({ jobs }) {
+function ManualApplyTab({ jobs, onGenerateCv, generatingCvFor }) {
   if (jobs.length === 0) {
     return (
       <EmptyState
@@ -1295,6 +1299,7 @@ function ManualApplyTab({ jobs }) {
           <p className="text-sm font-semibold text-orange-800">Automated contact search failed for these roles</p>
           <p className="text-xs text-orange-700 mt-0.5">
             No decision-maker email was found. Apply directly via LinkedIn or the company portal using the links below.
+            You can still generate a tailored CV for each role.
           </p>
         </div>
       </div>
@@ -1302,18 +1307,24 @@ function ManualApplyTab({ jobs }) {
       {/* Job cards */}
       <div className="grid gap-3">
         {jobs.map(job => (
-          <ManualApplyCard key={job.id} job={job} />
+          <ManualApplyCard
+            key={job.id}
+            job={job}
+            onGenerateCv={onGenerateCv}
+            generatingCvFor={generatingCvFor}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function ManualApplyCard({ job }) {
+function ManualApplyCard({ job, onGenerateCv, generatingCvFor }) {
   const [expanded, setExpanded] = useState(false);
-  const desc = job.description || '';
+  const desc      = job.description || '';
   const shortDesc = desc.slice(0, 300);
-  const hasMore = desc.length > 300;
+  const hasMore   = desc.length > 300;
+  const isGenCV   = generatingCvFor === job.id;
 
   const scoreBg = job.fit_score >= 80 ? 'bg-green-50 text-green-700 border-green-200'
                 : job.fit_score >= 60 ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
@@ -1322,7 +1333,10 @@ function ManualApplyCard({ job }) {
 
   return (
     <div className="bg-white border border-orange-100 rounded-2xl shadow-sm overflow-hidden">
+      {/* ── Body row ── */}
       <div className="px-5 py-4 flex flex-col md:flex-row md:items-start justify-between gap-3">
+
+        {/* Job info */}
         <div className="flex items-start gap-3 min-w-0">
           <div className="h-9 w-9 rounded-xl bg-orange-50 border border-orange-200 flex items-center justify-center shrink-0">
             <Briefcase className="w-3.5 h-3.5 text-orange-500" />
@@ -1364,20 +1378,34 @@ function ManualApplyCard({ job }) {
           </div>
         </div>
 
-        {/* Apply button */}
-        <div className="shrink-0">
+        {/* Action buttons — stacked vertically on mobile, side-by-side on md+ */}
+        <div className="shrink-0 flex flex-row md:flex-col items-center md:items-stretch gap-2">
+          {/* Tailored CV button */}
+          <button
+            onClick={() => onGenerateCv && onGenerateCv(job.id)}
+            disabled={isGenCV || !onGenerateCv}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white border-2 border-black text-black text-xs font-bold rounded-xl hover:bg-black hover:text-white transition-all disabled:opacity-50 whitespace-nowrap"
+          >
+            {isGenCV
+              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              : <Download className="w-3.5 h-3.5" />
+            }
+            {isGenCV ? 'Generating…' : 'Tailored CV'}
+          </button>
+
+          {/* Apply Now / no-url fallback */}
           {job.apply_url ? (
             <a
               href={job.apply_url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-orange-200 whitespace-nowrap"
+              className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white text-xs font-semibold rounded-xl transition-all shadow-sm shadow-orange-200 whitespace-nowrap"
             >
               <ExternalLink className="w-3.5 h-3.5" /> Apply Now
             </a>
           ) : (
             <span className="inline-flex items-center gap-1.5 px-3 py-2 bg-neutral border border-neutral-dark rounded-xl text-[11px] text-secondary-dark font-medium">
-              No URL available
+              No URL
             </span>
           )}
         </div>
