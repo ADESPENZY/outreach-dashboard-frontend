@@ -25,6 +25,16 @@ export async function findContacts(maxSearches = 10) {
   }
 }
 
+export async function bulkContactSearch() {
+  try {
+    // No timeout override — this can take 30–90 s depending on job count.
+    const response = await api.post("/api/outreach/bulk-contact-search/");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function getHunterQuota() {
   try {
     const response = await api.get("/api/outreach/hunter-quota/");

@@ -23,6 +23,15 @@ export async function getManualApplyJobs() {
   }
 }
 
+export async function getApprovedJobs() {
+  try {
+    const response = await api.get("/api/jobs/?status=approved");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function scoreAllJobs() {
   try {
     const response = await api.post("/api/jobs/score/all/");

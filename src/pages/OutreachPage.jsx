@@ -6,7 +6,7 @@ import {
   Loader2, ChevronDown, ChevronUp, Sparkles, Pencil, X, UserCheck,
   MailOpen, MessageSquare, ShieldCheck, Download, Clock, ListOrdered,
   Trash2, CalendarClock, Ban, ExternalLink, AlertTriangle, MapPin,
-  DollarSign, Briefcase,
+  DollarSign, Briefcase, Layers, ArrowRight, Zap,
 } from 'lucide-react';
 import {
   getContacts, getDraftEmails, getSentEmails, getHunterQuota,
@@ -14,12 +14,14 @@ import {
   markEmailReplied, runFollowups, generateJobCV, editEmail,
   queueEmail, queueAllEmails,
   deleteEmail, unqueueEmail, rescheduleEmail,
+  bulkContactSearch,
 } from '../services/apiOutreach';
-import { getManualApplyJobs } from '../services/apiJobs';
+import { getManualApplyJobs, getApprovedJobs } from '../services/apiJobs';
 import TailoredCVPreview from '../components/TailoredCVPreview';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
+  { key: 'staging',  label: 'Staging',         icon: Layers },
   { key: 'contacts', label: 'Contacts',        icon: Users },
   { key: 'drafts',   label: 'Drafts',          icon: FileText },
   { key: 'queue',    label: 'Queue & Sent',    icon: Send },
@@ -60,9 +62,10 @@ function fmtShortTime(iso) {
 // ═════════════════════════════════════════════════════════════════════════════
 const OutreachPage = () => {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab]     = useState('contacts');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [editModal, setEditModal]     = useState(null);
+  const [activeTab, setActiveTab]       = useState('staging');
+  const [searchQuery, setSearchQuery]   = useState('');
+  const [editModal, setEditModal]       = useState(null);
+  const [bulkResultModal, setBulkResultModal] = useState(null);
 
   // Legacy loading states for non-mutation actions
   const [findingContacts, setFindingContacts] = useState(false);
@@ -79,12 +82,26 @@ const OutreachPage = () => {
   const { data: drafts = [],          isLoading: loadingDrafts }   = useQuery({ queryKey: ['outreach-drafts'],     queryFn: getDraftEmails });
   const { data: sentEmails = [],      isLoading: loadingSent }     = useQuery({ queryKey: ['outreach-sent'],       queryFn: getSentEmails });
   const { data: manualApplyJobs = [], isLoading: loadingManual }   = useQuery({ queryKey: ['manual-apply-jobs'],   queryFn: getManualApplyJobs });
+  const { data: approvedJobs = [],    isLoading: loadingApproved } = useQuery({ queryKey: ['approved-jobs'],       queryFn: getApprovedJobs });
   const { data: hunterQuota = null } = useQuery({
     queryKey: ['hunter-quota'],
     queryFn: () => getHunterQuota().catch(() => null),
   });
 
-  const loading = loadingContacts || loadingDrafts || loadingSent || loadingManual;
+  const loading = loadingContacts || loadingDrafts || loadingSent || loadingManual || loadingApproved;
+
+  // ── Bulk contact search mutation ───────────────────────────────────────────
+  const bulkSearchMutation = useMutation({
+    mutationFn: bulkContactSearch,
+    onSuccess: (data) => {
+      setBulkResultModal(data);
+      queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
+    },
+    onError: (err) => toast.error('Bulk search failed: ' + err.message),
+  });
 
   // ── Queue mutations ────────────────────────────────────────────────────────
   const queueSingleMutation = useMutation({
@@ -236,6 +253,7 @@ const OutreachPage = () => {
 
   // Stats
   const stats = {
+    staging:  approvedJobs.length,
     contacts: contacts.length,
     drafts:   drafts.length,
     queued:   sentEmails.filter(e => e.is_queued && e.status === 'approved').length,
@@ -248,6 +266,16 @@ const OutreachPage = () => {
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-6 md:space-y-8 animate-fade-in font-roboto">
+
+      {/* Bulk search result modal */}
+      {bulkResultModal && (
+        <BulkSearchResultModal
+          result={bulkResultModal}
+          onClose={() => setBulkResultModal(null)}
+          onGoToContacts={() => { setBulkResultModal(null); setActiveTab('contacts'); }}
+          onGoToManual={() => { setBulkResultModal(null); setActiveTab('manual'); }}
+        />
+      )}
 
       {/* CV Preview Modal */}
       {cvPreviewModal && (
@@ -268,17 +296,18 @@ const OutreachPage = () => {
 
       {/* Stats bar */}
       {!loading && (
-        <div className="grid grid-cols-3 md:grid-cols-7 gap-3">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
           {[
-            { label: 'Contacts', value: stats.contacts, color: 'text-accent-teal',    bg: 'bg-accent-teal/10' },
-            { label: 'Drafts',   value: stats.drafts,   color: 'text-amber-600',       bg: 'bg-amber-50' },
-            { label: 'Queued',   value: stats.queued,   color: 'text-secondary-dark',  bg: 'bg-neutral' },
-            { label: 'Sent',     value: stats.sent,     color: 'text-emerald-600',     bg: 'bg-emerald-50' },
-            { label: 'Opened',   value: stats.opened,   color: 'text-purple-600',      bg: 'bg-purple-50' },
-            { label: 'Replied',  value: stats.replied,  color: 'text-green-600',       bg: 'bg-green-50' },
-            { label: 'Manual',   value: stats.manual,   color: 'text-orange-600',      bg: 'bg-orange-50', highlight: stats.manual > 0 },
+            { label: 'Staging',  value: stats.staging,  color: 'text-blue-600',        bg: 'bg-blue-50',       highlight: stats.staging > 0 },
+            { label: 'Contacts', value: stats.contacts, color: 'text-accent-teal',      bg: 'bg-accent-teal/10' },
+            { label: 'Drafts',   value: stats.drafts,   color: 'text-amber-600',         bg: 'bg-amber-50' },
+            { label: 'Queued',   value: stats.queued,   color: 'text-secondary-dark',    bg: 'bg-neutral' },
+            { label: 'Sent',     value: stats.sent,     color: 'text-emerald-600',       bg: 'bg-emerald-50' },
+            { label: 'Opened',   value: stats.opened,   color: 'text-purple-600',        bg: 'bg-purple-50' },
+            { label: 'Replied',  value: stats.replied,  color: 'text-green-600',         bg: 'bg-green-50' },
+            { label: 'Manual',   value: stats.manual,   color: 'text-orange-600',        bg: 'bg-orange-50',     highlight: stats.manual > 0 },
           ].map(s => (
-            <div key={s.label} className={`${s.bg} rounded-2xl p-4 border ${s.highlight ? 'border-orange-300' : 'border-neutral-dark'} flex flex-col items-center`}>
+            <div key={s.label} className={`${s.bg} rounded-2xl p-4 border ${s.highlight ? (s.label === 'Staging' ? 'border-blue-300' : 'border-orange-300') : 'border-neutral-dark'} flex flex-col items-center`}>
               <span className={`text-2xl font-bold font-montserrat ${s.color}`}>{s.value}</span>
               <span className="text-[11px] text-secondary-dark font-medium mt-0.5">{s.label}</span>
             </div>
@@ -292,7 +321,8 @@ const OutreachPage = () => {
           {TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
-            const count = tab.key === 'contacts' ? contacts.length
+            const count = tab.key === 'staging'  ? approvedJobs.length
+                        : tab.key === 'contacts' ? contacts.length
                         : tab.key === 'drafts'   ? drafts.length
                         : tab.key === 'manual'   ? manualApplyJobs.length
                         : sentEmails.length;
@@ -302,12 +332,16 @@ const OutreachPage = () => {
                 onClick={() => setActiveTab(tab.key)}
                 className={`flex-1 flex items-center justify-center gap-2 px-4 py-3.5 text-sm font-semibold transition-all border-b-2 ${
                   isActive
-                    ? tab.key === 'manual'
-                      ? 'text-orange-700 border-orange-500 bg-orange-50/50'
-                      : 'text-primary-dark border-primary-light bg-primary-light/5'
-                    : tab.key === 'manual' && manualApplyJobs.length > 0
-                      ? 'text-orange-600 border-transparent hover:bg-orange-50/30'
-                      : 'text-secondary-dark border-transparent hover:bg-neutral'
+                    ? tab.key === 'staging'
+                      ? 'text-blue-700 border-blue-500 bg-blue-50/50'
+                      : tab.key === 'manual'
+                        ? 'text-orange-700 border-orange-500 bg-orange-50/50'
+                        : 'text-primary-dark border-primary-light bg-primary-light/5'
+                    : tab.key === 'staging' && approvedJobs.length > 0
+                      ? 'text-blue-600 border-transparent hover:bg-blue-50/30'
+                      : tab.key === 'manual' && manualApplyJobs.length > 0
+                        ? 'text-orange-600 border-transparent hover:bg-orange-50/30'
+                        : 'text-secondary-dark border-transparent hover:bg-neutral'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -330,6 +364,14 @@ const OutreachPage = () => {
             </div>
           ) : (
             <>
+              {activeTab === 'staging' && (
+                <StagingTab
+                  jobs={approvedJobs}
+                  onRunBulkSearch={() => bulkSearchMutation.mutate()}
+                  isSearching={bulkSearchMutation.isPending}
+                  hunterQuota={hunterQuota}
+                />
+              )}
               {activeTab === 'contacts' && (
                 <ContactsTab
                   contacts={filteredContacts}
@@ -1015,6 +1057,217 @@ function EmptyState({ icon: Icon, title, subtitle }) {
       </div>
       <p className="text-base font-semibold text-secondary-dark">{title}</p>
       <p className="text-sm text-secondary-dark/60 mt-1 max-w-xs mx-auto">{subtitle}</p>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// STAGING TAB — approved jobs waiting for bulk contact search
+// ═════════════════════════════════════════════════════════════════════════════
+function StagingTab({ jobs, onRunBulkSearch, isSearching, hunterQuota }) {
+  const remaining = hunterQuota?.searches_remaining ?? null;
+  const dryRun    = hunterQuota?.dry_run ?? false;
+
+  return (
+    <div className="space-y-5">
+      {/* Action banner */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 p-5 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl">
+        <div className="flex items-start gap-3">
+          <div className="h-10 w-10 rounded-xl bg-blue-100 border border-blue-200 flex items-center justify-center shrink-0">
+            <Zap className="w-4.5 h-4.5 text-blue-600" />
+          </div>
+          <div>
+            <p className="font-bold text-sm text-blue-900">Batch Contact Search</p>
+            <p className="text-xs text-blue-700 mt-0.5 max-w-md">
+              Searches Hunter.io for a decision-maker at each approved company.
+              Contacts found move to the <strong>Contacts</strong> tab. Jobs with no email move to <strong>Manual Apply</strong>.
+            </p>
+            {remaining !== null && (
+              <p className={`text-[11px] mt-1.5 font-semibold ${remaining < 5 ? 'text-red-600' : 'text-blue-600'}`}>
+                Hunter.io quota: {remaining} search{remaining !== 1 ? 'es' : ''} remaining
+                {dryRun && <span className="ml-2 px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-[10px] font-bold">DRY RUN</span>}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={onRunBulkSearch}
+          disabled={isSearching || jobs.length === 0}
+          className="shrink-0 flex items-center gap-2.5 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-bold text-sm rounded-xl shadow-md shadow-blue-200 transition-all active:scale-95 whitespace-nowrap"
+        >
+          {isSearching ? (
+            <>
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Searching for Contacts…
+            </>
+          ) : (
+            <>
+              <Zap className="w-4 h-4" />
+              Run Bulk Contact Search ({jobs.length} Job{jobs.length !== 1 ? 's' : ''})
+            </>
+          )}
+        </button>
+      </div>
+
+      {isSearching && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+          <span>Processing jobs — this can take 30–90 seconds depending on how many companies need a domain lookup. Please wait…</span>
+        </div>
+      )}
+
+      {/* Job list */}
+      {jobs.length === 0 ? (
+        <EmptyState
+          icon={Layers}
+          title="Staging area is empty"
+          subtitle="Approve jobs on the Jobs page and they'll appear here, ready for bulk contact search."
+        />
+      ) : (
+        <div className="w-full overflow-x-auto border border-neutral-dark rounded-xl">
+          <table className="w-full min-w-[640px] text-left border-collapse">
+            <thead>
+              <tr className="bg-neutral/70 border-b border-neutral-dark text-[11px] uppercase tracking-wider text-secondary-dark font-semibold font-montserrat">
+                <th className="p-3.5 pl-4">Company</th>
+                <th className="p-3.5">Role</th>
+                <th className="p-3.5 hidden md:table-cell">Location</th>
+                <th className="p-3.5 hidden lg:table-cell">Salary</th>
+                <th className="p-3.5 text-right pr-4">AI Match</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral">
+              {jobs.map(job => {
+                const scoreBg = job.fit_score >= 80 ? 'bg-green-50 text-green-700 border-green-200'
+                              : job.fit_score >= 60 ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                              : job.fit_score != null ? 'bg-red-50 text-red-600 border-red-200'
+                              : 'bg-neutral text-secondary-dark border-neutral-dark';
+                return (
+                  <tr key={job.id} className="hover:bg-neutral/40 transition-colors">
+                    <td className="p-3.5 pl-4">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-8 w-8 rounded-lg bg-blue-50 border border-blue-100 flex items-center justify-center shrink-0">
+                          <Building className="w-3.5 h-3.5 text-blue-500" />
+                        </div>
+                        <span className="font-semibold text-sm text-black line-clamp-1">{job.company_name}</span>
+                      </div>
+                    </td>
+                    <td className="p-3.5">
+                      <span className="text-sm text-secondary-dark line-clamp-1">{job.title}</span>
+                    </td>
+                    <td className="p-3.5 hidden md:table-cell">
+                      {job.location ? (
+                        <span className="flex items-center gap-1 text-xs text-secondary-dark">
+                          <MapPin className="w-3 h-3 shrink-0" />{job.location}
+                        </span>
+                      ) : <span className="text-secondary-dark/40 text-xs">—</span>}
+                    </td>
+                    <td className="p-3.5 hidden lg:table-cell">
+                      <span className="text-xs text-secondary-dark">{job.salary_info || '—'}</span>
+                    </td>
+                    <td className="p-3.5 pr-4 text-right">
+                      {job.fit_score != null ? (
+                        <span className={`px-2 py-0.5 rounded-lg text-[10px] font-bold border ${scoreBg}`}>
+                          {job.fit_score}%
+                        </span>
+                      ) : <span className="text-secondary-dark/40 text-xs">—</span>}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// BULK SEARCH RESULT MODAL
+// ═════════════════════════════════════════════════════════════════════════════
+function BulkSearchResultModal({ result, onClose, onGoToContacts, onGoToManual }) {
+  const { total_processed, contacts_found, manual_apply, skipped = 0, errors = 0 } = result;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl border border-neutral-dark relative animate-fade-in">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-secondary-dark/50 hover:bg-neutral-dark rounded-full p-1.5 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="mx-auto w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center mb-4 shadow-lg shadow-blue-200">
+            <CheckCircle className="w-7 h-7 text-white" />
+          </div>
+          <h2 className="text-xl font-bold text-black font-montserrat">Search Complete!</h2>
+          <p className="text-sm text-secondary-dark mt-1">
+            Processed <span className="font-bold text-black">{total_processed}</span> approved job{total_processed !== 1 ? 's' : ''}
+          </p>
+        </div>
+
+        {/* Result cards */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
+          <div
+            onClick={contacts_found > 0 ? onGoToContacts : undefined}
+            className={`flex flex-col items-center p-4 rounded-2xl border ${contacts_found > 0 ? 'bg-emerald-50 border-emerald-200 cursor-pointer hover:bg-emerald-100 transition-colors' : 'bg-neutral border-neutral-dark'}`}
+          >
+            <span className={`text-3xl font-bold font-montserrat ${contacts_found > 0 ? 'text-emerald-600' : 'text-secondary-dark'}`}>
+              {contacts_found}
+            </span>
+            <span className="text-[11px] font-semibold text-secondary-dark mt-0.5">Contacts Found</span>
+            {contacts_found > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-emerald-600 font-bold mt-1">
+                View <ArrowRight className="w-3 h-3" />
+              </span>
+            )}
+          </div>
+
+          <div
+            onClick={manual_apply > 0 ? onGoToManual : undefined}
+            className={`flex flex-col items-center p-4 rounded-2xl border ${manual_apply > 0 ? 'bg-orange-50 border-orange-200 cursor-pointer hover:bg-orange-100 transition-colors' : 'bg-neutral border-neutral-dark'}`}
+          >
+            <span className={`text-3xl font-bold font-montserrat ${manual_apply > 0 ? 'text-orange-600' : 'text-secondary-dark'}`}>
+              {manual_apply}
+            </span>
+            <span className="text-[11px] font-semibold text-secondary-dark mt-0.5">Manual Apply</span>
+            {manual_apply > 0 && (
+              <span className="flex items-center gap-0.5 text-[10px] text-orange-600 font-bold mt-1">
+                View <ArrowRight className="w-3 h-3" />
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Secondary info */}
+        {(skipped > 0 || errors > 0) && (
+          <div className="flex gap-3 mb-5">
+            {skipped > 0 && (
+              <div className="flex-1 text-center px-3 py-2 bg-neutral border border-neutral-dark rounded-xl">
+                <p className="text-base font-bold text-secondary-dark">{skipped}</p>
+                <p className="text-[10px] text-secondary-dark/60">Quota limited</p>
+              </div>
+            )}
+            {errors > 0 && (
+              <div className="flex-1 text-center px-3 py-2 bg-red-50 border border-red-100 rounded-xl">
+                <p className="text-base font-bold text-red-600">{errors}</p>
+                <p className="text-[10px] text-red-400">Errors</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={onClose}
+          className="w-full py-2.5 text-sm font-semibold text-secondary-dark bg-white border border-neutral-dark rounded-xl hover:bg-neutral transition-colors"
+        >
+          Close
+        </button>
+      </div>
     </div>
   );
 }
