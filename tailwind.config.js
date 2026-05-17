@@ -83,7 +83,16 @@ export default {
   			lg: 'var(--radius)',
   			md: 'calc(var(--radius) - 2px)',
   			sm: 'calc(var(--radius) - 4px)'
-  		}
+  		},
+  		keyframes: {
+  			'slide-progress': {
+  				'0%':   { transform: 'translateX(-100%)' },
+  				'100%': { transform: 'translateX(250%)' },
+  			},
+  		},
+  		animation: {
+  			'slide-progress': 'slide-progress 1.4s ease-in-out infinite',
+  		},
   	}
   },
   plugins: [require("tailwindcss-animate")],

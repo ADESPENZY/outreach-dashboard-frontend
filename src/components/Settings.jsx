@@ -445,8 +445,8 @@ function OutreachTab() {
         </FieldRow>
       </SectionCard>
 
-      {/* Hunter.io quota */}
-      <SectionCard title="Hunter.io Quota" description="Live usage from your Hunter.io plan.">
+      {/* AI Search Credits quota */}
+      <SectionCard title="AI Search Credits" description="Live usage from your contact discovery plan.">
         {quota ? (
           <div className="flex flex-wrap gap-6">
             <div>
@@ -463,7 +463,7 @@ function OutreachTab() {
             </div>
           </div>
         ) : (
-          <p className="text-sm text-secondary-dark/60">Could not fetch Hunter.io quota.</p>
+          <p className="text-sm text-secondary-dark/60">Could not fetch search credit quota.</p>
         )}
 
         <div className="mt-4 flex items-center justify-between">
@@ -594,7 +594,7 @@ function WarmupTab() {
 
 const INTEGRATIONS = [
   {
-    name: 'Hunter.io',
+    name: 'AI Search Credits',
     description: 'Contact enrichment — finds emails from job listings.',
     icon: '🔍',
     status: 'configured',

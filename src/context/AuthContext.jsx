@@ -12,6 +12,12 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = async () => {
+    if (!sessionStorage.getItem('access')) {
+      setCurrentUser(null);
+      setIsAuthenticated(false);
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const user = await getMe();

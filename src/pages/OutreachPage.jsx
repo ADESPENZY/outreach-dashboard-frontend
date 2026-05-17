@@ -458,7 +458,7 @@ function HunterQuotaBadge({ quota }) {
   return (
     <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${color}`}>
       <ShieldCheck className="w-3.5 h-3.5" />
-      Hunter.io ({plan}): {searches_remaining}/{searches_limit} remaining
+      AI Search Credits ({plan}): {searches_remaining}/{searches_limit} remaining
       {dry_run && <span className="ml-1 px-1.5 py-0.5 bg-neutral-dark text-secondary-dark rounded text-[10px] font-bold">DRY RUN</span>}
     </div>
   );
@@ -482,7 +482,7 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
           className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-black/10 hover:bg-black/80 transition-all active:scale-95 disabled:opacity-60"
         >
           {findingContacts ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-          {findingContacts ? 'Scanning LinkedIn & Hunter...' : 'Find Decision Makers'}
+          {findingContacts ? 'Scanning for Decision Makers...' : 'Find Decision Makers'}
         </button>
       </div>
 
@@ -1083,12 +1083,12 @@ function StagingTab({ jobs, onRunBulkSearch, isSearching, hunterQuota }) {
           <div>
             <p className="font-bold text-sm text-blue-900">Batch Contact Search</p>
             <p className="text-xs text-blue-700 mt-0.5 max-w-md">
-              Searches Hunter.io for a decision-maker at each approved company.
+              Uses our AI contact discovery engine to find a decision-maker at each approved company.
               Contacts found move to the <strong>Contacts</strong> tab. Jobs with no email move to <strong>Manual Apply</strong>.
             </p>
             {remaining !== null && (
               <p className={`text-[11px] mt-1.5 font-semibold ${remaining < 5 ? 'text-red-600' : 'text-blue-600'}`}>
-                Hunter.io quota: {remaining} search{remaining !== 1 ? 'es' : ''} remaining
+                AI Search Credits: {remaining} search{remaining !== 1 ? 'es' : ''} remaining
                 {dryRun && <span className="ml-2 px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-[10px] font-bold">DRY RUN</span>}
               </p>
             )}

@@ -87,7 +87,7 @@ const JobsPage = () => {
             } else if (data.status === 'job_board') {
                 toast.info('This is a job board listing — apply directly on their site.');
             } else {
-                toast.warn('No contact found for this company on Hunter.io.');
+                toast.warn('No contact found for this company via our discovery engine.');
             }
         },
         onError: (err) => toast.error(err.message || 'Contact search failed.'),

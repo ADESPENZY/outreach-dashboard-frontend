@@ -1,5 +1,4 @@
 import React from 'react';
-import Spinner from './Spinner';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -7,8 +6,10 @@ const ProtectedRoute = ({ requireOnboarding = false }) => {
   const { isAuthenticated, isLoading, currentUser } = useAuth();
   const location = useLocation();
 
+  // Render the layout tree immediately so the sidebar/shell never blinks out.
+  // Each page owns its own skeleton while data loads.
   if (isLoading) {
-    return <Spinner />;
+    return <Outlet />;
   }
 
   if (!isAuthenticated) {

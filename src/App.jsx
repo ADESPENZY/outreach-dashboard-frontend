@@ -17,10 +17,12 @@ import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
 import AutoScoutSettings from './pages/AutoScoutSettings';
 import { AuthProvider } from './context/AuthContext';
+import AppBootLoader from './components/AppBootLoader';
 
 function App() {
   return (
     <AuthProvider>
+      <AppBootLoader />
       <BrowserRouter>
         <Routes>
           {/* Public */}
