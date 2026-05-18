@@ -17,7 +17,9 @@ import {
   bulkContactSearch,
 } from '../services/apiOutreach';
 import { getManualApplyJobs, getApprovedJobs } from '../services/apiJobs';
+import { getGmailAccounts } from '../services/apiGmail';
 import TailoredCVPreview from '../components/TailoredCVPreview';
+import NoInboxModal from '../components/NoInboxModal';
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
@@ -66,6 +68,7 @@ const OutreachPage = () => {
   const [searchQuery, setSearchQuery]   = useState('');
   const [editModal, setEditModal]       = useState(null);
   const [bulkResultModal, setBulkResultModal] = useState(null);
+  const [noInboxModal, setNoInboxModal] = useState(false);
 
   // Legacy loading states for non-mutation actions
   const [findingContacts, setFindingContacts] = useState(false);
@@ -87,6 +90,15 @@ const OutreachPage = () => {
     queryKey: ['hunter-quota'],
     queryFn: () => getHunterQuota().catch(() => null),
   });
+  const { data: connectedInboxes = [] } = useQuery({
+    queryKey: ['gmail-accounts'],
+    queryFn: getGmailAccounts,
+  });
+
+  const requireInbox = (action) => {
+    if (connectedInboxes.length === 0) { setNoInboxModal(true); return; }
+    action();
+  };
 
   const loading = loadingContacts || loadingDrafts || loadingSent || loadingManual || loadingApproved;
 
@@ -267,6 +279,9 @@ const OutreachPage = () => {
   return (
     <div className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-6 md:space-y-8 animate-fade-in font-roboto">
 
+      {/* No inbox gatekeeper modal */}
+      {noInboxModal && <NoInboxModal onClose={() => setNoInboxModal(false)} />}
+
       {/* Bulk search result modal */}
       {bulkResultModal && (
         <BulkSearchResultModal
@@ -367,7 +382,7 @@ const OutreachPage = () => {
               {activeTab === 'staging' && (
                 <StagingTab
                   jobs={approvedJobs}
-                  onRunBulkSearch={() => bulkSearchMutation.mutate()}
+                  onRunBulkSearch={() => requireInbox(() => bulkSearchMutation.mutate())}
                   isSearching={bulkSearchMutation.isPending}
                   hunterQuota={hunterQuota}
                 />
@@ -402,9 +417,9 @@ const OutreachPage = () => {
               {activeTab === 'queue' && (
                 <QueueTab
                   emails={sentEmails}
-                  onQueueSingle={(id) => queueSingleMutation.mutate(id)}
+                  onQueueSingle={(id) => requireInbox(() => queueSingleMutation.mutate(id))}
                   queuingId={queueSingleMutation.isPending ? queueSingleMutation.variables : null}
-                  onQueueAll={() => queueAllMutation.mutate()}
+                  onQueueAll={() => requireInbox(() => queueAllMutation.mutate())}
                   queuingAll={queueAllMutation.isPending}
                   onUnqueue={(id) => unqueueMutation.mutate(id)}
                   unqueuingId={unqueueMutation.isPending ? unqueueMutation.variables : null}
