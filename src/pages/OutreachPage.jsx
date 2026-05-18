@@ -60,6 +60,22 @@ function fmtShortTime(iso) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// SKELETON LOADER
+// ═════════════════════════════════════════════════════════════════════════════
+function OutreachSkeleton() {
+  return (
+    <div className="flex items-center gap-4 p-5 bg-white rounded-2xl border border-neutral-dark">
+      <div className="w-10 h-10 rounded-xl bg-slate-200 animate-pulse shrink-0" />
+      <div className="flex-1 space-y-2.5 min-w-0">
+        <div className="h-3.5 bg-slate-200 animate-pulse rounded-full w-2/5" />
+        <div className="h-3 bg-slate-200 animate-pulse rounded-full w-3/5" />
+      </div>
+      <div className="h-8 w-24 bg-slate-200 animate-pulse rounded-xl shrink-0" />
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ═════════════════════════════════════════════════════════════════════════════
 const OutreachPage = () => {
@@ -373,9 +389,8 @@ const OutreachPage = () => {
 
         <div className="p-6">
           {loading ? (
-            <div className="py-16 text-center">
-              <Loader2 className="w-8 h-8 animate-spin mx-auto text-primary-light" />
-              <p className="mt-3 text-sm text-secondary-dark animate-pulse">Loading…</p>
+            <div className="space-y-3">
+              {Array.from({ length: 5 }).map((_, i) => <OutreachSkeleton key={i} />)}
             </div>
           ) : (
             <>

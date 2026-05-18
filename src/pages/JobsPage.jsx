@@ -3,11 +3,11 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router';
 import {
-  CheckCircle, XCircle, Search, Play, Plus, MapPin, Building, Briefcase,
+  CheckCircle, XCircle, Search, Plus, MapPin, Building, Briefcase,
   ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2
 } from 'lucide-react';
 import {
-  getScrapedJobs, scoreAllJobs, updateJobStatus, trackJob,
+  getScrapedJobs, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
 } from '../services/apiJobs';
 import { generateJobCV, getJobCV, findContactManual } from '../services/apiOutreach';
@@ -20,19 +20,6 @@ const JobsPage = () => {
     const { data: jobs = [], isLoading: loading } = useQuery({
         queryKey: ['jobs'],
         queryFn: getScrapedJobs,
-    });
-
-    const scoreAllMutation = useMutation({
-        mutationFn: scoreAllJobs,
-        onSuccess: (data) => {
-            if (data.approved > 0) {
-                toast.success(`AI Scoring Complete! ${data.approved} approved, ${data.rejected} rejected.`, { autoClose: 6000 });
-            } else {
-                toast.info(`Scoring complete — ${data.rejected} jobs rejected. Try scraping with different keywords.`, { autoClose: 6000 });
-            }
-            queryClient.invalidateQueries({ queryKey: ['jobs'] });
-        },
-        onError: () => toast.error('Scoring failed. Please try again.'),
     });
 
     const updateStatusMutation = useMutation({
@@ -111,7 +98,6 @@ const JobsPage = () => {
                 : data.new_jobs;
             if (count > 0) {
                 toast.success(`${count} new jobs scraped! AI is now evaluating your matches...`, { autoClose: 4000 });
-                scoreAllMutation.mutate();
             } else {
                 toast.info('No new jobs found — they may already be in your list or try different keywords.', { autoClose: 6000 });
             }
@@ -135,7 +121,6 @@ const JobsPage = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 10;
 
-    const handleScoreAll = () => scoreAllMutation.mutate();
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
     const handleGenerateCv = (jobId) => generateCvMutation.mutate(jobId);
     const handleTrackJob = (jobId) => trackJobMutation.mutate(jobId);
@@ -216,9 +201,7 @@ const JobsPage = () => {
         }
     };
 
-    const unscoredCount = jobs.filter(j => j.fit_score == null).length;
     const approvedCount = jobs.filter(j => j.status === 'approved').length;
-    const estScoreMin   = Math.max(1, Math.ceil(unscoredCount * 4 / 60));
 
     const totalPages  = Math.ceil(filteredJobs.length / itemsPerPage);
     const startIndex  = (currentPage - 1) * itemsPerPage;
@@ -239,22 +222,6 @@ const JobsPage = () => {
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <button
-                        onClick={handleScoreAll}
-                        disabled={scoreAllMutation.isPending || unscoredCount === 0}
-                        className="flex flex-col items-center gap-0.5 bg-gradient-to-r hover:bg-gradient-to-br from-black to-black-light text-white px-5 py-2 rounded-xl font-medium shadow-md shadow-black/10 transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 min-w-[130px]"
-                    >
-                        <span className="flex items-center gap-2 text-sm">
-                            {scoreAllMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                            {scoreAllMutation.isPending ? 'Scoring...' : `Score All${unscoredCount > 0 ? ` (${unscoredCount})` : ''}`}
-                        </span>
-                        {unscoredCount > 0 && !scoreAllMutation.isPending && (
-                            <span className="text-[10px] text-white/60 font-normal">~{estScoreMin} min</span>
-                        )}
-                        {scoreAllMutation.isPending && (
-                            <span className="text-[10px] text-white/60 font-normal">please wait...</span>
-                        )}
-                    </button>
-                    <button
                         onClick={() => setIsScrapeModalOpen(true)}
                         className="flex items-center gap-2 bg-gradient-to-r hover:bg-gradient-to-br from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-orange-200 transition-all active:scale-95"
                     >
@@ -264,26 +231,7 @@ const JobsPage = () => {
                 </div>
             </div>
 
-            {/* Step nudge banners */}
-            {scoreAllMutation.isPending && (
-                <div className="flex items-start gap-3 bg-black text-white px-5 py-3.5 rounded-2xl shadow-sm">
-                    <Loader2 className="w-4 h-4 animate-spin mt-0.5 shrink-0 text-primary-light" />
-                    <div>
-                        <p className="text-sm font-semibold">Scoring {unscoredCount} jobs with AI...</p>
-                        <p className="text-xs text-white/60 mt-0.5">This usually takes {estScoreMin}–{estScoreMin + 1} minutes. You can leave this page and come back.</p>
-                    </div>
-                </div>
-            )}
-            {!scoreAllMutation.isPending && unscoredCount > 0 && (
-                <div className="flex items-start gap-3 bg-amber-50 border border-amber-200 px-5 py-3.5 rounded-2xl">
-                    <Play className="w-4 h-4 mt-0.5 shrink-0 text-amber-500" />
-                    <div>
-                        <p className="text-sm font-semibold text-amber-800">{unscoredCount} jobs waiting to be scored</p>
-                        <p className="text-xs text-amber-600 mt-0.5">Press "Score All" to let AI approve the best matches. Takes ~{estScoreMin} minute{estScoreMin > 1 ? 's' : ''}.</p>
-                    </div>
-                </div>
-            )}
-            {!scoreAllMutation.isPending && unscoredCount === 0 && approvedCount > 0 && (
+            {approvedCount > 0 && (
                 <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 px-5 py-3.5 rounded-2xl">
                     <CheckCircle className="w-4 h-4 mt-0.5 shrink-0 text-emerald-500" />
                     <div>

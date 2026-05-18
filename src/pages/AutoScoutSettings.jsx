@@ -150,7 +150,7 @@ export default function AutoScoutSettings() {
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="max-w-2xl mx-auto space-y-6 pb-10 animate-fade-in font-roboto"
+      className="max-w-4xl mx-auto space-y-6 pt-8 pb-10 animate-fade-in font-roboto"
     >
       {/* ── Page Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-start gap-4">
