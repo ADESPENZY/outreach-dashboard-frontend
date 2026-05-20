@@ -37,14 +37,14 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (data) => {
-    const response = await api.post("/dashboard/auth/login/", data);
+    const response = await api.post("/api/accounts/auth/login/", data);
     const { access } = response.data;
     sessionStorage.setItem("access", access);
     await checkAuth();
   };
 
   const register = async (data) => {
-    const response = await api.post("/dashboard/auth/register/", data);
+    const response = await api.post("/api/accounts/auth/register/", data);
     const { access } = response.data;
     sessionStorage.setItem("access", access);
     await checkAuth();
@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     try {
-      await api.post("/dashboard/auth/logout/");
+      await api.post("/api/accounts/auth/logout/");
     } catch (e) {
       console.error("Logout failed on server, clearing locally", e);
     } finally {

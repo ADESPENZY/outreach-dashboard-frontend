@@ -23,7 +23,7 @@ export default function ProfilePage() {
   const handleDownloadPdf = async () => {
     setDownloading(true);
     try {
-      const res = await api.get('/dashboard/profile/resume-pdf/', { responseType: 'blob' });
+      const res = await api.get('/api/accounts/profile/resume-pdf/', { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
       const link = document.createElement('a');
       link.href = url;

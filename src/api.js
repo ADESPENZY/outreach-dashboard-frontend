@@ -79,7 +79,7 @@ api.interceptors.response.use(
             try {
                 // Call refresh endpoint. The HttpOnly cookie will be sent automatically
                 const response = await axios.post(
-                    `${BASE_URL}/dashboard/auth/refresh/`,
+                    `${BASE_URL}/api/accounts/auth/refresh/`,
                     {},
                     { withCredentials: true }
                 );

@@ -18,7 +18,7 @@ export async function login(data) {
 
 export async function getMe() {
   try {
-    const response = await api.get("/dashboard/auth/me/");
+    const response = await api.get("/api/accounts/auth/me/");
     return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));
