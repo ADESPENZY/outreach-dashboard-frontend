@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api, { clearClientAuthState } from '../api';
-import { getMe } from '../services/apiAuth';
+import { getMe, login as loginApi, register as registerApi } from '../services/apiAuth';
 
 const AuthContext = createContext();
 
@@ -37,15 +37,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (data) => {
-    const response = await api.post("/api/accounts/auth/login/", data);
-    const { access } = response.data;
+    const { access } = await loginApi(data);
     sessionStorage.setItem("access", access);
     await checkAuth();
   };
 
   const register = async (data) => {
-    const response = await api.post("/api/accounts/auth/register/", data);
-    const { access } = response.data;
+    const { access } = await registerApi(data);
     sessionStorage.setItem("access", access);
     await checkAuth();
   };
