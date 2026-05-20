@@ -485,10 +485,8 @@ const LoginPage = () => {
     mutationFn: (data) => login(data),
     onSuccess: () => {
       toast.success('You Have Successfully Signed In!!');
-      setTimeout(() => {
-        const from = location?.state?.from?.pathname || '/dashboard';
-        navigate(from, { replace: true });
-      }, 100);
+      const from = location?.state?.from?.pathname || '/dashboard';
+      navigate(from, { replace: true });
     },
     onError: (err) => {
       toast.error(err.message || 'Login failed');

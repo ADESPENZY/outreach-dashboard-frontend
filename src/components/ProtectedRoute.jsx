@@ -6,10 +6,8 @@ const ProtectedRoute = ({ requireOnboarding = false }) => {
   const { isAuthenticated, isLoading, currentUser } = useAuth();
   const location = useLocation();
 
-  // Render the layout tree immediately so the sidebar/shell never blinks out.
-  // Each page owns its own skeleton while data loads.
   if (isLoading) {
-    return <Outlet />;
+    return null;
   }
 
   if (!isAuthenticated) {
