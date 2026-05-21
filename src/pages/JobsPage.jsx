@@ -11,7 +11,8 @@ import {
   getScrapedJobs, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
 } from '../services/apiJobs';
-import { generateJobCV, getJobCV, findContactManual } from '../services/apiOutreach';
+import { generateJobCV, getJobCVJson, findContactManual } from '../services/apiOutreach';
+import TailoredCVPreview from '../components/TailoredCVPreview';
 
 const JobsPage = () => {
     const navigate = useNavigate();
@@ -33,20 +34,13 @@ const JobsPage = () => {
     });
 
     const generateCvMutation = useMutation({
-        mutationFn: async (jobId) => {
-            const blob = await generateJobCV(jobId);
-            return { jobId, blob };
+        mutationFn: async (job) => {
+            const cvData = await generateJobCV(job.id);
+            return { job, cvData };
         },
-        onSuccess: ({ jobId, blob }) => {
-            const url = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-            const link = document.createElement('a');
-            link.href = url;
-            link.setAttribute('download', `tailored_cv_${jobId}.pdf`);
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.URL.revokeObjectURL(url);
-            toast.success('Tailored CV downloaded!');
+        onSuccess: ({ job, cvData }) => {
+            setCvModal({ jobId: job.id, cvData, title: `${job.company_name} — ${job.title}` });
+            toast.success('Tailored CV ready!');
             queryClient.invalidateQueries({ queryKey: ['jobs'] });
         },
         onError: () => toast.error('CV generation failed. Please try again.'),
@@ -128,15 +122,14 @@ const JobsPage = () => {
     const itemsPerPage = 10;
 
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
-    const handleGenerateCv = (jobId) => generateCvMutation.mutate(jobId);
+    const handleGenerateCv = (job) => generateCvMutation.mutate(job);
     const handleTrackJob = (jobId) => trackJobMutation.mutate(jobId);
 
     const handleViewCv = async (job) => {
         setLoadingCvPreview(job.id);
         try {
-            const blob = await getJobCV(job.id);
-            const blobUrl = window.URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
-            setCvModal({ jobId: job.id, blobUrl, title: `${job.company_name} — ${job.title}` });
+            const cvData = await getJobCVJson(job.id);
+            setCvModal({ jobId: job.id, cvData, title: `${job.company_name} — ${job.title}` });
         } catch {
             toast.error('Could not load CV preview. Please try again.');
         } finally {
@@ -144,10 +137,7 @@ const JobsPage = () => {
         }
     };
 
-    const handleCloseCvModal = () => {
-        if (cvModal?.blobUrl) window.URL.revokeObjectURL(cvModal.blobUrl);
-        setCvModal(null);
-    };
+    const handleCloseCvModal = () => setCvModal(null);
 
     const toggleLocation = (loc) => {
         setScrapeForm(prev => {
@@ -408,14 +398,14 @@ const JobsPage = () => {
                                         </button>
                                     ) : (
                                         <button
-                                            onClick={() => handleGenerateCv(job.id)}
-                                            disabled={generateCvMutation.isPending && generateCvMutation.variables === job.id}
+                                            onClick={() => handleGenerateCv(job)}
+                                            disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === job.id}
                                             className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
                                         >
-                                            {generateCvMutation.isPending && generateCvMutation.variables === job.id
+                                            {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id
                                                 ? <Loader2 className="w-3 h-3 animate-spin" />
                                                 : <Download className="w-3 h-3" />}
-                                            {generateCvMutation.isPending && generateCvMutation.variables === job.id ? 'Generating...' : 'Gen CV'}
+                                            {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id ? 'Generating...' : 'Gen CV'}
                                         </button>
                                     )
                                 )}
@@ -751,11 +741,11 @@ const JobsPage = () => {
                             {/* Generate CV — approved only */}
                             {selectedJob.status === 'approved' && (
                                 <button
-                                    onClick={() => { handleGenerateCv(selectedJob.id); setSelectedJob(null); }}
-                                    disabled={generateCvMutation.isPending && generateCvMutation.variables === selectedJob.id}
+                                    onClick={() => { handleGenerateCv(selectedJob); setSelectedJob(null); }}
+                                    disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id}
                                     className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-primary-dark hover:bg-primary-light/5 transition-colors disabled:opacity-60"
                                 >
-                                    {generateCvMutation.isPending && generateCvMutation.variables === selectedJob.id
+                                    {generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id
                                         ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
                                         : <Download className="w-5 h-5 shrink-0" />}
                                     Generate Tailored CV
@@ -843,41 +833,11 @@ const JobsPage = () => {
 
             {/* CV Preview Modal */}
             {cvModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
-                    <div className="bg-white rounded-2xl shadow-2xl border border-neutral-dark w-full max-w-4xl h-[90vh] flex flex-col overflow-hidden">
-                        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-dark shrink-0">
-                            <div className="flex items-center gap-2.5">
-                                <div className="h-8 w-8 rounded-lg bg-gradient-to-tr from-primary-light/20 to-primary-light/10 flex items-center justify-center border border-primary-light/30">
-                                    <FileText className="w-4 h-4 text-primary-light" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-bold text-black font-montserrat">Tailored CV</p>
-                                    <p className="text-xs text-secondary-dark truncate max-w-sm">{cvModal.title}</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <a
-                                    href={cvModal.blobUrl}
-                                    download={`CV_${cvModal.title?.replace(/\s/g, '_')}.pdf`}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all"
-                                >
-                                    <Download className="w-3 h-3" /> Download
-                                </a>
-                                <button
-                                    onClick={handleCloseCvModal}
-                                    className="p-1.5 text-secondary-dark hover:bg-neutral-dark rounded-lg transition-colors"
-                                >
-                                    <X className="w-4 h-4" />
-                                </button>
-                            </div>
-                        </div>
-                        <iframe
-                            src={cvModal.blobUrl}
-                            className="flex-1 w-full border-0"
-                            title="CV Preview"
-                        />
-                    </div>
-                </div>
+                <TailoredCVPreview
+                    jobId={cvModal.jobId}
+                    data={cvModal.cvData}
+                    onClose={handleCloseCvModal}
+                />
             )}
         </div>
     );
