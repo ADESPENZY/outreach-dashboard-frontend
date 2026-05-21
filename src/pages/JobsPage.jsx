@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { useNavigate } from 'react-router';
+import { useNavigate, useSearchParams } from 'react-router';
 import {
   CheckCircle, XCircle, Search, Plus, MapPin, Building, Briefcase,
   ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   getScrapedJobs, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
@@ -106,6 +107,11 @@ const JobsPage = () => {
         },
         onError: (err) => toast.error(err.message || 'Scraping failed. Please try again.'),
     });
+
+    // ── Tour state ────────────────────────────────────────────────────────────
+    const [searchParams] = useSearchParams();
+    const isTourActive = searchParams.get('tour') === '1';
+    const [showModalTour, setShowModalTour] = useState(false);
 
     // ── UI state ──────────────────────────────────────────────────────────────
     const [filterTab, setFilterTab] = useState('All');
@@ -208,6 +214,20 @@ const JobsPage = () => {
     const paginatedJobs = filteredJobs.slice(startIndex, startIndex + itemsPerPage);
 
     useEffect(() => { setCurrentPage(1); }, [searchQuery, filterTab]);
+
+    // Auto-open modal and activate tour step 1 on mount when tour param is present
+    useEffect(() => {
+        if (isTourActive) {
+            setIsScrapeModalOpen(true);
+            setShowModalTour(true);
+        }
+    }, [isTourActive]);
+
+    const completeTour = () => {
+        localStorage.setItem('applydirTourDone', 'true');
+        setShowModalTour(false);
+        navigate('/dashboard/jobs', { replace: true });
+    };
 
     return (
         <div className="p-4 md:p-8 w-full max-w-[1600px] mx-auto space-y-6 animate-fade-in font-roboto">
@@ -469,6 +489,36 @@ const JobsPage = () => {
                         <form onSubmit={handleScrape} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
                             <div>
                                 <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-2">Source</label>
+
+                                {/* Step 2 Tour Tooltip — inline above source tabs */}
+                                <AnimatePresence>
+                                    {showModalTour && (
+                                        <motion.div
+                                            initial={{ opacity: 0, y: -6 }}
+                                            animate={{ opacity: 1, y: 0 }}
+                                            exit={{ opacity: 0, y: -6 }}
+                                            transition={{ duration: 0.2, ease: 'easeOut' }}
+                                            className="relative bg-gray-900 text-white rounded-xl p-4 mb-3 border border-white/10"
+                                        >
+                                            {/* Downward caret pointing at tabs below */}
+                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full w-0 h-0 border-l-[7px] border-r-[7px] border-t-[7px] border-l-transparent border-r-transparent border-t-gray-900" />
+                                            <p className="text-[11px] font-bold text-primary-light uppercase tracking-wider mb-1.5">
+                                                Step 2 of 2 · Tour
+                                            </p>
+                                            <p className="text-sm leading-relaxed text-white/85 mb-3">
+                                                Choose your source stream, enter your target title, and let the AI score matching roles live! You're ready to hunt.
+                                            </p>
+                                            <button
+                                                type="button"
+                                                onClick={completeTour}
+                                                className="w-full py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-bold rounded-xl hover:opacity-90 transition-opacity"
+                                            >
+                                                Got it! — Start Hunting
+                                            </button>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
                                         { key: 'linkedin', label: 'LinkedIn',      sub: 'via Apify',              icon: null },
