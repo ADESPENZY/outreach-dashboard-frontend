@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
@@ -11,6 +11,7 @@ import {
   getJobsStream, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
 } from '../services/apiJobs';
+import { getAutoScoutSettings } from '../services/apiSettings';
 import { generateJobCV, getJobCVJson, findContactManual } from '../services/apiOutreach';
 import TailoredCVPreview from '../components/TailoredCVPreview';
 
@@ -32,11 +33,19 @@ const JobsPage = () => {
     const [loadingCvPreview, setLoadingCvPreview] = useState(null);
     const [selectedJob, setSelectedJob]           = useState(null);
     const [showModalTour, setShowModalTour]       = useState(false);
+    const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
     const sentinelRef                             = useRef(null);
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
     const isTourActive   = searchParams.get('tour') === '1';
+
+    // ── React Query — auto-scout settings (for banner logic) ─────────────────
+    const { data: autoScoutSettings } = useQuery({
+        queryKey: ['auto-scout-settings'],
+        queryFn: getAutoScoutSettings,
+        staleTime: 5 * 60 * 1000,
+    });
 
     // ── React Query — infinite cursor stream ─────────────────────────────────
     // queryKey includes filterTab — changing tabs resets to page 1 server-side.
@@ -139,6 +148,9 @@ const JobsPage = () => {
             }
             setIsScrapeModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
+            if (autoScoutSettings?.is_active === false && localStorage.getItem('applydirAutoScoutPrompted') !== 'true') {
+                setShowAutoScoutBanner(true);
+            }
         },
         onError: (err) => {
             setIsScrapeActive(false);
@@ -921,6 +933,54 @@ const JobsPage = () => {
                     onClose={handleCloseCvModal}
                 />
             )}
+
+            {/* Auto-Scout Contextual Banner */}
+            <AnimatePresence>
+                {showAutoScoutBanner && (
+                    <motion.div
+                        initial={{ x: '110%', opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: '110%', opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+                        className="fixed right-0 bottom-8 z-50 w-80 bg-white rounded-l-2xl shadow-2xl border border-neutral-dark border-r-0 overflow-hidden"
+                    >
+                        <div className="h-1 bg-gradient-to-r from-primary-light to-primary-dark" />
+                        <div className="p-5 space-y-3">
+                            <button
+                                onClick={() => {
+                                    localStorage.setItem('applydirAutoScoutPrompted', 'true');
+                                    setShowAutoScoutBanner(false);
+                                }}
+                                className="absolute top-3 right-3 text-secondary-dark hover:text-black transition-colors"
+                                aria-label="Dismiss"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
+                                    <UserSearch className="w-4 h-4 text-primary-light" />
+                                </div>
+                                <p className="text-sm font-bold text-black font-montserrat leading-tight pr-6">
+                                    Want this done automatically? 🚀
+                                </p>
+                            </div>
+                            <p className="text-xs text-secondary-dark leading-relaxed">
+                                Activate Auto-Scout to let our system hunt, grade, and tailor resumes for up to <span className="font-semibold text-black">25 jobs every night</span> while you rest.
+                            </p>
+                            <button
+                                onClick={() => {
+                                    localStorage.setItem('applydirAutoScoutPrompted', 'true');
+                                    setShowAutoScoutBanner(false);
+                                    navigate('/dashboard/auto-scout');
+                                }}
+                                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold py-2.5 rounded-xl shadow-md shadow-orange-200 hover:opacity-90 transition-opacity active:scale-95"
+                            >
+                                Configure Auto-Scout
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 };

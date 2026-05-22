@@ -304,23 +304,23 @@ export default function AutoScoutSettings() {
               </label>
               <div className="flex items-baseline gap-1">
                 <span className="text-xl font-bold text-primary-dark">{dailyLimit}</span>
-                <span className="text-sm text-secondary-dark">/ 50 scrapes</span>
+                <span className="text-sm text-secondary-dark">/ 25 scrapes</span>
               </div>
             </div>
             <input
               type="range"
               min={1}
-              max={50}
+              max={25}
               {...register('daily_scrape_limit', { valueAsNumber: true })}
               className="w-full h-2 rounded-full appearance-none cursor-pointer"
               style={{
-                background: `linear-gradient(to right, #FF5B2E ${((dailyLimit - 1) / 49) * 100}%, #e5e7eb ${((dailyLimit - 1) / 49) * 100}%)`,
+                background: `linear-gradient(to right, #FF5B2E ${((dailyLimit - 1) / 24) * 100}%, #e5e7eb ${((dailyLimit - 1) / 24) * 100}%)`,
               }}
             />
             <div className="flex justify-between text-[10px] text-secondary-dark/50 mt-1.5 font-medium">
               <span>1</span>
-              <span>25</span>
-              <span>50 max</span>
+              <span>13</span>
+              <span>25 max</span>
             </div>
           </div>
         </div>
