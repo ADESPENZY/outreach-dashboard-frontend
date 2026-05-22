@@ -20,7 +20,7 @@ const JobsPage = () => {
     const queryClient = useQueryClient();
 
     // ── All state — hoisted above every hook so no const is read before initialisation (TDZ-safe) ──
-    const [isScrapeActive, setIsScrapeActive]       = useState(false);
+    const [isScrapeActive, setIsScrapeActive]       = useState(() => localStorage.getItem('applydir_is_scraping') === 'true');
     const [hasUnscoredJobs, setHasUnscoredJobs]     = useState(false);
     const [filterTab, setFilterTab]                 = useState('All');
     const [searchQuery, setSearchQuery]             = useState('');
@@ -35,6 +35,9 @@ const JobsPage = () => {
     const [showModalTour, setShowModalTour]       = useState(false);
     const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
     const sentinelRef                             = useRef(null);
+    // Tracks whether this page mount has observed any unscored jobs during an active scrape.
+    // Used to detect the true→false transition that signals the background pipeline is done.
+    const scrapeSeenUnscoredRef                   = useRef(false);
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
@@ -135,17 +138,26 @@ const JobsPage = () => {
                 return scrapeApifyJobs(form);
             }
         },
-        onMutate: () => setIsScrapeActive(true),
+        onMutate: () => {
+            setIsScrapeActive(true);
+            localStorage.setItem('applydir_is_scraping', 'true');
+            localStorage.setItem('applydir_scraping_started_at', Date.now().toString());
+        },
         onSuccess: (data) => {
-            setIsScrapeActive(false);
             setIsScrapeModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
 
             if (data?.status === 'processing') {
-                // Backend accepted the job; heavy work is running in the background.
-                // The refetchInterval on hasUnscoredJobs will surface results as they land.
+                // 202: background thread owns the work. Keep isScrapeActive=true so the
+                // banner stays visible and the submit button stays blocked. The
+                // hasUnscoredJobs effect will clear both state and localStorage once the
+                // pipeline finishes and all jobs are scored.
                 toast.success('Scraper running in the background — jobs will appear shortly. 🔍', { autoClose: 5000 });
             } else {
+                // Synchronous response path (legacy / should not occur after 202 refactor).
+                setIsScrapeActive(false);
+                localStorage.removeItem('applydir_is_scraping');
+                localStorage.removeItem('applydir_scraping_started_at');
                 const count = typeof data.new_jobs === 'object'
                     ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
                     : data.new_jobs;
@@ -162,6 +174,8 @@ const JobsPage = () => {
         },
         onError: (err) => {
             setIsScrapeActive(false);
+            localStorage.removeItem('applydir_is_scraping');
+            localStorage.removeItem('applydir_scraping_started_at');
             toast.error(err.message || 'Scraping failed. Please try again.');
         },
     });
@@ -242,9 +256,34 @@ const JobsPage = () => {
 
     const approvedCount = jobs.filter(j => j.status === 'approved').length;
 
-    // Keep polling active while the backend scores newly-scraped jobs
+    // Keep polling active while the backend scores newly-scraped jobs.
+    // Also owns the persistent scrape-lock lifecycle:
+    //   - Branch A: unscored jobs visible → record that we've seen them this session
+    //   - Branch B: saw unscored → now all scored → background pipeline done, release lock
+    //   - Branch C: no unscored, no transition seen yet → stale-lock timeout fallback (5 min)
     useEffect(() => {
-        setHasUnscoredJobs(jobs.some(j => j.fit_score == null));
+        const hasUnscored = jobs.some(j => j.fit_score == null);
+        setHasUnscoredJobs(hasUnscored);
+
+        if (localStorage.getItem('applydir_is_scraping') === 'true') {
+            if (hasUnscored) {
+                scrapeSeenUnscoredRef.current = true;                              // Branch A
+            } else if (scrapeSeenUnscoredRef.current) {
+                localStorage.removeItem('applydir_is_scraping');                  // Branch B
+                localStorage.removeItem('applydir_scraping_started_at');
+                setIsScrapeActive(false);
+                scrapeSeenUnscoredRef.current = false;
+            } else {
+                const startedAt = parseInt(                                        // Branch C
+                    localStorage.getItem('applydir_scraping_started_at') || '0'
+                );
+                if (startedAt && Date.now() - startedAt > 5 * 60 * 1000) {
+                    localStorage.removeItem('applydir_is_scraping');
+                    localStorage.removeItem('applydir_scraping_started_at');
+                    setIsScrapeActive(false);
+                }
+            }
+        }
     }, [jobs]);
 
     // Infinite scroll — fire fetchNextPage when the sentinel enters the viewport
@@ -288,11 +327,14 @@ const JobsPage = () => {
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <button
-                        onClick={() => setIsScrapeModalOpen(true)}
-                        className="flex items-center gap-2 bg-gradient-to-r hover:bg-gradient-to-br from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-orange-200 transition-all active:scale-95"
+                        onClick={() => !isScrapeActive && setIsScrapeModalOpen(true)}
+                        disabled={isScrapeActive}
+                        className="flex items-center gap-2 bg-gradient-to-r hover:bg-gradient-to-br from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-orange-200 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100"
                     >
-                        <Plus className="w-4 h-4" />
-                        Scrape New Jobs
+                        {isScrapeActive
+                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping...</>
+                            : <><Plus className="w-4 h-4" /> Scrape New Jobs</>
+                        }
                     </button>
                 </div>
             </div>
@@ -338,7 +380,7 @@ const JobsPage = () => {
 
             {/* ── Auto-Scout live status banner ──────────────────────────────────── */}
             <AnimatePresence>
-                {scrapeMutation.isPending && (
+                {(scrapeMutation.isPending || isScrapeActive) && (
                     <motion.div
                         key="scout-banner"
                         initial={{ opacity: 0, y: -14, scale: 0.97 }}
@@ -481,22 +523,33 @@ const JobsPage = () => {
                             {/* Right: Decluttered actions */}
                             <div className="flex items-center gap-2 shrink-0 flex-wrap md:flex-nowrap">
                                 {/* Not yet decided: approve + reject only */}
-                                {job.status !== 'approved' && job.status !== 'rejected' && (<>
-                                    <button
-                                        onClick={() => handleUpdateStatus(job.id, 'approved')}
-                                        className="w-9 h-9 rounded-full flex items-center justify-center bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all shadow-sm border border-green-100 hover:border-green-500"
-                                        title="Approve"
-                                    >
-                                        <CheckCircle className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => handleUpdateStatus(job.id, 'rejected')}
-                                        className="w-9 h-9 rounded-full flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm border border-red-100 hover:border-red-500"
-                                        title="Reject"
-                                    >
-                                        <XCircle className="w-4 h-4" />
-                                    </button>
-                                </>)}
+                                {job.status !== 'approved' && job.status !== 'rejected' && (() => {
+                                    const pendingThisJob = updateStatusMutation.isPending && updateStatusMutation.variables?.id === job.id;
+                                    const approvePending = pendingThisJob && updateStatusMutation.variables?.newStatus === 'approved';
+                                    const rejectPending  = pendingThisJob && updateStatusMutation.variables?.newStatus === 'rejected';
+                                    return (<>
+                                        <button
+                                            onClick={() => handleUpdateStatus(job.id, 'approved')}
+                                            disabled={pendingThisJob}
+                                            className="w-9 h-9 rounded-full flex items-center justify-center bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all shadow-sm border border-green-100 hover:border-green-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            title="Approve"
+                                        >
+                                            {approvePending
+                                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                                : <CheckCircle className="w-4 h-4" />}
+                                        </button>
+                                        <button
+                                            onClick={() => handleUpdateStatus(job.id, 'rejected')}
+                                            disabled={pendingThisJob}
+                                            className="w-9 h-9 rounded-full flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm border border-red-100 hover:border-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
+                                            title="Reject"
+                                        >
+                                            {rejectPending
+                                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                                : <XCircle className="w-4 h-4" />}
+                                        </button>
+                                    </>);
+                                })()}
 
                                 {/* Approved: primary CV action */}
                                 {job.status === 'approved' && (
@@ -773,10 +826,12 @@ const JobsPage = () => {
                             <div className="pt-1">
                                 <button
                                     type="submit"
-                                    disabled={scrapeMutation.isPending}
+                                    disabled={scrapeMutation.isPending || isScrapeActive}
                                     className="w-full bg-gradient-to-r from-primary-light to-primary-dark text-white p-3 rounded-xl font-semibold shadow-md shadow-orange-100 hover:opacity-90 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
                                 >
-                                    {scrapeMutation.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping...</> : 'Start Scrape'}
+                                    {(scrapeMutation.isPending || isScrapeActive)
+                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping in background...</>
+                                        : 'Start Scrape'}
                                 </button>
                             </div>
                         </form>
@@ -825,18 +880,24 @@ const JobsPage = () => {
                             {/* Approve */}
                             <button
                                 onClick={() => { handleUpdateStatus(selectedJob.id, 'approved'); setSelectedJob(null); }}
-                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-green-700 hover:bg-green-50 transition-colors"
+                                disabled={updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id}
+                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-green-700 hover:bg-green-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                <CheckCircle className="w-5 h-5 shrink-0" />
+                                {updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id && updateStatusMutation.variables?.newStatus === 'approved'
+                                    ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                    : <CheckCircle className="w-5 h-5 shrink-0" />}
                                 Approve Job
                             </button>
 
                             {/* Reject */}
                             <button
                                 onClick={() => { handleUpdateStatus(selectedJob.id, 'rejected'); setSelectedJob(null); }}
-                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-red-600 hover:bg-red-50 transition-colors"
+                                disabled={updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id}
+                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
-                                <XCircle className="w-5 h-5 shrink-0" />
+                                {updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id && updateStatusMutation.variables?.newStatus === 'rejected'
+                                    ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                    : <XCircle className="w-5 h-5 shrink-0" />}
                                 Reject Job
                             </button>
 
