@@ -4,11 +4,11 @@ import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Rocket, Eye, EyeOff, FileText, Mail, Settings,
+  Rocket, Eye, EyeOff, FileText, Mail,
   Briefcase, TrendingUp, Zap
 } from 'lucide-react';
 import {
-  motion, AnimatePresence, useAnimationFrame, useMotionValue,
+  motion, useAnimationFrame, useMotionValue,
   animate
 } from 'framer-motion';
 import SmallSpinner from '../components/SmallSpinner';
@@ -50,7 +50,9 @@ function FloatingInput({ id, label, type = 'text', register, error, rightSlot })
   return (
     <div className="relative">
       <div className={`relative rounded-lg border transition-all duration-200 ${
-        focused
+        error
+          ? 'border-red-500/60 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'
+          : focused
           ? 'border-[rgba(255,91,46,0.60)] shadow-[0_0_0_3px_rgba(184,46,7,0.15)]'
           : 'border-[rgba(255,255,255,0.10)]'
       } bg-[#000000]`}>
@@ -58,7 +60,7 @@ function FloatingInput({ id, label, type = 'text', register, error, rightSlot })
           htmlFor={id}
           className={`absolute left-3 transition-all duration-200 pointer-events-none font-roboto ${
             floated
-              ? 'top-1.5 text-[10px] text-[rgba(255,91,46,0.80)]'
+              ? `top-1.5 text-[10px] ${error ? 'text-red-400' : 'text-[rgba(255,91,46,0.80)]'}`
               : 'top-1/2 -translate-y-1/2 text-sm text-[rgba(255,255,255,0.40)]'
           }`}
         >
@@ -150,14 +152,12 @@ function PipelineSVG() {
           <stop offset="100%" stopColor="rgba(255,91,46,0.40)" />
         </linearGradient>
       </defs>
-      {/* Zone 1 → Zone 2 */}
       <path
         ref={path1Ref}
         d="M 148 90 C 180 90 195 90 215 90"
         stroke="url(#lineGrad)" strokeWidth="1.5"
         fill="none" strokeDasharray="4 3"
       />
-      {/* Zone 2 → Zone 3 */}
       <path
         ref={path2Ref}
         d="M 305 90 C 325 90 340 90 360 70"
@@ -228,7 +228,6 @@ function AIEngine() {
             />
           ))}
           {nodes.map((n, i) => <BrainNode key={i} {...n} />)}
-          {/* Gear icons as SVG text stand-ins */}
           <motion.g
             style={{ transformOrigin: '18px 18px' }}
             animate={{ rotate: 360 }}
@@ -324,10 +323,7 @@ function ActivityLog() {
   return (
     <div
       className="rounded-xl border border-[rgba(255,255,255,0.07)] p-3"
-      style={{
-        background: 'rgba(255,255,255,0.03)',
-        backdropFilter: 'blur(8px)',
-      }}
+      style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(8px)' }}
     >
       <div className="flex items-center gap-1.5 mb-2.5">
         <motion.div
@@ -463,7 +459,7 @@ function VisualizationPanel() {
       <ActivityLog />
 
       {/* Metrics */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 pb-14">
         {METRICS.map((m, i) => (
           <MetricCard key={m.label} {...m} delay={0.5 + i * 0.1} />
         ))}
@@ -489,27 +485,21 @@ const LoginPage = () => {
       navigate(from, { replace: true });
     },
     onError: (err) => {
-      // ── 401 firewall ──────────────────────────────────────────────────────
-      // Check this FIRST with an explicit return so no field-level fallback
-      // or generic string can overwrite a clean auth rejection message.
       if (err.response?.status === 401) {
         const backendDetail = err.response?.data?.detail;
         toast.error(backendDetail || 'Invalid username or password. Please check your credentials.');
         return;
       }
-
-      // ── All other error paths ─────────────────────────────────────────────
       const msg = err.response?.data?.detail || err.message || 'Invalid username or password. Please try again.';
-      // Final guard: never dump raw HTML markup into the toast.
       const isHtml = msg.trimStart().startsWith('<');
       toast.error(isHtml ? 'Something went wrong on our end. Please try again shortly.' : msg);
     },
   });
 
   return (
-    <section className="min-h-screen flex bg-[#1A1A1A]">
+    <section className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#0B0C10] text-white">
       {/* ── LEFT: Auth Panel ── */}
-      <div className="w-full md:w-1/2 flex flex-col justify-between p-8 sm:p-12 relative z-10">
+      <div className="lg:col-span-5 flex flex-col justify-between p-8 sm:p-12 lg:p-16 relative z-10">
         {/* Brand mark */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
@@ -524,22 +514,21 @@ const LoginPage = () => {
           />
           <span className="font-montserrat font-semibold text-white text-lg">
             Apply
-            <span
-              className="font-extrabold bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent"
-            >
+            <span className="font-extrabold bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent">
               DIR
             </span>
           </span>
         </motion.div>
 
-        {/* Heading */}
+        {/* Center block */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.5 }}
-          className="flex-1 flex flex-col justify-center max-w-sm"
+          className="max-w-md w-full mx-auto my-auto"
         >
-          <div className="flex items-start gap-3 mb-8">
+          {/* Heading */}
+          <div className="flex items-start gap-3">
             <div
               className="w-0.5 h-8 rounded-full flex-shrink-0 mt-1"
               style={{ background: 'linear-gradient(to bottom, #B82E07, #FF5B2E)' }}
@@ -554,67 +543,70 @@ const LoginPage = () => {
             </div>
           </div>
 
-          <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="flex flex-col gap-5">
-            <FloatingInput
-              id="username"
-              label="Username"
-              register={register('username', { required: 'Username is required' })}
-              error={errors?.username?.message}
-            />
-            <FloatingInput
-              id="password"
-              label="Password"
-              type={showPass ? 'text' : 'password'}
-              register={register('password', { required: 'Password is required' })}
-              error={errors?.password?.message}
-              rightSlot={
-                <button
-                  type="button"
-                  onClick={() => setShowPass((p) => !p)}
-                  className="text-[rgba(255,255,255,0.30)] hover:text-[rgba(255,255,255,0.70)] transition-colors"
+          {/* Glass panel */}
+          <div className="bg-[#12131C]/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-2xl mt-8">
+            <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="flex flex-col gap-5">
+              <FloatingInput
+                id="username"
+                label="Username"
+                register={register('username', { required: 'Username is required' })}
+                error={errors?.username?.message}
+              />
+              <FloatingInput
+                id="password"
+                label="Password"
+                type={showPass ? 'text' : 'password'}
+                register={register('password', { required: 'Password is required' })}
+                error={errors?.password?.message}
+                rightSlot={
+                  <button
+                    type="button"
+                    onClick={() => setShowPass((p) => !p)}
+                    className="text-[rgba(255,255,255,0.30)] hover:text-[rgba(255,255,255,0.70)] transition-colors"
+                  >
+                    {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                }
+              />
+
+              <div className="flex justify-end -mt-2">
+                <Link
+                  to="/forgot-password"
+                  className="text-[rgba(255,91,46,0.70)] text-xs font-roboto hover:text-[#FF5B2E] transition-colors"
                 >
-                  {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
-                </button>
-              }
-            />
+                  Forgot password?
+                </Link>
+              </div>
 
-            <div className="flex justify-end -mt-2">
-              <Link
-                to="/forgot-password"
-                className="text-[rgba(255,91,46,0.70)] text-xs font-roboto hover:text-[#FF5B2E] transition-colors"
+              <motion.button
+                type="submit"
+                disabled={mutation.isPending}
+                whileHover={{ y: -1, boxShadow: '0 0 20px rgba(255,91,46,0.35), 0 0 40px rgba(184,46,7,0.20)' }}
+                whileTap={{ y: 0, boxShadow: 'none' }}
+                className="w-full h-12 rounded-lg text-white font-montserrat font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
+                style={{ background: 'linear-gradient(135deg, #B82E07 70%, #FF5B2E 30%)' }}
               >
-                Forgot password?
+                {mutation.isPending ? (
+                  <>
+                    <SmallSpinner />
+                    <span>Signing in...</span>
+                  </>
+                ) : (
+                  <span>Sign In</span>
+                )}
+              </motion.button>
+            </form>
+
+            <p className="text-[rgba(255,255,255,0.35)] text-sm font-roboto text-center mt-6">
+              Don&apos;t have an account?{' '}
+              <Link
+                to="/register"
+                className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold transition-colors"
+              >
+                Sign up
               </Link>
-            </div>
-
-            <motion.button
-              type="submit"
-              disabled={mutation.isPending}
-              whileHover={{ y: -1, boxShadow: '0 0 20px rgba(255,91,46,0.35), 0 0 40px rgba(184,46,7,0.20)' }}
-              whileTap={{ y: 0, boxShadow: 'none' }}
-              className="w-full h-12 rounded-lg text-white font-montserrat font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200"
-              style={{ background: 'linear-gradient(135deg, #B82E07 70%, #FF5B2E 30%)' }}
-            >
-              {mutation.isPending ? (
-                <>
-                  <SmallSpinner />
-                  <span>Signing in...</span>
-                </>
-              ) : (
-                <span>Sign In</span>
-              )}
-            </motion.button>
-          </form>
-
-          <p className="text-[rgba(255,255,255,0.35)] text-sm font-roboto text-center mt-8">
-            Don&apos;t have an account?{' '}
-            <Link
-              to="/register"
-              className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold transition-colors"
-            >
-              Sign up
-            </Link>
-          </p>
+            </p>
+          </div>
         </motion.div>
 
         {/* Footer */}
@@ -623,25 +615,31 @@ const LoginPage = () => {
         </p>
       </div>
 
-      {/* Divider */}
-      <div
-        className="hidden md:block w-px self-stretch my-8"
-        style={{
-          background: 'linear-gradient(to bottom, transparent, rgba(255,255,255,0.06) 20%, rgba(255,255,255,0.06) 80%, transparent)',
-        }}
-      />
-
       {/* ── RIGHT: Visualization Panel ── */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2, duration: 0.6 }}
-        className="hidden md:flex md:w-1/2 flex-col"
+        className="hidden lg:flex lg:col-span-7 flex-col relative overflow-hidden"
         style={{
-          background: 'radial-gradient(ellipse at center, #1A1A1A 60%, #111111 100%)',
+          background: 'radial-gradient(ellipse at center, #111218 60%, #0B0C10 100%)',
         }}
       >
         <VisualizationPanel />
+
+        {/* Floating stat pill */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 1.0, duration: 0.5 }}
+          className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 rounded-full border border-white/10 z-20 whitespace-nowrap"
+          style={{ background: 'rgba(11,12,16,0.80)', backdropFilter: 'blur(12px)' }}
+        >
+          <Zap size={12} style={{ color: '#FF5B2E' }} />
+          <span className="text-[rgba(255,255,255,0.65)] text-xs font-roboto">
+            Over 10,000+ remote applications optimized globally
+          </span>
+        </motion.div>
       </motion.div>
     </section>
   );
