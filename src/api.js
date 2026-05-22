@@ -49,6 +49,17 @@ api.interceptors.response.use(
         if (error.response?.status === 401) {
             const isAuthPage = window.location.pathname === '/' || window.location.pathname === '/register';
 
+            // Guard 0: Auth endpoints that issue tokens can never benefit from a
+            // refresh cycle — let the original error propagate immediately so that
+            // callers (e.g. LoginPage) receive the real 401 instead of a secondary
+            // 400 from the refresh endpoint.
+            if (
+                originalRequest.url?.includes('/auth/login/') ||
+                originalRequest.url?.includes('/auth/register/')
+            ) {
+                return Promise.reject(error);
+            }
+
             // Guard 1: Don't refresh the refresh endpoint itself
             if (originalRequest.url?.includes('/auth/refresh/')) {
                 clearClientAuthState();
