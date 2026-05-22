@@ -28,7 +28,7 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
     setIsExtractingFile(true);
     try {
       const formData = new FormData();
-      formData.append('cv_file', file);
+      formData.append('cv', file);
       const data = await uploadCV(formData);
       const extracted = data?.cv_raw_text || data?.extracted_text || '';
       if (extracted) {
