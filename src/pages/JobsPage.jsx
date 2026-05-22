@@ -18,12 +18,28 @@ const JobsPage = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // ── Polling state — must be declared before useInfiniteQuery so refetchInterval captures live values ──
-    const [isScrapeActive, setIsScrapeActive]     = useState(false);
-    const [hasUnscoredJobs, setHasUnscoredJobs]   = useState(false);
+    // ── All state — hoisted above every hook so no const is read before initialisation (TDZ-safe) ──
+    const [isScrapeActive, setIsScrapeActive]       = useState(false);
+    const [hasUnscoredJobs, setHasUnscoredJobs]     = useState(false);
+    const [filterTab, setFilterTab]                 = useState('All');
+    const [searchQuery, setSearchQuery]             = useState('');
+    const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
+    const [scrapeForm, setScrapeForm] = useState({
+        source: 'linkedin', keywords: '', locations: ['remote'],
+        time_range: '24h', count: 25, search_url: '', atsTitle: '', atsLocation: '',
+    });
+    const [cvModal, setCvModal]                   = useState(null);
+    const [loadingCvPreview, setLoadingCvPreview] = useState(null);
+    const [selectedJob, setSelectedJob]           = useState(null);
+    const [showModalTour, setShowModalTour]       = useState(false);
+    const sentinelRef                             = useRef(null);
+
+    // ── Router ────────────────────────────────────────────────────────────────
+    const [searchParams] = useSearchParams();
+    const isTourActive   = searchParams.get('tour') === '1';
 
     // ── React Query — infinite cursor stream ─────────────────────────────────
-    // queryKey includes filterTab so switching tabs resets to page 1 server-side.
+    // queryKey includes filterTab — changing tabs resets to page 1 server-side.
     const {
         data: jobPages,
         isLoading: loading,
@@ -130,23 +146,6 @@ const JobsPage = () => {
         },
     });
 
-    // ── Tour state ────────────────────────────────────────────────────────────
-    const [searchParams] = useSearchParams();
-    const isTourActive = searchParams.get('tour') === '1';
-    const [showModalTour, setShowModalTour] = useState(false);
-
-    // ── UI state ──────────────────────────────────────────────────────────────
-    const [filterTab, setFilterTab] = useState('All');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
-    const [scrapeForm, setScrapeForm] = useState({
-        source: 'linkedin', keywords: '', locations: ['remote'],
-        time_range: '24h', count: 25, search_url: '', atsTitle: '', atsLocation: '',
-    });
-    const [cvModal, setCvModal] = useState(null);
-    const [loadingCvPreview, setLoadingCvPreview] = useState(null);
-    const [selectedJob, setSelectedJob] = useState(null);
-    const sentinelRef = useRef(null);
 
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
     const handleGenerateCv = (job) => generateCvMutation.mutate(job);
