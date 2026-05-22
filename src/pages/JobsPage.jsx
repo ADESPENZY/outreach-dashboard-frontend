@@ -270,8 +270,13 @@ const JobsPage = () => {
 
     const approvedCount = jobs.filter(j => j.status === 'approved').length;
 
+    // If we have jobs on screen and the user has no CV, the raw scraping phase is officially done.
+    const isScrapingInProgress = scrapeMutation.isPending || isScrapeActive;
+    const showScrapingBanner = isScrapingInProgress && (!jobs || jobs.length === 0);
+
     // Keep polling active while the backend scores newly-scraped jobs.
     // Also owns the persistent scrape-lock lifecycle:
+    //   - Unactivated guard: AI scoring is skipped — raw job arrival is the completion signal
     //   - Branch A: unscored jobs visible → record that we've seen them this session
     //   - Branch B: saw unscored → now all scored → background pipeline done, release lock
     //   - Branch C: no unscored, no transition seen yet → stale-lock timeout fallback (5 min)
@@ -280,6 +285,15 @@ const JobsPage = () => {
         setHasUnscoredJobs(hasUnscored);
 
         if (localStorage.getItem('applydir_is_scraping') === 'true') {
+            if (!isActivated && jobs.length > 0) {
+                // Unactivated profiles skip AI scoring entirely — arriving raw jobs mean scraping is done
+                localStorage.removeItem('applydir_is_scraping');
+                localStorage.removeItem('applydir_scraping_started_at');
+                setIsScrapeActive(false);
+                scrapeSeenUnscoredRef.current = false;
+                return;
+            }
+
             if (hasUnscored) {
                 scrapeSeenUnscoredRef.current = true;                              // Branch A
             } else if (scrapeSeenUnscoredRef.current) {
@@ -298,7 +312,7 @@ const JobsPage = () => {
                 }
             }
         }
-    }, [jobs]);
+    }, [jobs, isActivated]);
 
     // Infinite scroll — fire fetchNextPage when the sentinel enters the viewport
     useEffect(() => {
@@ -341,11 +355,11 @@ const JobsPage = () => {
                 </div>
                 <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
                     <button
-                        onClick={() => !isScrapeActive && setIsScrapeModalOpen(true)}
-                        disabled={isScrapeActive}
+                        onClick={() => !showScrapingBanner && setIsScrapeModalOpen(true)}
+                        disabled={showScrapingBanner}
                         className="flex items-center gap-2 bg-gradient-to-r hover:bg-gradient-to-br from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-orange-200 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100"
                     >
-                        {isScrapeActive
+                        {showScrapingBanner
                             ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping...</>
                             : <><Plus className="w-4 h-4" /> Scrape New Jobs</>
                         }
@@ -394,7 +408,7 @@ const JobsPage = () => {
 
             {/* ── Auto-Scout live status banner ──────────────────────────────────── */}
             <AnimatePresence>
-                {(scrapeMutation.isPending || isScrapeActive) && (
+                {showScrapingBanner && (
                     <motion.div
                         key="scout-banner"
                         initial={{ opacity: 0, y: -14, scale: 0.97 }}
