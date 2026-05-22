@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  getScrapedJobs, updateJobStatus, trackJob,
+  getJobsStream, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
 } from '../services/apiJobs';
 import { generateJobCV, getJobCVJson, findContactManual } from '../services/apiOutreach';
@@ -18,17 +18,40 @@ const JobsPage = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // ── React Query ───────────────────────────────────────────────────────────
-    const { data: jobs = [], isLoading: loading } = useQuery({
-        queryKey: ['jobs'],
-        queryFn: getScrapedJobs,
+    // ── Polling state — must be declared before useInfiniteQuery so refetchInterval captures live values ──
+    const [isScrapeActive, setIsScrapeActive]     = useState(false);
+    const [hasUnscoredJobs, setHasUnscoredJobs]   = useState(false);
+
+    // ── React Query — infinite cursor stream ─────────────────────────────────
+    // queryKey includes filterTab so switching tabs resets to page 1 server-side.
+    const {
+        data: jobPages,
+        isLoading: loading,
+        fetchNextPage,
+        hasNextPage,
+        isFetchingNextPage,
+    } = useInfiniteQuery({
+        queryKey: ['jobs-stream', filterTab],
+        queryFn: ({ pageParam = null }) => getJobsStream(pageParam, filterTab),
+        getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+        refetchInterval: (isScrapeActive || hasUnscoredJobs) ? 3000 : false,
     });
+
+    // Flatten pages; deduplicate by id in case polling shifts page boundaries.
+    const jobs = useMemo(() => {
+        const seen = new Set();
+        return (jobPages?.pages.flatMap(p => p.jobs) ?? []).filter(job => {
+            if (seen.has(job.id)) return false;
+            seen.add(job.id);
+            return true;
+        });
+    }, [jobPages]);
 
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
-        onSuccess: (_, { id, newStatus }) => {
+        onSuccess: (_, { newStatus }) => {
             toast.success(`Job marked as ${newStatus}`);
-            queryClient.setQueryData(['jobs'], old => old.map(job => job.id === id ? { ...job, status: newStatus } : job));
+            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
         },
         onError: () => toast.error('Failed to update status. Please try again.'),
     });
@@ -41,20 +64,20 @@ const JobsPage = () => {
         onSuccess: ({ job, cvData }) => {
             setCvModal({ jobId: job.id, cvData, title: `${job.company_name} — ${job.title}` });
             toast.success('Tailored CV ready!');
-            queryClient.invalidateQueries({ queryKey: ['jobs'] });
+            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
         },
         onError: () => toast.error('CV generation failed. Please try again.'),
     });
 
     const trackJobMutation = useMutation({
         mutationFn: (jobId) => trackJob(jobId),
-        onSuccess: (data, jobId) => {
+        onSuccess: (data) => {
             if (data.already_tracked) {
                 toast.info('Already in your tracker — taking you there');
             } else {
                 toast.success('Added to Job Tracker!');
             }
-            queryClient.setQueryData(['jobs'], old => old.map(j => j.id === jobId ? { ...j, is_tracked: true } : j));
+            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
             navigate('/dashboard/job-tracker');
         },
         onError: () => toast.error('Could not add to tracker. Please try again in a moment.'),
@@ -65,7 +88,7 @@ const JobsPage = () => {
         onSuccess: (data, jobId) => {
             if (data.status === 'found') {
                 toast.success(`Contact found: ${data.contact?.email}`);
-                queryClient.invalidateQueries({ queryKey: ['jobs'] });
+                queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
             } else if (data.status === 'job_board') {
                 toast.info('This is a job board listing — apply directly on their site.');
             } else {
@@ -87,7 +110,9 @@ const JobsPage = () => {
                 return scrapeApifyJobs(form);
             }
         },
+        onMutate: () => setIsScrapeActive(true),
         onSuccess: (data) => {
+            setIsScrapeActive(false);
             const count = typeof data.new_jobs === 'object'
                 ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
                 : data.new_jobs;
@@ -97,9 +122,12 @@ const JobsPage = () => {
                 toast.info('No new jobs found — they may already be in your list or try different keywords.', { autoClose: 6000 });
             }
             setIsScrapeModalOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['jobs'] });
+            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
         },
-        onError: (err) => toast.error(err.message || 'Scraping failed. Please try again.'),
+        onError: (err) => {
+            setIsScrapeActive(false);
+            toast.error(err.message || 'Scraping failed. Please try again.');
+        },
     });
 
     // ── Tour state ────────────────────────────────────────────────────────────
@@ -118,8 +146,7 @@ const JobsPage = () => {
     const [cvModal, setCvModal] = useState(null);
     const [loadingCvPreview, setLoadingCvPreview] = useState(null);
     const [selectedJob, setSelectedJob] = useState(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 10;
+    const sentinelRef = useRef(null);
 
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
     const handleGenerateCv = (job) => generateCvMutation.mutate(job);
@@ -170,16 +197,13 @@ const JobsPage = () => {
     };
 
     // ── Derived data ──────────────────────────────────────────────────────────
-    const filteredJobs = jobs.filter(job => {
-        if (filterTab !== 'All' && job.status?.toLowerCase() !== filterTab.toLowerCase().replace(/ /g, '_')) return false;
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            const companyMatch = job.company_name?.toLowerCase().includes(query);
-            const roleMatch = job.title?.toLowerCase().includes(query);
-            if (!companyMatch && !roleMatch) return false;
-        }
-        return true;
-    });
+    // Status is now filtered server-side via the queryKey; only search is client-side.
+    const filteredJobs = searchQuery
+        ? jobs.filter(job => {
+            const q = searchQuery.toLowerCase();
+            return job.company_name?.toLowerCase().includes(q) || job.title?.toLowerCase().includes(q);
+        })
+        : jobs;
 
     const getScoreBadgeColor = (score) => {
         if (score == null) return 'bg-neutral-dark text-secondary-dark border-neutral-dark';
@@ -199,11 +223,24 @@ const JobsPage = () => {
 
     const approvedCount = jobs.filter(j => j.status === 'approved').length;
 
-    const totalPages  = Math.ceil(filteredJobs.length / itemsPerPage);
-    const startIndex  = (currentPage - 1) * itemsPerPage;
-    const paginatedJobs = filteredJobs.slice(startIndex, startIndex + itemsPerPage);
+    // Keep polling active while the backend scores newly-scraped jobs
+    useEffect(() => {
+        setHasUnscoredJobs(jobs.some(j => j.fit_score == null));
+    }, [jobs]);
 
-    useEffect(() => { setCurrentPage(1); }, [searchQuery, filterTab]);
+    // Infinite scroll — fire fetchNextPage when the sentinel enters the viewport
+    useEffect(() => {
+        const el = sentinelRef.current;
+        if (!el) return;
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) fetchNextPage();
+            },
+            { threshold: 0.1 },
+        );
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
 
     // Auto-open modal and activate tour step 1 on mount when tour param is present
     useEffect(() => {
@@ -280,6 +317,59 @@ const JobsPage = () => {
                 </div>
             </div>
 
+            {/* ── Auto-Scout live status banner ──────────────────────────────────── */}
+            <AnimatePresence>
+                {scrapeMutation.isPending && (
+                    <motion.div
+                        key="scout-banner"
+                        initial={{ opacity: 0, y: -14, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0,  scale: 1    }}
+                        exit={{    opacity: 0, y: -14, scale: 0.97 }}
+                        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                        className="relative overflow-hidden bg-gradient-to-r from-[#0F172A] to-[#1a2744] border border-white/10 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-xl"
+                    >
+                        {/* Sweeping background glow */}
+                        <motion.div
+                            className="absolute inset-0 bg-gradient-to-r from-primary-light/10 via-primary-light/5 to-transparent pointer-events-none"
+                            animate={{ opacity: [0.5, 1, 0.5] }}
+                            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                        />
+
+                        {/* Spinner icon */}
+                        <div className="relative z-10 w-9 h-9 rounded-xl bg-primary-light/15 border border-primary-light/30 flex items-center justify-center shrink-0">
+                            <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' }}
+                            >
+                                <Loader2 className="w-4 h-4 text-primary-light" />
+                            </motion.div>
+                        </div>
+
+                        {/* Copy */}
+                        <div className="relative z-10 min-w-0 flex-1">
+                            <p className="text-white font-bold text-sm font-montserrat leading-snug">
+                                Auto-Scout is hunting for roles...
+                            </p>
+                            <p className="text-white/50 text-xs mt-0.5 font-roboto">
+                                AI evaluation will follow shortly — new matches will stream in below
+                            </p>
+                        </div>
+
+                        {/* Pulsing dots */}
+                        <div className="relative z-10 flex items-center gap-1.5 shrink-0">
+                            {[0, 0.18, 0.36].map((delay, i) => (
+                                <motion.span
+                                    key={i}
+                                    className="block w-1.5 h-1.5 rounded-full bg-primary-light"
+                                    animate={{ opacity: [0.25, 1, 0.25], scale: [0.8, 1.15, 0.8] }}
+                                    transition={{ duration: 1.2, repeat: Infinity, delay, ease: 'easeInOut' }}
+                                />
+                            ))}
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* ── Card List ─────────────────────────────────────────────────────── */}
             <div className="flex flex-col gap-4">
                 {loading ? (
@@ -309,9 +399,15 @@ const JobsPage = () => {
                         <p className="text-sm mt-1 text-secondary-dark">Try adjusting your filters or scrape new ones.</p>
                     </div>
                 ) : (
-                    paginatedJobs.map(job => (
-                        <div
+                    <AnimatePresence mode="popLayout" initial={false}>
+                    {filteredJobs.map(job => (
+                        <motion.div
                             key={job.id}
+                            layout
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0  }}
+                            exit={{    opacity: 0, scale: 0.97 }}
+                            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                             className="w-full bg-white border border-neutral-dark rounded-xl p-4 md:p-5 hover:shadow-lg hover:border-primary-light/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6"
                         >
                             {/* Left: Icon + Title + Company */}
@@ -426,41 +522,28 @@ const JobsPage = () => {
                                     Details &rarr;
                                 </button>
                             </div>
-                        </div>
-                    ))
+                        </motion.div>
+                    ))}
+                    </AnimatePresence>
                 )}
             </div>
 
-            {/* Pagination */}
-            {!loading && filteredJobs.length > 0 && (
-                <div className="bg-white border border-neutral-dark rounded-xl p-4 flex flex-col md:flex-row items-center justify-between gap-4">
-                    <span className="text-sm text-secondary-dark">
-                        Showing <span className="font-medium text-black">{startIndex + 1}</span> to{' '}
-                        <span className="font-medium text-black">
-                            {Math.min(startIndex + itemsPerPage, filteredJobs.length)}
-                        </span>{' '}
-                        of <span className="font-medium text-black">{filteredJobs.length}</span> results
-                    </span>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                            disabled={currentPage === 1}
-                            className="px-3 py-1 border border-neutral-dark rounded-lg text-sm bg-white text-secondary-dark hover:bg-neutral disabled:opacity-50 transition-colors"
-                        >
-                            Previous
-                        </button>
-                        <span className="text-sm text-secondary-dark font-medium px-2">
-                            Page {currentPage} of {totalPages}
-                        </span>
-                        <button
-                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                            disabled={currentPage === totalPages}
-                            className="px-3 py-1 border border-neutral-dark rounded-lg text-sm bg-white text-secondary-dark hover:bg-neutral disabled:opacity-50 transition-colors"
-                        >
-                            Next
-                        </button>
-                    </div>
+            {/* Infinite scroll sentinel — observed by IntersectionObserver */}
+            <div ref={sentinelRef} className="h-px" />
+
+            {/* Fetch-next loading indicator */}
+            {isFetchingNextPage && (
+                <div className="flex items-center justify-center gap-2 py-6 text-sm text-secondary-dark">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading more jobs...
                 </div>
+            )}
+
+            {/* End-of-list marker */}
+            {!hasNextPage && filteredJobs.length > 0 && !loading && (
+                <p className="text-center text-xs text-secondary-dark/50 py-4 font-roboto">
+                    All {filteredJobs.length} jobs loaded
+                </p>
             )}
 
             {/* Scrape Modal */}

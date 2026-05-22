@@ -14,6 +14,24 @@ export async function getScrapedJobs() {
   }
 }
 
+/**
+ * Cursor-based page fetch for the infinite-scroll Jobs dashboard.
+ * Returns { jobs: [...], next_cursor: number | null }
+ */
+export async function getJobsStream(cursor = null, filterTab = 'All') {
+  try {
+    const params = { limit: 25 };
+    if (cursor != null) params.cursor = cursor;
+    if (filterTab && filterTab !== 'All') {
+      params.status = filterTab.toLowerCase().replace(/ /g, '_');
+    }
+    const response = await api.get("/api/jobs/stream/", { params });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function getManualApplyJobs() {
   try {
     const response = await api.get("/api/jobs/?status=manual_apply");
