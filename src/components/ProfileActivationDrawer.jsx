@@ -1,15 +1,66 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sparkles, FileText, Loader2, Brain } from 'lucide-react';
+import { X, Sparkles, FileText, Loader2, Brain, UploadCloud } from 'lucide-react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { updateProfile } from '../services/apiProfile';
+import { updateProfile, uploadCV } from '../services/apiProfile';
 import { updateAutoScoutSettings } from '../services/apiSettings';
 
 export default function ProfileActivationDrawer({ isOpen, onClose }) {
   const queryClient = useQueryClient();
   const [cvText, setCvText] = useState('');
   const [scoringRules, setScoringRules] = useState('');
+  const [isExtractingFile, setIsExtractingFile] = useState(false);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const processFile = async (file) => {
+    if (!file) return;
+    const allowed = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (!allowed.includes(file.type)) {
+      toast.error('Please upload a PDF or Word document (.pdf, .doc, .docx)');
+      return;
+    }
+    setIsExtractingFile(true);
+    try {
+      const formData = new FormData();
+      formData.append('cv_file', file);
+      const data = await uploadCV(formData);
+      const extracted = data?.cv_raw_text || data?.extracted_text || '';
+      if (extracted) {
+        setCvText(extracted);
+        toast.success('CV text extracted — review it below and activate when ready.');
+      } else {
+        toast.error('Could not extract text from the file. Try pasting your CV manually.');
+      }
+    } catch (err) {
+      toast.error(err.message || 'File extraction failed. Please paste your CV text manually.');
+    } finally {
+      setIsExtractingFile(false);
+    }
+  };
+
+  const handleFileChange = (e) => {
+    processFile(e.target.files?.[0]);
+    e.target.value = '';
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    processFile(e.dataTransfer.files?.[0]);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => setIsDragOver(false);
 
   const activateMutation = useMutation({
     mutationFn: async () => {
@@ -99,9 +150,48 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
                   </span>
                 </div>
                 <p className="text-xs text-secondary-dark mb-2.5 leading-relaxed">
-                  Paste your full resume text. The AI uses this to compute match scores and generate
-                  a tailored CV for each approved job.
+                  Upload your resume or paste the text below. The AI uses this to compute match
+                  scores and generate a tailored CV for each approved job.
                 </p>
+
+                {/* File dropzone */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <div
+                  onClick={() => !isExtractingFile && fileInputRef.current?.click()}
+                  onDrop={handleDrop}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all mb-4 flex flex-col items-center justify-center group ${
+                    isDragOver
+                      ? 'border-primary-light bg-primary-light/5'
+                      : 'border-neutral-dark hover:border-primary-light/50 bg-neutral hover:bg-primary-light/5'
+                  } ${isExtractingFile ? 'pointer-events-none' : ''}`}
+                >
+                  {isExtractingFile ? (
+                    <>
+                      <Loader2 className="w-8 h-8 text-primary-light animate-spin mb-2" />
+                      <p className="text-sm font-semibold text-secondary-dark">Extracting text…</p>
+                      <p className="text-xs text-secondary-dark/50 mt-1">This takes just a moment</p>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-8 h-8 text-secondary-dark/40 group-hover:text-primary-light mb-2 transition-colors" />
+                      <p className="text-sm font-medium text-secondary-dark group-hover:text-black transition-colors">
+                        Click to upload <span className="font-semibold text-primary-dark">PDF / Docx</span> or drag and drop
+                      </p>
+                      <p className="text-xs text-secondary-dark/50 mt-1">
+                        AI will extract your text automatically
+                      </p>
+                    </>
+                  )}
+                </div>
+
                 <textarea
                   value={cvText}
                   onChange={(e) => setCvText(e.target.value)}
