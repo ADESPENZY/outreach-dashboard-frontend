@@ -34,8 +34,8 @@ function App() {
             <Route path="/onboarding" element={<Onboarding />} />
           </Route>
 
-          {/* Dashboard — JWT + onboarding guard */}
-          <Route element={<ProtectedRoute requireOnboarding={true} />}>
+          {/* Dashboard — JWT only; onboarding is now optional (progressive disclosure) */}
+          <Route element={<ProtectedRoute requireOnboarding={false} />}>
             <Route path="/dashboard" element={<Dashboard />}>
               <Route index element={<DashboardPage />} />
               <Route path="analytics"         element={<Analytics />} />

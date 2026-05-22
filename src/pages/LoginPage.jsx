@@ -489,7 +489,15 @@ const LoginPage = () => {
       navigate(from, { replace: true });
     },
     onError: (err) => {
-      toast.error(err.message || 'Login failed');
+      const msg = err.message || '';
+      // Final guard: if an HTML page somehow escaped the service layer, never
+      // dump raw markup into the toast — show a generic fallback instead.
+      const isHtml = msg.trimStart().startsWith('<');
+      toast.error(
+        isHtml
+          ? 'Something went wrong on our end. Please try again shortly.'
+          : (msg || 'Invalid username or password.')
+      );
     },
   });
 

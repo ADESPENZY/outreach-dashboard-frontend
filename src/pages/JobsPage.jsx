@@ -4,7 +4,8 @@ import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
   CheckCircle, XCircle, Search, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2
+  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2,
+  Lock, Sparkles,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -12,8 +13,10 @@ import {
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
 } from '../services/apiJobs';
 import { getAutoScoutSettings } from '../services/apiSettings';
+import { getProfile } from '../services/apiProfile';
 import { generateJobCV, getJobCVJson, findContactManual } from '../services/apiOutreach';
 import TailoredCVPreview from '../components/TailoredCVPreview';
+import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 
 const JobsPage = () => {
     const navigate = useNavigate();
@@ -34,6 +37,7 @@ const JobsPage = () => {
     const [selectedJob, setSelectedJob]           = useState(null);
     const [showModalTour, setShowModalTour]       = useState(false);
     const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
+    const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
     const sentinelRef                             = useRef(null);
     // Tracks whether this page mount has observed any unscored jobs during an active scrape.
     // Used to detect the true→false transition that signals the background pipeline is done.
@@ -49,6 +53,16 @@ const JobsPage = () => {
         queryFn: getAutoScoutSettings,
         staleTime: 5 * 60 * 1000,
     });
+
+    // ── React Query — user profile (drives the AI activation gate) ───────────
+    const { data: profile } = useQuery({
+        queryKey: ['profile'],
+        queryFn: getProfile,
+        staleTime: 5 * 60 * 1000,
+    });
+
+    // User has AI capabilities unlocked once they have saved CV text.
+    const isActivated = !!profile?.cv_raw_text;
 
     // ── React Query — infinite cursor stream ─────────────────────────────────
     // queryKey includes filterTab — changing tabs resets to page 1 server-side.
@@ -504,10 +518,20 @@ const JobsPage = () => {
 
                             {/* Middle: AI Match badge + status dot */}
                             <div className="flex md:flex-col items-center md:items-start gap-3 md:gap-2 shrink-0">
-                                <div className={`px-2.5 py-1 rounded-lg text-xs font-bold font-montserrat border flex items-center gap-1.5 shadow-sm ${getScoreBadgeColor(job.fit_score)}`}>
-                                    <span>AI Match:</span>
-                                    <span>{job.fit_score != null ? job.fit_score : '—'}</span>
-                                </div>
+                                {isActivated ? (
+                                    <div className={`px-2.5 py-1 rounded-lg text-xs font-bold font-montserrat border flex items-center gap-1.5 shadow-sm ${getScoreBadgeColor(job.fit_score)}`}>
+                                        <span>AI Match:</span>
+                                        <span>{job.fit_score != null ? job.fit_score : '—'}</span>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setIsActivationDrawerOpen(true)}
+                                        className="px-2.5 py-1 rounded-lg text-xs font-bold font-montserrat border flex items-center gap-1.5 shadow-sm bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100 transition-colors"
+                                    >
+                                        <Lock className="w-3 h-3 shrink-0" />
+                                        <span>AI Score Locked</span>
+                                    </button>
+                                )}
                                 <span className="flex items-center gap-1.5 text-xs text-secondary-dark">
                                     <div className={`w-2 h-2 rounded-full shrink-0 ${getStatusDotColor(job.status)}`} />
                                     {job.status ? job.status.charAt(0).toUpperCase() + job.status.slice(1) : 'Scraped'}
@@ -551,29 +575,39 @@ const JobsPage = () => {
                                     </>);
                                 })()}
 
-                                {/* Approved: primary CV action */}
+                                {/* Approved: primary CV action — gated on AI activation */}
                                 {job.status === 'approved' && (
-                                    job.has_cv ? (
-                                        <button
-                                            onClick={() => handleViewCv(job)}
-                                            disabled={loadingCvPreview === job.id}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold rounded-lg hover:bg-violet-100 transition-all disabled:opacity-60"
-                                        >
-                                            {loadingCvPreview === job.id
-                                                ? <Loader2 className="w-3 h-3 animate-spin" />
-                                                : <FileText className="w-3 h-3" />}
-                                            View CV
-                                        </button>
+                                    isActivated ? (
+                                        job.has_cv ? (
+                                            <button
+                                                onClick={() => handleViewCv(job)}
+                                                disabled={loadingCvPreview === job.id}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold rounded-lg hover:bg-violet-100 transition-all disabled:opacity-60"
+                                            >
+                                                {loadingCvPreview === job.id
+                                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                    : <FileText className="w-3 h-3" />}
+                                                View CV
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleGenerateCv(job)}
+                                                disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === job.id}
+                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
+                                            >
+                                                {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id
+                                                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                                                    : <Download className="w-3 h-3" />}
+                                                {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id ? 'Generating...' : 'Gen CV'}
+                                            </button>
+                                        )
                                     ) : (
                                         <button
-                                            onClick={() => handleGenerateCv(job)}
-                                            disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === job.id}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
+                                            onClick={() => setIsActivationDrawerOpen(true)}
+                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm shadow-orange-200 hover:opacity-90 transition-all active:scale-95"
                                         >
-                                            {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id
-                                                ? <Loader2 className="w-3 h-3 animate-spin" />
-                                                : <Download className="w-3 h-3" />}
-                                            {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id ? 'Generating...' : 'Gen CV'}
+                                            <Sparkles className="w-3 h-3" />
+                                            Unlock AI Score &amp; CV
                                         </button>
                                     )
                                 )}
@@ -901,32 +935,40 @@ const JobsPage = () => {
                                 Reject Job
                             </button>
 
-                            {/* Generate CV — approved only */}
+                            {/* Generate CV / Preview CV — approved only, gated on AI activation */}
                             {selectedJob.status === 'approved' && (
-                                <button
-                                    onClick={() => { handleGenerateCv(selectedJob); setSelectedJob(null); }}
-                                    disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id}
-                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-primary-dark hover:bg-primary-light/5 transition-colors disabled:opacity-60"
-                                >
-                                    {generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id
-                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                        : <Download className="w-5 h-5 shrink-0" />}
-                                    Generate Tailored CV
-                                </button>
-                            )}
-
-                            {/* View CV — only if already generated */}
-                            {selectedJob.has_cv && (
-                                <button
-                                    onClick={() => { handleViewCv(selectedJob); setSelectedJob(null); }}
-                                    disabled={loadingCvPreview === selectedJob.id}
-                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-60"
-                                >
-                                    {loadingCvPreview === selectedJob.id
-                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                        : <FileText className="w-5 h-5 shrink-0" />}
-                                    Preview CV
-                                </button>
+                                isActivated ? (<>
+                                    <button
+                                        onClick={() => { handleGenerateCv(selectedJob); setSelectedJob(null); }}
+                                        disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id}
+                                        className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-primary-dark hover:bg-primary-light/5 transition-colors disabled:opacity-60"
+                                    >
+                                        {generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id
+                                            ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                            : <Download className="w-5 h-5 shrink-0" />}
+                                        Generate Tailored CV
+                                    </button>
+                                    {selectedJob.has_cv && (
+                                        <button
+                                            onClick={() => { handleViewCv(selectedJob); setSelectedJob(null); }}
+                                            disabled={loadingCvPreview === selectedJob.id}
+                                            className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-60"
+                                        >
+                                            {loadingCvPreview === selectedJob.id
+                                                ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                                                : <FileText className="w-5 h-5 shrink-0" />}
+                                            Preview CV
+                                        </button>
+                                    )}
+                                </>) : (
+                                    <button
+                                        onClick={() => { setSelectedJob(null); setIsActivationDrawerOpen(true); }}
+                                        className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-primary-dark hover:bg-primary-light/5 transition-colors"
+                                    >
+                                        <Sparkles className="w-5 h-5 shrink-0 text-primary-light" />
+                                        Unlock AI Score &amp; Tailored CV
+                                    </button>
+                                )
                             )}
 
                             {/* Find Contact — approved + no contact */}
@@ -1002,6 +1044,12 @@ const JobsPage = () => {
                     onClose={handleCloseCvModal}
                 />
             )}
+
+            {/* AI Activation Drawer — slides in from right when user taps a locked element */}
+            <ProfileActivationDrawer
+                isOpen={isActivationDrawerOpen}
+                onClose={() => setIsActivationDrawerOpen(false)}
+            />
 
             {/* Auto-Scout Contextual Banner */}
             <AnimatePresence>
