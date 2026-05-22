@@ -489,17 +489,20 @@ const LoginPage = () => {
       navigate(from, { replace: true });
     },
     onError: (err) => {
-      // Priority 1: use the server's exact detail message (e.g. SimpleJWT's
-      // "No active account found with the given credentials.") so the user
-      // sees the backend's authoritative wording rather than a generic string.
-      const serverMessage = err.response?.data?.detail;
-      const fallback = err.message || 'Invalid username or password. Please try again.';
-      const raw = serverMessage || fallback;
+      // ── 401 firewall ──────────────────────────────────────────────────────
+      // Check this FIRST with an explicit return so no field-level fallback
+      // or generic string can overwrite a clean auth rejection message.
+      if (err.response?.status === 401) {
+        const backendDetail = err.response?.data?.detail;
+        toast.error(backendDetail || 'Invalid username or password. Please check your credentials.');
+        return;
+      }
 
-      // Final guard: if an HTML page somehow escaped the service layer, never
-      // dump raw markup into the toast.
-      const isHtml = raw.trimStart().startsWith('<');
-      toast.error(isHtml ? 'Something went wrong on our end. Please try again shortly.' : raw);
+      // ── All other error paths ─────────────────────────────────────────────
+      const msg = err.response?.data?.detail || err.message || 'Invalid username or password. Please try again.';
+      // Final guard: never dump raw HTML markup into the toast.
+      const isHtml = msg.trimStart().startsWith('<');
+      toast.error(isHtml ? 'Something went wrong on our end. Please try again shortly.' : msg);
     },
   });
 
