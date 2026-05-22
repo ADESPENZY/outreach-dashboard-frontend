@@ -138,16 +138,24 @@ const JobsPage = () => {
         onMutate: () => setIsScrapeActive(true),
         onSuccess: (data) => {
             setIsScrapeActive(false);
-            const count = typeof data.new_jobs === 'object'
-                ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
-                : data.new_jobs;
-            if (count > 0) {
-                toast.success(`${count} new jobs scraped! AI is now evaluating your matches...`, { autoClose: 4000 });
-            } else {
-                toast.info('No new jobs found — they may already be in your list or try different keywords.', { autoClose: 6000 });
-            }
             setIsScrapeModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
+
+            if (data?.status === 'processing') {
+                // Backend accepted the job; heavy work is running in the background.
+                // The refetchInterval on hasUnscoredJobs will surface results as they land.
+                toast.success('Scraper running in the background — jobs will appear shortly. 🔍', { autoClose: 5000 });
+            } else {
+                const count = typeof data.new_jobs === 'object'
+                    ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
+                    : data.new_jobs;
+                if (count > 0) {
+                    toast.success(`${count} new jobs scraped! AI is now evaluating your matches...`, { autoClose: 4000 });
+                } else {
+                    toast.info('No new jobs found — they may already be in your list or try different keywords.', { autoClose: 6000 });
+                }
+            }
+
             if (autoScoutSettings?.is_active === false && localStorage.getItem('applydirAutoScoutPrompted') !== 'true') {
                 setShowAutoScoutBanner(true);
             }
