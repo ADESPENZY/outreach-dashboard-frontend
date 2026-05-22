@@ -489,15 +489,17 @@ const LoginPage = () => {
       navigate(from, { replace: true });
     },
     onError: (err) => {
-      const msg = err.message || '';
+      // Priority 1: use the server's exact detail message (e.g. SimpleJWT's
+      // "No active account found with the given credentials.") so the user
+      // sees the backend's authoritative wording rather than a generic string.
+      const serverMessage = err.response?.data?.detail;
+      const fallback = err.message || 'Invalid username or password. Please try again.';
+      const raw = serverMessage || fallback;
+
       // Final guard: if an HTML page somehow escaped the service layer, never
-      // dump raw markup into the toast — show a generic fallback instead.
-      const isHtml = msg.trimStart().startsWith('<');
-      toast.error(
-        isHtml
-          ? 'Something went wrong on our end. Please try again shortly.'
-          : (msg || 'Invalid username or password.')
-      );
+      // dump raw markup into the toast.
+      const isHtml = raw.trimStart().startsWith('<');
+      toast.error(isHtml ? 'Something went wrong on our end. Please try again shortly.' : raw);
     },
   });
 
