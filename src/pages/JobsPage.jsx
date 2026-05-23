@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useEffect, useRef } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  getJobsStream, updateJobStatus, trackJob,
+  getJobsPage, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
 } from '../services/apiJobs';
 import { getAutoScoutSettings } from '../services/apiSettings';
@@ -26,6 +26,8 @@ const JobsPage = () => {
     const [isScrapeActive, setIsScrapeActive]       = useState(() => localStorage.getItem('applydir_is_scraping') === 'true');
     const [hasUnscoredJobs, setHasUnscoredJobs]     = useState(false);
     const [filterTab, setFilterTab]                 = useState('All');
+    const [currentPage, setCurrentPage]             = useState(1);
+    const itemsPerPage                              = 10;
     const [searchQuery, setSearchQuery]             = useState('');
     const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
     const [scrapeForm, setScrapeForm] = useState({
@@ -38,13 +40,12 @@ const JobsPage = () => {
     const [showModalTour, setShowModalTour]       = useState(false);
     const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
     const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
-    const sentinelRef                             = useRef(null);
     // Tracks whether this page mount has observed any unscored jobs during an active scrape.
     // Used to detect the true→false transition that signals the background pipeline is done.
     const scrapeSeenUnscoredRef = useRef(false);
-    // Job count at the moment a scrape was triggered — persisted in localStorage so it
+    // Total job count at the moment a scrape was triggered — persisted in localStorage so it
     // survives page navigations mid-scrape.  Used by Branch C to detect fast-score completions.
-    const scrapeJobCountAtStartRef = useRef(
+    const scrapeTotalAtStartRef = useRef(
         parseInt(localStorage.getItem('applydir_scraping_job_count') || '0')
     );
 
@@ -69,36 +70,29 @@ const JobsPage = () => {
     // User has AI capabilities unlocked once they have saved CV text.
     const isActivated = !!profile?.cv_raw_text;
 
-    // ── React Query — infinite cursor stream ─────────────────────────────────
-    // queryKey includes filterTab — changing tabs resets to page 1 server-side.
-    const {
-        data: jobPages,
-        isLoading: loading,
-        fetchNextPage,
-        hasNextPage,
-        isFetchingNextPage,
-    } = useInfiniteQuery({
-        queryKey: ['jobs-stream', filterTab],
-        queryFn: ({ pageParam = null }) => getJobsStream(pageParam, filterTab),
-        getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
+    // ── React Query — single-page fetch ──────────────────────────────────────
+    // queryKey includes filterTab + currentPage so any change triggers exactly
+    // one clean network request and nothing more.
+    const { data: pageData, isLoading: loading, isFetching } = useQuery({
+        queryKey: ['jobs-page', filterTab, currentPage],
+        queryFn:  () => getJobsPage(currentPage, filterTab, itemsPerPage),
         refetchInterval: (isScrapeActive || hasUnscoredJobs) ? 3000 : false,
+        staleTime: 0,
     });
 
-    // Flatten pages; deduplicate by id in case polling shifts page boundaries.
-    const jobs = useMemo(() => {
-        const seen = new Set();
-        return (jobPages?.pages.flatMap(p => p.jobs) ?? []).filter(job => {
-            if (seen.has(job.id)) return false;
-            seen.add(job.id);
-            return true;
-        });
-    }, [jobPages]);
+    const jobs       = pageData?.jobs        ?? [];
+    const totalCount = pageData?.total_count ?? 0;
+    const totalPages = pageData?.total_pages ?? 1;
+
+    // Reset to page 1 whenever the filter tab changes so users always land
+    // on the first page of a new filter set.
+    useEffect(() => { setCurrentPage(1); }, [filterTab]);
 
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
         onSuccess: (_, { newStatus }) => {
             toast.success(`Job marked as ${newStatus}`);
-            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
+            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
         },
         onError: () => toast.error('Failed to update status. Please try again.'),
     });
@@ -111,7 +105,7 @@ const JobsPage = () => {
         onSuccess: ({ job, cvData }) => {
             setCvModal({ jobId: job.id, cvData, title: `${job.company_name} — ${job.title}` });
             toast.success('Tailored CV ready!');
-            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
+            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
         },
         onError: () => toast.error('CV generation failed. Please try again.'),
     });
@@ -124,7 +118,7 @@ const JobsPage = () => {
             } else {
                 toast.success('Added to Job Tracker!');
             }
-            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
+            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
             navigate('/dashboard/job-tracker');
         },
         onError: () => toast.error('Could not add to tracker. Please try again in a moment.'),
@@ -135,7 +129,7 @@ const JobsPage = () => {
         onSuccess: (data, jobId) => {
             if (data.status === 'found') {
                 toast.success(`Contact found: ${data.contact?.email}`);
-                queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
+                queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
             } else if (data.status === 'job_board') {
                 toast.info('This is a job board listing — apply directly on their site.');
             } else {
@@ -159,16 +153,18 @@ const JobsPage = () => {
         },
         onMutate: () => {
             setIsScrapeActive(true);
+            setCurrentPage(1);
             localStorage.setItem('applydir_is_scraping', 'true');
             localStorage.setItem('applydir_scraping_started_at', Date.now().toString());
-            // Snapshot the pre-scrape job count so Branch C can detect fast-score completions.
-            const countNow = String(jobs.length);
+            // Snapshot total job count (not page-slice length) so Branch C can
+            // detect fast-score completions regardless of page size.
+            const countNow = String(pageData?.total_count ?? 0);
             localStorage.setItem('applydir_scraping_job_count', countNow);
-            scrapeJobCountAtStartRef.current = jobs.length;
+            scrapeTotalAtStartRef.current = pageData?.total_count ?? 0;
         },
         onSuccess: (data) => {
             setIsScrapeModalOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
+            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
 
             if (data?.status === 'processing') {
                 // 202: background thread owns the work. Keep isScrapeActive=true so the
@@ -279,21 +275,25 @@ const JobsPage = () => {
         }
     };
 
-    const approvedCount = jobs.filter(j => j.status === 'approved').length;
+    // When on the Approved tab, totalCount IS the approved count (server-filtered).
+    // On other tabs, fall back to counting the visible page slice.
+    const approvedCount = filterTab === 'Approved'
+        ? totalCount
+        : jobs.filter(j => j.status === 'approved').length;
 
-    // If we have jobs on screen and the user has no CV, the raw scraping phase is officially done.
     const isScrapingInProgress = scrapeMutation.isPending || isScrapeActive;
-    const showScrapingBanner = isScrapingInProgress && (!jobs || jobs.length === 0);
+    // Show the loading banner only before any jobs have arrived for this user.
+    const showScrapingBanner = isScrapingInProgress && totalCount === 0 && jobs.length === 0;
 
     // Scrape-lock lifecycle state machine.
     //
     // State definitions:
     //   Unactivated guard — no CV: scoring is never attempted; raw job arrival = done
-    //   Branch A — unscored jobs observed: pipeline is in-flight, keep polling
-    //   Branch B — transition observed→complete: all jobs now scored, release lock
+    //   Branch A — unscored jobs observed on page 1: pipeline in-flight, keep polling
+    //   Branch B — transition observed→complete: page 1 jobs all scored, release lock
     //   Branch C — activated, no unscored ever seen: two sub-cases:
-    //     C-fast — new jobs arrived already-scored (scoring beat the first poll): release now
-    //     C-timeout — nothing arrived yet or scrape crashed: 5-min safety net
+    //     C-fast — total_count grew since scrape start AND no unscored: scoring beat first poll
+    //     C-timeout — nothing new arrived or scrape crashed: 5-min safety net
     useEffect(() => {
         const hasUnscored = jobs.some(j => j.fit_score == null);
         setHasUnscoredJobs(hasUnscored);
@@ -324,13 +324,13 @@ const JobsPage = () => {
             scrapeSeenUnscoredRef.current = false;
         } else {
             // Branch C: no unscored jobs observed this session
-            const countAtStart = parseInt(
-                localStorage.getItem('applydir_scraping_job_count') || '0'
-            );
-            const newJobsArrived = jobs.length > countAtStart;
+            // Compare against the total DB count snapshotted at scrape start — this
+            // is not capped by page size so it reliably detects new job arrivals.
+            const countAtStart    = parseInt(localStorage.getItem('applydir_scraping_job_count') || '0');
+            const newJobsArrived  = totalCount > countAtStart;
 
             if (isActivated && newJobsArrived) {
-                // C-fast: new jobs arrived already-scored — scoring completed before first poll
+                // C-fast: new jobs arrived already-scored — scoring beat the first poll
                 localStorage.removeItem('applydir_is_scraping');
                 localStorage.removeItem('applydir_scraping_started_at');
                 localStorage.removeItem('applydir_scraping_job_count');
@@ -338,9 +338,7 @@ const JobsPage = () => {
                 scrapeSeenUnscoredRef.current = false;
             } else {
                 // C-timeout: safety net for crashed scrapes or zero-result runs
-                const startedAt = parseInt(
-                    localStorage.getItem('applydir_scraping_started_at') || '0'
-                );
+                const startedAt = parseInt(localStorage.getItem('applydir_scraping_started_at') || '0');
                 if (startedAt && Date.now() - startedAt > 5 * 60 * 1000) {
                     localStorage.removeItem('applydir_is_scraping');
                     localStorage.removeItem('applydir_scraping_started_at');
@@ -349,21 +347,7 @@ const JobsPage = () => {
                 }
             }
         }
-    }, [jobs, isActivated]);
-
-    // Infinite scroll — fire fetchNextPage when the sentinel enters the viewport
-    useEffect(() => {
-        const el = sentinelRef.current;
-        if (!el) return;
-        const observer = new IntersectionObserver(
-            ([entry]) => {
-                if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) fetchNextPage();
-            },
-            { threshold: 0.1 },
-        );
-        observer.observe(el);
-        return () => observer.disconnect();
-    }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+    }, [jobs, isActivated, totalCount]);
 
     // Auto-open modal and activate tour step 1 on mount when tour param is present
     useEffect(() => {
@@ -685,22 +669,66 @@ const JobsPage = () => {
                 )}
             </div>
 
-            {/* Infinite scroll sentinel — observed by IntersectionObserver */}
-            <div ref={sentinelRef} className="h-px" />
+            {/* ── Pagination controls ──────────────────────────────────────────── */}
+            {!loading && totalCount > 0 && (
+                <div className="flex items-center justify-between pt-2 pb-1">
+                    {/* Summary */}
+                    <p className="text-xs text-secondary-dark/60 font-roboto select-none">
+                        {totalCount} job{totalCount !== 1 ? 's' : ''} &nbsp;·&nbsp; page {currentPage} of {totalPages}
+                    </p>
 
-            {/* Fetch-next loading indicator */}
-            {isFetchingNextPage && (
-                <div className="flex items-center justify-center gap-2 py-6 text-sm text-secondary-dark">
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading more jobs...
+                    {/* Controls */}
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                            disabled={currentPage <= 1 || isFetching}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-neutral-dark text-secondary-dark hover:bg-neutral hover:border-secondary-dark/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+                        >
+                            ← Prev
+                        </button>
+
+                        {/* Page number pills */}
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: totalPages }, (_, i) => i + 1)
+                                .filter(n => n === 1 || n === totalPages || Math.abs(n - currentPage) <= 1)
+                                .reduce((acc, n, idx, arr) => {
+                                    if (idx > 0 && n - arr[idx - 1] > 1) acc.push('...');
+                                    acc.push(n);
+                                    return acc;
+                                }, [])
+                                .map((item, idx) =>
+                                    item === '...'
+                                        ? <span key={`gap-${idx}`} className="px-1 text-xs text-secondary-dark/40 select-none">…</span>
+                                        : <button
+                                            key={item}
+                                            onClick={() => setCurrentPage(item)}
+                                            disabled={isFetching}
+                                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed ${
+                                                item === currentPage
+                                                    ? 'bg-gradient-to-r from-primary-light to-primary-dark text-white shadow-sm shadow-orange-200'
+                                                    : 'text-secondary-dark hover:bg-neutral border border-neutral-dark'
+                                            }`}
+                                        >
+                                            {item}
+                                        </button>
+                                )
+                            }
+                        </div>
+
+                        <button
+                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                            disabled={currentPage >= totalPages || isFetching}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-neutral-dark text-secondary-dark hover:bg-neutral hover:border-secondary-dark/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
+                        >
+                            Next →
+                        </button>
+                    </div>
+
+                    {/* Fetching indicator */}
+                    {isFetching && !loading && (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-light shrink-0" />
+                    )}
                 </div>
-            )}
-
-            {/* End-of-list marker */}
-            {!hasNextPage && filteredJobs.length > 0 && !loading && (
-                <p className="text-center text-xs text-secondary-dark/50 py-4 font-roboto">
-                    All {filteredJobs.length} jobs loaded
-                </p>
             )}
 
             {/* Scrape Modal */}

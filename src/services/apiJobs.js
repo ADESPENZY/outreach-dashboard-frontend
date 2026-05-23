@@ -15,8 +15,25 @@ export async function getScrapedJobs() {
 }
 
 /**
- * Cursor-based page fetch for the infinite-scroll Jobs dashboard.
- * Returns { jobs: [...], next_cursor: number | null }
+ * Page-based fetch for the Jobs dashboard.
+ * Returns { jobs, next_cursor: null, total_count, total_pages, page }
+ */
+export async function getJobsPage(page = 1, filterTab = 'All', limit = 10) {
+  try {
+    const params = { page, limit };
+    if (filterTab && filterTab !== 'All') {
+      params.status = filterTab.toLowerCase().replace(/ /g, '_');
+    }
+    const response = await api.get("/api/jobs/stream/", { params });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/**
+ * @deprecated Use getJobsPage for the Jobs dashboard.
+ * Kept for any legacy callers; cursor-based path is still supported by the backend.
  */
 export async function getJobsStream(cursor = null, filterTab = 'All') {
   try {
