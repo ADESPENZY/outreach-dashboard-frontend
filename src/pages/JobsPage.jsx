@@ -77,7 +77,8 @@ const JobsPage = () => {
         queryKey: ['jobs-page', filterTab, currentPage],
         queryFn:  () => getJobsPage(currentPage, filterTab, itemsPerPage),
         refetchInterval: (isScrapeActive || hasUnscoredJobs) ? 3000 : false,
-        staleTime: 0,
+        staleTime: 10000,
+        refetchOnWindowFocus: false,
     });
 
     const jobs       = pageData?.jobs        ?? [];
@@ -295,7 +296,9 @@ const JobsPage = () => {
     //     C-fast — total_count grew since scrape start AND no unscored: scoring beat first poll
     //     C-timeout — nothing new arrived or scrape crashed: 5-min safety net
     useEffect(() => {
-        const hasUnscored = jobs.some(j => j.fit_score == null);
+        // CRITICAL FIX: unactivated profiles never receive scores server-side,
+        // so treat hasUnscored as false for them to immediately release the polling lock.
+        const hasUnscored = isActivated ? jobs.some(j => j.fit_score == null) : false;
         setHasUnscoredJobs(hasUnscored);
 
         if (localStorage.getItem('applydir_is_scraping') !== 'true') return;
