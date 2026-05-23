@@ -41,7 +41,12 @@ const JobsPage = () => {
     const sentinelRef                             = useRef(null);
     // Tracks whether this page mount has observed any unscored jobs during an active scrape.
     // Used to detect the true→false transition that signals the background pipeline is done.
-    const scrapeSeenUnscoredRef                   = useRef(false);
+    const scrapeSeenUnscoredRef = useRef(false);
+    // Job count at the moment a scrape was triggered — persisted in localStorage so it
+    // survives page navigations mid-scrape.  Used by Branch C to detect fast-score completions.
+    const scrapeJobCountAtStartRef = useRef(
+        parseInt(localStorage.getItem('applydir_scraping_job_count') || '0')
+    );
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
@@ -156,6 +161,10 @@ const JobsPage = () => {
             setIsScrapeActive(true);
             localStorage.setItem('applydir_is_scraping', 'true');
             localStorage.setItem('applydir_scraping_started_at', Date.now().toString());
+            // Snapshot the pre-scrape job count so Branch C can detect fast-score completions.
+            const countNow = String(jobs.length);
+            localStorage.setItem('applydir_scraping_job_count', countNow);
+            scrapeJobCountAtStartRef.current = jobs.length;
         },
         onSuccess: (data) => {
             setIsScrapeModalOpen(false);
@@ -172,6 +181,7 @@ const JobsPage = () => {
                 setIsScrapeActive(false);
                 localStorage.removeItem('applydir_is_scraping');
                 localStorage.removeItem('applydir_scraping_started_at');
+                localStorage.removeItem('applydir_scraping_job_count');
                 const count = typeof data.new_jobs === 'object'
                     ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
                     : data.new_jobs;
@@ -190,6 +200,7 @@ const JobsPage = () => {
             setIsScrapeActive(false);
             localStorage.removeItem('applydir_is_scraping');
             localStorage.removeItem('applydir_scraping_started_at');
+            localStorage.removeItem('applydir_scraping_job_count');
             toast.error(err.message || 'Scraping failed. Please try again.');
         },
     });
@@ -274,40 +285,66 @@ const JobsPage = () => {
     const isScrapingInProgress = scrapeMutation.isPending || isScrapeActive;
     const showScrapingBanner = isScrapingInProgress && (!jobs || jobs.length === 0);
 
-    // Keep polling active while the backend scores newly-scraped jobs.
-    // Also owns the persistent scrape-lock lifecycle:
-    //   - Unactivated guard: AI scoring is skipped — raw job arrival is the completion signal
-    //   - Branch A: unscored jobs visible → record that we've seen them this session
-    //   - Branch B: saw unscored → now all scored → background pipeline done, release lock
-    //   - Branch C: no unscored, no transition seen yet → stale-lock timeout fallback (5 min)
+    // Scrape-lock lifecycle state machine.
+    //
+    // State definitions:
+    //   Unactivated guard — no CV: scoring is never attempted; raw job arrival = done
+    //   Branch A — unscored jobs observed: pipeline is in-flight, keep polling
+    //   Branch B — transition observed→complete: all jobs now scored, release lock
+    //   Branch C — activated, no unscored ever seen: two sub-cases:
+    //     C-fast — new jobs arrived already-scored (scoring beat the first poll): release now
+    //     C-timeout — nothing arrived yet or scrape crashed: 5-min safety net
     useEffect(() => {
         const hasUnscored = jobs.some(j => j.fit_score == null);
         setHasUnscoredJobs(hasUnscored);
 
-        if (localStorage.getItem('applydir_is_scraping') === 'true') {
-            if (!isActivated && jobs.length > 0) {
-                // Unactivated profiles skip AI scoring entirely — arriving raw jobs mean scraping is done
+        if (localStorage.getItem('applydir_is_scraping') !== 'true') return;
+
+        // ── Unactivated guard ────────────────────────────────────────────────
+        // Scoring is intentionally skipped server-side; raw job arrival is the
+        // only completion signal we'll ever get for these users.
+        if (!isActivated && jobs.length > 0) {
+            localStorage.removeItem('applydir_is_scraping');
+            localStorage.removeItem('applydir_scraping_started_at');
+            localStorage.removeItem('applydir_scraping_job_count');
+            setIsScrapeActive(false);
+            scrapeSeenUnscoredRef.current = false;
+            return;
+        }
+
+        if (hasUnscored) {
+            // Branch A: pipeline in-flight — record observation and keep polling
+            scrapeSeenUnscoredRef.current = true;
+        } else if (scrapeSeenUnscoredRef.current) {
+            // Branch B: unscored→scored transition complete — background thread done
+            localStorage.removeItem('applydir_is_scraping');
+            localStorage.removeItem('applydir_scraping_started_at');
+            localStorage.removeItem('applydir_scraping_job_count');
+            setIsScrapeActive(false);
+            scrapeSeenUnscoredRef.current = false;
+        } else {
+            // Branch C: no unscored jobs observed this session
+            const countAtStart = parseInt(
+                localStorage.getItem('applydir_scraping_job_count') || '0'
+            );
+            const newJobsArrived = jobs.length > countAtStart;
+
+            if (isActivated && newJobsArrived) {
+                // C-fast: new jobs arrived already-scored — scoring completed before first poll
                 localStorage.removeItem('applydir_is_scraping');
                 localStorage.removeItem('applydir_scraping_started_at');
-                setIsScrapeActive(false);
-                scrapeSeenUnscoredRef.current = false;
-                return;
-            }
-
-            if (hasUnscored) {
-                scrapeSeenUnscoredRef.current = true;                              // Branch A
-            } else if (scrapeSeenUnscoredRef.current) {
-                localStorage.removeItem('applydir_is_scraping');                  // Branch B
-                localStorage.removeItem('applydir_scraping_started_at');
+                localStorage.removeItem('applydir_scraping_job_count');
                 setIsScrapeActive(false);
                 scrapeSeenUnscoredRef.current = false;
             } else {
-                const startedAt = parseInt(                                        // Branch C
+                // C-timeout: safety net for crashed scrapes or zero-result runs
+                const startedAt = parseInt(
                     localStorage.getItem('applydir_scraping_started_at') || '0'
                 );
                 if (startedAt && Date.now() - startedAt > 5 * 60 * 1000) {
                     localStorage.removeItem('applydir_is_scraping');
                     localStorage.removeItem('applydir_scraping_started_at');
+                    localStorage.removeItem('applydir_scraping_job_count');
                     setIsScrapeActive(false);
                 }
             }
