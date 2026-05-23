@@ -76,7 +76,7 @@ const JobsPage = () => {
     const { data: pageData, isLoading: loading, isFetching } = useQuery({
         queryKey: ['jobs-page', filterTab, currentPage],
         queryFn:  () => getJobsPage(currentPage, filterTab, itemsPerPage),
-        refetchInterval: (isScrapeActive || hasUnscoredJobs) ? 3000 : false,
+        refetchInterval: (isActivated && (isScrapeActive || hasUnscoredJobs)) ? 3000 : false,
         staleTime: 10000,
         refetchOnWindowFocus: false,
     });
