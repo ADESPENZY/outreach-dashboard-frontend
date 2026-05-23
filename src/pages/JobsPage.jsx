@@ -154,13 +154,15 @@ const JobsPage = () => {
         },
         onSuccess: (data) => {
             setIsScrapeModalOpen(false);
+            // Single clean fetch the moment the server acknowledges the scrape request.
+            // This hydrates the page immediately and gives the scrape-lock lifecycle
+            // effect its first updated totalCount to compare against countAtStart.
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
 
             if (data?.status === 'processing') {
-                // 202: background thread owns the work. Keep isScrapeActive=true so the
-                // banner stays visible and the submit button stays blocked. The
-                // hasUnscoredJobs effect will clear both state and localStorage once the
-                // pipeline finishes and all jobs are scored.
+                // 202: background thread owns the work. isScrapeActive stays true so the
+                // banner remains visible. The scrape-lock lifecycle effect (keyed on
+                // totalCount) will clear the banner once new jobs arrive in the database.
                 toast.success('Scraper running in the background — jobs will appear shortly. 🔍', { autoClose: 5000 });
             } else {
                 // Synchronous response path (legacy / should not occur after 202 refactor).

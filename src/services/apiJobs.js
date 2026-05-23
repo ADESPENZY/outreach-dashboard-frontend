@@ -16,7 +16,9 @@ export async function getScrapedJobs() {
 
 /**
  * Page-based fetch for the Jobs dashboard.
- * Returns { jobs, next_cursor: null, total_count, total_pages, page }
+ * Returns { jobs, total_count, total_pages, page }
+ * Hits /api/jobs/?page=N&limit=10 so the first slice arrives immediately
+ * without waiting for the full job list to be fetched and serialised.
  */
 export async function getJobsPage(page = 1, filterTab = 'All', limit = 10) {
   try {
@@ -24,7 +26,7 @@ export async function getJobsPage(page = 1, filterTab = 'All', limit = 10) {
     if (filterTab && filterTab !== 'All') {
       params.status = filterTab.toLowerCase().replace(/ /g, '_');
     }
-    const response = await api.get("/api/jobs/stream/", { params });
+    const response = await api.get("/api/jobs/", { params });
     return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));
