@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -24,7 +24,6 @@ const JobsPage = () => {
 
     // ── All state — hoisted above every hook so no const is read before initialisation (TDZ-safe) ──
     const [isScrapeActive, setIsScrapeActive]       = useState(() => localStorage.getItem('applydir_is_scraping') === 'true');
-    const [hasUnscoredJobs, setHasUnscoredJobs]     = useState(false);
     const [filterTab, setFilterTab]                 = useState('All');
     const [currentPage, setCurrentPage]             = useState(1);
     const itemsPerPage                              = 10;
@@ -40,14 +39,6 @@ const JobsPage = () => {
     const [showModalTour, setShowModalTour]       = useState(false);
     const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
     const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
-    // Tracks whether this page mount has observed any unscored jobs during an active scrape.
-    // Used to detect the true→false transition that signals the background pipeline is done.
-    const scrapeSeenUnscoredRef = useRef(false);
-    // Total job count at the moment a scrape was triggered — persisted in localStorage so it
-    // survives page navigations mid-scrape.  Used by Branch C to detect fast-score completions.
-    const scrapeTotalAtStartRef = useRef(
-        parseInt(localStorage.getItem('applydir_scraping_job_count') || '0')
-    );
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
@@ -76,9 +67,10 @@ const JobsPage = () => {
     const { data: pageData, isLoading: loading, isFetching } = useQuery({
         queryKey: ['jobs-page', filterTab, currentPage],
         queryFn:  () => getJobsPage(currentPage, filterTab, itemsPerPage),
-        refetchInterval: (isActivated && (isScrapeActive || hasUnscoredJobs)) ? 3000 : false,
-        staleTime: 10000,
+        refetchInterval: false,
         refetchOnWindowFocus: false,
+        refetchOnReconnect: false,
+        staleTime: 30000,
     });
 
     const jobs       = pageData?.jobs        ?? [];
@@ -157,11 +149,8 @@ const JobsPage = () => {
             setCurrentPage(1);
             localStorage.setItem('applydir_is_scraping', 'true');
             localStorage.setItem('applydir_scraping_started_at', Date.now().toString());
-            // Snapshot total job count (not page-slice length) so Branch C can
-            // detect fast-score completions regardless of page size.
             const countNow = String(pageData?.total_count ?? 0);
             localStorage.setItem('applydir_scraping_job_count', countNow);
-            scrapeTotalAtStartRef.current = pageData?.total_count ?? 0;
         },
         onSuccess: (data) => {
             setIsScrapeModalOpen(false);
@@ -286,71 +275,40 @@ const JobsPage = () => {
     // Show the loading banner only before any jobs have arrived for this user.
     const showScrapingBanner = isScrapingInProgress && totalCount === 0 && jobs.length === 0;
 
-    // Scrape-lock lifecycle state machine.
-    //
-    // State definitions:
-    //   Unactivated guard — no CV: scoring is never attempted; raw job arrival = done
-    //   Branch A — unscored jobs observed on page 1: pipeline in-flight, keep polling
-    //   Branch B — transition observed→complete: page 1 jobs all scored, release lock
-    //   Branch C — activated, no unscored ever seen: two sub-cases:
-    //     C-fast — total_count grew since scrape start AND no unscored: scoring beat first poll
-    //     C-timeout — nothing new arrived or scrape crashed: 5-min safety net
+    // Scrape-lock lifecycle: clears isScrapeActive once the background job
+    // is finished. Three exit conditions (no polling required):
+    //   1. Unactivated user — any job arrival confirms the scrape landed.
+    //   2. Activated user — total_count grew past the pre-scrape snapshot.
+    //   3. Safety timeout — 5 minutes elapsed regardless of outcome.
     useEffect(() => {
-        // CRITICAL FIX: unactivated profiles never receive scores server-side,
-        // so treat hasUnscored as false for them to immediately release the polling lock.
-        const hasUnscored = isActivated ? jobs.some(j => j.fit_score == null) : false;
-        setHasUnscoredJobs(hasUnscored);
-
         if (localStorage.getItem('applydir_is_scraping') !== 'true') return;
 
-        // ── Unactivated guard ────────────────────────────────────────────────
-        // Scoring is intentionally skipped server-side; raw job arrival is the
-        // only completion signal we'll ever get for these users.
-        if (!isActivated && jobs.length > 0) {
+        const countAtStart = parseInt(localStorage.getItem('applydir_scraping_job_count') || '0');
+
+        if (!isActivated && totalCount > 0) {
             localStorage.removeItem('applydir_is_scraping');
             localStorage.removeItem('applydir_scraping_started_at');
             localStorage.removeItem('applydir_scraping_job_count');
             setIsScrapeActive(false);
-            scrapeSeenUnscoredRef.current = false;
             return;
         }
 
-        if (hasUnscored) {
-            // Branch A: pipeline in-flight — record observation and keep polling
-            scrapeSeenUnscoredRef.current = true;
-        } else if (scrapeSeenUnscoredRef.current) {
-            // Branch B: unscored→scored transition complete — background thread done
+        if (isActivated && totalCount > countAtStart) {
             localStorage.removeItem('applydir_is_scraping');
             localStorage.removeItem('applydir_scraping_started_at');
             localStorage.removeItem('applydir_scraping_job_count');
             setIsScrapeActive(false);
-            scrapeSeenUnscoredRef.current = false;
-        } else {
-            // Branch C: no unscored jobs observed this session
-            // Compare against the total DB count snapshotted at scrape start — this
-            // is not capped by page size so it reliably detects new job arrivals.
-            const countAtStart    = parseInt(localStorage.getItem('applydir_scraping_job_count') || '0');
-            const newJobsArrived  = totalCount > countAtStart;
-
-            if (isActivated && newJobsArrived) {
-                // C-fast: new jobs arrived already-scored — scoring beat the first poll
-                localStorage.removeItem('applydir_is_scraping');
-                localStorage.removeItem('applydir_scraping_started_at');
-                localStorage.removeItem('applydir_scraping_job_count');
-                setIsScrapeActive(false);
-                scrapeSeenUnscoredRef.current = false;
-            } else {
-                // C-timeout: safety net for crashed scrapes or zero-result runs
-                const startedAt = parseInt(localStorage.getItem('applydir_scraping_started_at') || '0');
-                if (startedAt && Date.now() - startedAt > 5 * 60 * 1000) {
-                    localStorage.removeItem('applydir_is_scraping');
-                    localStorage.removeItem('applydir_scraping_started_at');
-                    localStorage.removeItem('applydir_scraping_job_count');
-                    setIsScrapeActive(false);
-                }
-            }
+            return;
         }
-    }, [jobs, isActivated, totalCount]);
+
+        const startedAt = parseInt(localStorage.getItem('applydir_scraping_started_at') || '0');
+        if (startedAt && Date.now() - startedAt > 5 * 60 * 1000) {
+            localStorage.removeItem('applydir_is_scraping');
+            localStorage.removeItem('applydir_scraping_started_at');
+            localStorage.removeItem('applydir_scraping_job_count');
+            setIsScrapeActive(false);
+        }
+    }, [totalCount, isActivated]);
 
     // Auto-open modal and activate tour step 1 on mount when tour param is present
     useEffect(() => {
