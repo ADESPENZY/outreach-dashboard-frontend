@@ -39,6 +39,8 @@ const JobsPage = () => {
     const [showModalTour, setShowModalTour]       = useState(false);
     const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
     const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
+    const [newJobsCount, setNewJobsCount] = useState(0);
+    const [showNewJobsBanner, setShowNewJobsBanner] = useState(false);
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
@@ -80,6 +82,16 @@ const JobsPage = () => {
     // Reset to page 1 whenever the filter tab changes so users always land
     // on the first page of a new filter set.
     useEffect(() => { setCurrentPage(1); }, [filterTab]);
+
+    // While a scrape is running, poll the job list every 8 seconds so the
+    // page detects new arrivals without a manual refresh.
+    useEffect(() => {
+        if (!isScrapeActive) return;
+        const id = setInterval(() => {
+            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
+        }, 8000);
+        return () => clearInterval(id);
+    }, [isScrapeActive, queryClient]);
 
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
@@ -151,6 +163,7 @@ const JobsPage = () => {
             localStorage.setItem('applydir_scraping_started_at', Date.now().toString());
             const countNow = String(pageData?.total_count ?? 0);
             localStorage.setItem('applydir_scraping_job_count', countNow);
+            toast.info('Scrape initiated. This may take a few moments.');
         },
         onSuccess: (data) => {
             setIsScrapeModalOpen(false);
@@ -163,7 +176,7 @@ const JobsPage = () => {
                 // 202: background thread owns the work. isScrapeActive stays true so the
                 // banner remains visible. The scrape-lock lifecycle effect (keyed on
                 // totalCount) will clear the banner once new jobs arrive in the database.
-                toast.success('Scraper running in the background — jobs will appear shortly. 🔍', { autoClose: 5000 });
+                toast.success('Scrape successful! Jobs are being added to your dashboard.', { autoClose: 5000 });
             } else {
                 // Synchronous response path (legacy / should not occur after 202 refactor).
                 setIsScrapeActive(false);
@@ -184,12 +197,18 @@ const JobsPage = () => {
                 setShowAutoScoutBanner(true);
             }
         },
+        // onSettled is the finally-equivalent: always runs after success or error.
+        // Guarantees the modal closes even if onSuccess throws, so the button
+        // can never get stuck regardless of the API outcome.
+        onSettled: () => {
+            setIsScrapeModalOpen(false);
+        },
         onError: (err) => {
             setIsScrapeActive(false);
             localStorage.removeItem('applydir_is_scraping');
             localStorage.removeItem('applydir_scraping_started_at');
             localStorage.removeItem('applydir_scraping_job_count');
-            toast.error(err.message || 'Scraping failed. Please try again.');
+            toast.error('Failed to start scrape. Please try again.');
         },
     });
 
@@ -278,7 +297,7 @@ const JobsPage = () => {
     const showScrapingBanner = isScrapingInProgress && totalCount === 0 && jobs.length === 0;
 
     // Scrape-lock lifecycle: clears isScrapeActive once the background job
-    // is finished. Three exit conditions (no polling required):
+    // is finished and shows the "new jobs" arrival banner. Exit conditions:
     //   1. Unactivated user — any job arrival confirms the scrape landed.
     //   2. Activated user — total_count grew past the pre-scrape snapshot.
     //   3. Safety timeout — 5 minutes elapsed regardless of outcome.
@@ -287,28 +306,35 @@ const JobsPage = () => {
 
         const countAtStart = parseInt(localStorage.getItem('applydir_scraping_job_count') || '0');
 
-        if (!isActivated && totalCount > 0) {
+        const _clearScrapeState = () => {
             localStorage.removeItem('applydir_is_scraping');
             localStorage.removeItem('applydir_scraping_started_at');
             localStorage.removeItem('applydir_scraping_job_count');
             setIsScrapeActive(false);
+        };
+
+        const _showArrivalBanner = (delta) => {
+            if (delta > 0) {
+                setNewJobsCount(delta);
+                setShowNewJobsBanner(true);
+            }
+        };
+
+        if (!isActivated && totalCount > 0) {
+            _showArrivalBanner(totalCount - countAtStart);
+            _clearScrapeState();
             return;
         }
 
         if (isActivated && totalCount > countAtStart) {
-            localStorage.removeItem('applydir_is_scraping');
-            localStorage.removeItem('applydir_scraping_started_at');
-            localStorage.removeItem('applydir_scraping_job_count');
-            setIsScrapeActive(false);
+            _showArrivalBanner(totalCount - countAtStart);
+            _clearScrapeState();
             return;
         }
 
         const startedAt = parseInt(localStorage.getItem('applydir_scraping_started_at') || '0');
         if (startedAt && Date.now() - startedAt > 5 * 60 * 1000) {
-            localStorage.removeItem('applydir_is_scraping');
-            localStorage.removeItem('applydir_scraping_started_at');
-            localStorage.removeItem('applydir_scraping_job_count');
-            setIsScrapeActive(false);
+            _clearScrapeState();
         }
     }, [totalCount, isActivated]);
 
@@ -389,6 +415,63 @@ const JobsPage = () => {
                     />
                 </div>
             </div>
+
+            {/* ── New jobs arrival banner ────────────────────────────────────────── */}
+            <AnimatePresence>
+                {showNewJobsBanner && (
+                    <motion.div
+                        key="new-jobs-banner"
+                        initial={{ opacity: 0, y: -16, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0,   scale: 1    }}
+                        exit={{    opacity: 0, y: -16, scale: 0.97 }}
+                        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+                        className="relative overflow-hidden bg-gradient-to-r from-emerald-950 to-teal-900 border border-emerald-500/30 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-xl"
+                    >
+                        {/* Subtle shimmer */}
+                        <motion.div
+                            className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 via-transparent to-transparent pointer-events-none"
+                            animate={{ opacity: [0.4, 0.9, 0.4] }}
+                            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+                        />
+
+                        {/* Icon */}
+                        <div className="relative z-10 w-9 h-9 rounded-xl bg-emerald-400/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
+                            <Sparkles className="w-4 h-4 text-emerald-300" />
+                        </div>
+
+                        {/* Copy */}
+                        <div className="relative z-10 min-w-0 flex-1">
+                            <p className="text-white font-bold text-sm font-montserrat leading-snug">
+                                {newJobsCount} new job{newJobsCount !== 1 ? 's' : ''} just added!
+                            </p>
+                            <p className="text-white/50 text-xs mt-0.5 font-roboto">
+                                AI has evaluated your matches — scroll down or view page 1 to see them.
+                            </p>
+                        </div>
+
+                        {/* CTA */}
+                        <button
+                            onClick={() => {
+                                setFilterTab('All');
+                                setCurrentPage(1);
+                                setShowNewJobsBanner(false);
+                            }}
+                            className="relative z-10 shrink-0 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold transition-colors shadow-sm"
+                        >
+                            View new jobs
+                        </button>
+
+                        {/* Dismiss */}
+                        <button
+                            onClick={() => setShowNewJobsBanner(false)}
+                            className="relative z-10 shrink-0 text-white/40 hover:text-white/80 transition-colors"
+                            aria-label="Dismiss"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
             {/* ── Auto-Scout live status banner ──────────────────────────────────── */}
             <AnimatePresence>
@@ -902,11 +985,11 @@ const JobsPage = () => {
                             <div className="pt-1">
                                 <button
                                     type="submit"
-                                    disabled={scrapeMutation.isPending || isScrapeActive}
+                                    disabled={scrapeMutation.isPending}
                                     className="w-full bg-gradient-to-r from-primary-light to-primary-dark text-white p-3 rounded-xl font-semibold shadow-md shadow-orange-100 hover:opacity-90 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
                                 >
-                                    {(scrapeMutation.isPending || isScrapeActive)
-                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping in background...</>
+                                    {scrapeMutation.isPending
+                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting scrape...</>
                                         : 'Start Scrape'}
                                 </button>
                             </div>
