@@ -76,7 +76,7 @@ const RegisterPage = () => {
     mutationFn: (data) => authRegister(data),
     onSuccess: () => {
       toast.success("Account created successfully!");
-      navigate('/dashboard/jobs', { replace: true });
+      navigate('/dashboard', { replace: true });
     },
     onError: (err) => {
       toast.error(err.message || 'Registration failed');
