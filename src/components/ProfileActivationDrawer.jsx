@@ -1,92 +1,137 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Sparkles, FileText, Loader2, Brain, UploadCloud } from 'lucide-react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  X, Sparkles, Upload, FileText, Loader2, ShieldCheck,
+} from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { updateProfile, uploadCV } from '../services/apiProfile';
-import { updateAutoScoutSettings } from '../services/apiSettings';
+import { getProfile, createProfile, updateProfile, uploadCV } from '../services/apiProfile';
 
+// ── Field — exact match from Onboarding.jsx ───────────────────────────────────
+function Field({ label, value, onChange, placeholder, type = 'text' }) {
+  return (
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{label}</label>
+      <input
+        type={type}
+        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-primary-light/50 focus:ring-2 focus:ring-primary-light/10 transition-all"
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+      />
+    </div>
+  );
+}
+
+// ── ProfileActivationDrawer ───────────────────────────────────────────────────
+// Rewritten as a centered modal.
+// Props interface is identical to the old drawer so JobsPage.jsx needs no edits.
 export default function ProfileActivationDrawer({ isOpen, onClose }) {
-  const queryClient = useQueryClient();
-  const [cvText, setCvText] = useState('');
-  const [scoringRules, setScoringRules] = useState('');
-  const [isExtractingFile, setIsExtractingFile] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const fileInputRef = useRef(null);
+  const queryClient    = useQueryClient();
+  const fileInputRef   = useRef(null);
+  const extractTimer   = useRef(null);
 
-  const processFile = async (file) => {
-    if (!file) return;
-    const allowed = [
-      'application/pdf',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    ];
-    if (!allowed.includes(file.type)) {
-      toast.error('Please upload a PDF or Word document (.pdf, .doc, .docx)');
+  // Profile form (pre-filled from API on open)
+  const [form, setForm]                   = useState({ full_name: '', location: '', phone: '', linkedin_url: '' });
+  const [profileExists, setProfileExists] = useState(false);
+
+  // CV upload state — mirrors Onboarding.jsx Step 1 exactly
+  const [cvFile, setCvFile]               = useState(null);
+  const [cvUploading, setCvUploading]     = useState(false);
+  const [cvUploaded, setCvUploaded]       = useState(false);
+  const [cvExtracting, setCvExtracting]   = useState(false);
+
+  // Load profile when the modal opens so form fields are pre-filled
+  useEffect(() => {
+    if (!isOpen) return;
+    getProfile()
+      .then(profile => {
+        if (!profile) return;
+        setProfileExists(true);
+        setForm({
+          full_name:    profile.full_name    || '',
+          location:     profile.location     || '',
+          phone:        profile.phone        || '',
+          linkedin_url: profile.linkedin_url || '',
+        });
+        if (profile.cv_raw_text) setCvUploaded(true);
+      })
+      .catch(() => {/* new user — no profile yet, form starts empty */});
+  }, [isOpen]);
+
+  // Clear timer on unmount to avoid state updates on an unmounted component
+  useEffect(() => {
+    return () => { if (extractTimer.current) clearTimeout(extractTimer.current); };
+  }, []);
+
+  const set = (field, value) => setForm(f => ({ ...f, [field]: value }));
+
+  // ── CV upload — unified activation trigger ────────────────────────────────
+  const handleFileSelect = async (file) => {
+    if (!file || file.type !== 'application/pdf') {
+      toast.error('Please select a PDF file');
       return;
     }
-    setIsExtractingFile(true);
+
+    setCvFile(file);      // immediate — badge renders before any network call
+    setCvUploading(true);
+
     try {
-      const formData = new FormData();
-      formData.append('cv', file);
-      const data = await uploadCV(formData);
-      const extracted = data?.cv_raw_text || data?.extracted_text || '';
-      if (extracted) {
-        setCvText(extracted);
-        toast.success('CV text extracted — review it below and activate when ready.');
+      // Always persist the profile form alongside the CV upload so name /
+      // location / phone are saved even if the user only filled them now.
+      if (profileExists) {
+        await updateProfile({
+          full_name:    form.full_name,
+          location:     form.location,
+          phone:        form.phone,
+          linkedin_url: form.linkedin_url,
+        });
       } else {
-        toast.error('Could not extract text from the file. Try pasting your CV manually.');
+        await createProfile({
+          full_name:    form.full_name,
+          location:     form.location,
+          phone:        form.phone,
+          linkedin_url: form.linkedin_url,
+        });
+        setProfileExists(true);
       }
-    } catch (err) {
-      toast.error(err.message || 'File extraction failed. Please paste your CV text manually.');
+
+      const fd = new FormData();
+      fd.append('cv', file);
+      await uploadCV(fd);
+      setCvUploaded(true);
+
+      // uploadCV resolves instantly — the backend spawned _cv_processing_pipeline
+      // in a daemon thread to run extract_skills_from_cv + score_all_unscored_jobs.
+      // Show the extracting indicator while we bridge that async gap.
+      setCvExtracting(true);
+
+      // After 9 s the OpenAI skill extraction + retroactive scoring threads
+      // should have completed for most CVs. Close the modal and refresh data.
+      extractTimer.current = setTimeout(() => {
+        setCvExtracting(false);
+        queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
+        queryClient.invalidateQueries({ queryKey: ['profile'] });
+        toast.success('AI Engine activated! Your job matches are being scored.');
+        onClose();
+      }, 9000);
+
+    } catch {
+      toast.error('CV upload failed. Please try again.');
+      setCvFile(null);
+      setCvUploaded(false);
     } finally {
-      setIsExtractingFile(false);
+      setCvUploading(false);
     }
   };
 
-  const handleFileChange = (e) => {
-    processFile(e.target.files?.[0]);
-    e.target.value = '';
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    processFile(e.dataTransfer.files?.[0]);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = () => setIsDragOver(false);
-
-  const activateMutation = useMutation({
-    mutationFn: async () => {
-      const calls = [updateProfile({ cv_raw_text: cvText.trim() })];
-      if (scoringRules.trim()) {
-        calls.push(updateAutoScoutSettings({ custom_scoring_prompt: scoringRules.trim() }));
-      }
-      return Promise.all(calls);
-    },
-    onSuccess: () => {
-      toast.success('AI Engine activated! Scores are being computed for your jobs.');
-      queryClient.invalidateQueries({ queryKey: ['profile'] });
-      queryClient.invalidateQueries({ queryKey: ['jobs-stream'] });
-      queryClient.invalidateQueries({ queryKey: ['auto-scout-settings'] });
-      onClose();
-    },
-    onError: (err) => toast.error(err.message || 'Activation failed. Please try again.'),
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!cvText.trim()) {
-      toast.error('Please paste your resume text to activate AI scoring.');
-      return;
-    }
-    activateMutation.mutate();
+  // ── Close handler — always safe to close; background thread keeps running ──
+  const handleClose = () => {
+    if (extractTimer.current) clearTimeout(extractTimer.current);
+    setCvFile(null);
+    setCvUploaded(false);
+    setCvExtracting(false);
+    onClose();
   };
 
   return (
@@ -95,154 +140,178 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
         <>
           {/* Backdrop */}
           <motion.div
-            key="pad-backdrop"
+            key="pac-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.22 }}
-            className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm"
-            onClick={onClose}
+            className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm"
+            onClick={handleClose}
           />
 
-          {/* Drawer panel */}
+          {/* Modal card */}
           <motion.div
-            key="pad-panel"
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
-            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-            className="fixed right-0 top-0 bottom-0 z-[90] w-full max-w-md bg-white shadow-2xl flex flex-col"
+            key="pac-modal"
+            initial={{ opacity: 0, scale: 0.96, y: 18 }}
+            animate={{ opacity: 1, scale: 1,    y: 0  }}
+            exit={{    opacity: 0, scale: 0.96, y: 18 }}
+            transition={{ type: 'spring', stiffness: 340, damping: 30 }}
+            className="fixed inset-0 z-[90] flex items-center justify-center p-4 pointer-events-none"
           >
-            {/* Header */}
-            <div className="px-6 py-5 border-b border-neutral-dark flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center shadow-md shadow-orange-200 shrink-0">
-                  <Sparkles className="w-4 h-4 text-white" />
+            <div
+              className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden pointer-events-auto"
+              onClick={e => e.stopPropagation()}
+            >
+              {/* ── Header ──────────────────────────────────────────────── */}
+              <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center shadow-md shadow-orange-200 shrink-0">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-bold text-gray-900 font-montserrat text-base leading-tight">
+                      Activate AI Engine
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Upload your CV to unlock AI scoring &amp; tailored resumes
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h2 className="font-bold text-black font-montserrat text-base leading-tight">
-                    Activate AI Engine
-                  </h2>
-                  <p className="text-xs text-secondary-dark mt-0.5">
-                    Unlock scoring &amp; tailored CV generation
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={onClose}
-                className="p-1.5 text-secondary-dark hover:bg-neutral-dark rounded-lg transition-colors"
-                aria-label="Close drawer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Scrollable body */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-6 py-6 space-y-6">
-
-              {/* CV Text section */}
-              <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <FileText className="w-4 h-4 text-primary-light shrink-0" />
-                  <label className="text-sm font-semibold text-black">Resume / CV Text</label>
-                  <span className="ml-auto text-[10px] font-semibold text-primary-dark bg-primary-light/10 border border-primary-light/20 px-2 py-0.5 rounded-full">
-                    Required
-                  </span>
-                </div>
-                <p className="text-xs text-secondary-dark mb-2.5 leading-relaxed">
-                  Upload your resume or paste the text below. The AI uses this to compute match
-                  scores and generate a tailored CV for each approved job.
-                </p>
-
-                {/* File dropzone */}
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                <div
-                  onClick={() => !isExtractingFile && fileInputRef.current?.click()}
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all mb-4 flex flex-col items-center justify-center group ${
-                    isDragOver
-                      ? 'border-primary-light bg-primary-light/5'
-                      : 'border-neutral-dark hover:border-primary-light/50 bg-neutral hover:bg-primary-light/5'
-                  } ${isExtractingFile ? 'pointer-events-none' : ''}`}
+                <button
+                  onClick={handleClose}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                  aria-label="Close"
                 >
-                  {isExtractingFile ? (
-                    <>
-                      <Loader2 className="w-8 h-8 text-primary-light animate-spin mb-2" />
-                      <p className="text-sm font-semibold text-secondary-dark">Extracting text…</p>
-                      <p className="text-xs text-secondary-dark/50 mt-1">This takes just a moment</p>
-                    </>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* ── Body ────────────────────────────────────────────────── */}
+              <div className="p-6 space-y-5">
+
+                {/* Profile form grid — exact from Onboarding.jsx Step 1 */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <Field
+                    label="Full Name"
+                    value={form.full_name}
+                    onChange={v => set('full_name', v)}
+                    placeholder="Joshua Atoyebi"
+                  />
+                  <Field
+                    label="Location"
+                    value={form.location}
+                    onChange={v => set('location', v)}
+                    placeholder="Lagos, Nigeria"
+                  />
+                  <Field
+                    label="Phone"
+                    value={form.phone}
+                    onChange={v => set('phone', v)}
+                    placeholder="+234 800 000 0000"
+                  />
+                  <Field
+                    label="LinkedIn URL"
+                    value={form.linkedin_url}
+                    onChange={v => set('linkedin_url', v)}
+                    placeholder="linkedin.com/in/yourname"
+                  />
+                </div>
+
+                {/* CV upload — exact drop zone layout from Onboarding.jsx */}
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    CV / Résumé (PDF) <span className="text-primary-light">*</span>
+                  </label>
+
+                  {cvFile ? (
+                    /* ── Uploaded success row (emerald green) ── */
+                    <div className="flex items-center gap-3 p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center shrink-0">
+                        <FileText className="w-4 h-4 text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{cvFile.name}</p>
+                        <p className="text-xs text-gray-500">{(cvFile.size / 1024).toFixed(0)} KB · PDF</p>
+                      </div>
+
+                      {/* Uploading indicator */}
+                      {cvUploading && (
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-primary-light shrink-0">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…
+                        </span>
+                      )}
+
+                      {/* Settled success check */}
+                      {cvUploaded && !cvUploading && !cvExtracting && (
+                        <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+                      )}
+
+                      {/* AI reading indicator */}
+                      {cvExtracting && !cvUploading && (
+                        <span className="flex items-center gap-1.5 text-xs font-medium text-primary-light shrink-0">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> AI reading…
+                        </span>
+                      )}
+
+                      {/* Remove file — disabled while any async work is in flight */}
+                      {!cvUploading && !cvExtracting && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCvFile(null);
+                            setCvUploaded(false);
+                            if (fileInputRef.current) fileInputRef.current.value = '';
+                          }}
+                          className="text-gray-400 hover:text-gray-600 transition-colors ml-1 shrink-0"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
                   ) : (
-                    <>
-                      <UploadCloud className="w-8 h-8 text-secondary-dark/40 group-hover:text-primary-light mb-2 transition-colors" />
-                      <p className="text-sm font-medium text-secondary-dark group-hover:text-black transition-colors">
-                        Click to upload <span className="font-semibold text-primary-dark">PDF / Docx</span> or drag and drop
+                    /* ── Dashed drop zone — exact h-32 layout from Onboarding.jsx ── */
+                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-gray-200 rounded-xl cursor-pointer hover:border-primary-light/40 hover:bg-primary-light/5 transition-all group">
+                      <Upload className="w-7 h-7 text-gray-400 group-hover:text-primary-light mb-2 transition-colors" />
+                      <span className="text-sm font-medium text-gray-500 group-hover:text-primary-dark transition-colors">
+                        Click to upload PDF
+                      </span>
+                      <span className="text-xs text-gray-400 mt-0.5">AI extracts your skills automatically</span>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".pdf"
+                        className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleFileSelect(f); }}
+                      />
+                    </label>
+                  )}
+
+                  {/* cvExtracting — blue text + 70% pulsed progress bar from Onboarding.jsx */}
+                  {cvExtracting && (
+                    <div className="mt-2.5">
+                      <p className="text-xs text-primary-dark font-medium mb-1.5">
+                        Extracting your skills with AI…
                       </p>
-                      <p className="text-xs text-secondary-dark/50 mt-1">
-                        AI will extract your text automatically
-                      </p>
-                    </>
+                      <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-gradient-to-r from-primary-dark to-primary-light rounded-full animate-pulse"
+                          style={{ width: '70%' }}
+                        />
+                      </div>
+                    </div>
                   )}
                 </div>
-
-                <textarea
-                  value={cvText}
-                  onChange={(e) => setCvText(e.target.value)}
-                  placeholder={"Paste your resume text here…\n\nJohn Doe\nSenior Software Engineer\n5 years of experience in Django, React, PostgreSQL…"}
-                  rows={10}
-                  className="w-full p-3 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/30 focus:border-primary-light outline-none resize-none transition-all text-black placeholder:text-secondary-dark/50 font-roboto leading-relaxed"
-                />
               </div>
 
-              {/* Scoring rules section */}
-              <div>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Brain className="w-4 h-4 text-accent-teal shrink-0" />
-                  <label className="text-sm font-semibold text-black">Custom AI Scoring Rules</label>
-                  <span className="ml-auto text-[10px] font-semibold text-secondary-dark bg-neutral-dark border border-neutral-dark px-2 py-0.5 rounded-full">
-                    Optional
-                  </span>
+              {/* ── Footer — visible only during extraction phase ───────── */}
+              {cvExtracting && (
+                <div className="px-6 pb-5">
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary-light/5 border border-primary-light/15 text-xs text-primary-dark font-medium">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    AI is computing your job match scores — this window will close automatically.
+                  </div>
                 </div>
-                <p className="text-xs text-secondary-dark mb-2.5 leading-relaxed">
-                  Tell the AI what makes a role a strong fit — seniority, tech stack, remote
-                  preference, salary range, company size, etc.
-                </p>
-                <textarea
-                  value={scoringRules}
-                  onChange={(e) => setScoringRules(e.target.value)}
-                  placeholder={"e.g. Prioritise remote-first roles. Prefer companies with < 200 employees. Must use Python or Django. Weight salary above £60k highly."}
-                  rows={5}
-                  className="w-full p-3 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-accent-teal/30 focus:border-accent-teal outline-none resize-none transition-all text-black placeholder:text-secondary-dark/50 font-roboto leading-relaxed"
-                />
-              </div>
-
-              {/* Spacer so content doesn't hide behind sticky footer */}
-              <div className="h-2" />
-            </form>
-
-            {/* Sticky footer */}
-            <div className="px-6 py-4 border-t border-neutral-dark shrink-0 bg-white">
-              <button
-                onClick={handleSubmit}
-                disabled={activateMutation.isPending || !cvText.trim()}
-                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white py-3 rounded-xl font-semibold text-sm shadow-md shadow-orange-200 hover:opacity-90 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100"
-              >
-                {activateMutation.isPending ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Activating…</>
-                ) : (
-                  <><Sparkles className="w-4 h-4" /> Activate AI Engine</>
-                )}
-              </button>
-              <p className="text-xs text-secondary-dark/50 text-center mt-3">
-                Your CV text is stored securely and used only for job matching &amp; tailoring.
-              </p>
+              )}
             </div>
           </motion.div>
         </>
