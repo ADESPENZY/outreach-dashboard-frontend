@@ -416,58 +416,66 @@ const JobsPage = () => {
                 </div>
             </div>
 
-            {/* ── New jobs arrival banner ────────────────────────────────────────── */}
+            {/* ── New jobs arrival pill — fixed center-bottom, Render-style ───────
+                 Rendered outside the page flow via fixed positioning so it floats
+                 above all content without shifting the layout.                    ── */}
             <AnimatePresence>
                 {showNewJobsBanner && (
                     <motion.div
-                        key="new-jobs-banner"
-                        initial={{ opacity: 0, y: -16, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0,   scale: 1    }}
-                        exit={{    opacity: 0, y: -16, scale: 0.97 }}
-                        transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
-                        className="relative overflow-hidden bg-gradient-to-r from-emerald-950 to-teal-900 border border-emerald-500/30 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-xl"
+                        key="new-jobs-pill"
+                        initial={{ opacity: 0, y: 48, scale: 0.86 }}
+                        animate={{ opacity: 1, y: 0,  scale: 1    }}
+                        exit={{    opacity: 0, y: 32, scale: 0.92  }}
+                        transition={{ type: 'spring', stiffness: 380, damping: 26 }}
+                        className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 pointer-events-auto"
                     >
-                        {/* Subtle shimmer */}
-                        <motion.div
-                            className="absolute inset-0 bg-gradient-to-r from-emerald-400/10 via-transparent to-transparent pointer-events-none"
-                            animate={{ opacity: [0.4, 0.9, 0.4] }}
-                            transition={{ duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
-                        />
-
-                        {/* Icon */}
-                        <div className="relative z-10 w-9 h-9 rounded-xl bg-emerald-400/20 border border-emerald-400/40 flex items-center justify-center shrink-0">
-                            <Sparkles className="w-4 h-4 text-emerald-300" />
-                        </div>
-
-                        {/* Copy */}
-                        <div className="relative z-10 min-w-0 flex-1">
-                            <p className="text-white font-bold text-sm font-montserrat leading-snug">
-                                {newJobsCount} new job{newJobsCount !== 1 ? 's' : ''} just added!
-                            </p>
-                            <p className="text-white/50 text-xs mt-0.5 font-roboto">
-                                AI has evaluated your matches — scroll down or view page 1 to see them.
-                            </p>
-                        </div>
-
-                        {/* CTA */}
-                        <button
+                        {/* Main pill */}
+                        <motion.button
                             onClick={() => {
                                 setFilterTab('All');
                                 setCurrentPage(1);
                                 setShowNewJobsBanner(false);
                             }}
-                            className="relative z-10 shrink-0 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white text-xs font-bold transition-colors shadow-sm"
+                            whileHover={{ scale: 1.06 }}
+                            whileTap={{ scale: 0.96 }}
+                            animate={{
+                                boxShadow: [
+                                    '0 0 0px rgba(52,211,153,0)',
+                                    '0 0 22px rgba(52,211,153,0.40)',
+                                    '0 0 0px rgba(52,211,153,0)',
+                                ],
+                            }}
+                            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+                            className="flex items-center gap-2.5 pl-3.5 pr-5 py-2.5
+                                       bg-[#08111f]
+                                       border-2 border-dashed border-emerald-400/65
+                                       rounded-full
+                                       text-emerald-300 text-sm font-semibold font-montserrat
+                                       whitespace-nowrap cursor-pointer select-none
+                                       hover:border-emerald-300/90 hover:text-white
+                                       transition-colors duration-150"
                         >
-                            View new jobs
-                        </button>
+                            {/* Pulsing live dot */}
+                            <span className="relative flex h-2 w-2 shrink-0">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                            </span>
+                            <Sparkles className="w-3.5 h-3.5 shrink-0 opacity-80" />
+                            <span>
+                                {newJobsCount} new job{newJobsCount !== 1 ? 's' : ''} &mdash; view scraped jobs
+                            </span>
+                        </motion.button>
 
-                        {/* Dismiss */}
+                        {/* Separate dismiss pill */}
                         <button
                             onClick={() => setShowNewJobsBanner(false)}
-                            className="relative z-10 shrink-0 text-white/40 hover:text-white/80 transition-colors"
                             aria-label="Dismiss"
+                            className="w-7 h-7 rounded-full bg-[#08111f] border border-white/10
+                                       flex items-center justify-center shrink-0
+                                       text-white/25 hover:text-white/65 hover:border-white/25
+                                       transition-all duration-150"
                         >
-                            <X className="w-4 h-4" />
+                            <X className="w-3 h-3" />
                         </button>
                     </motion.div>
                 )}
