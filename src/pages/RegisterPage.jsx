@@ -11,6 +11,7 @@ import {
   motion, useAnimationFrame, useMotionValue,
   animate,
 } from 'framer-motion';
+import { GoogleLogin } from '@react-oauth/google';
 import SmallSpinner from '../components/SmallSpinner';
 import { useAuth } from '../context/AuthContext';
 
@@ -459,11 +460,27 @@ const RegisterPage = () => {
   const { register, handleSubmit, formState, watch } = useForm();
   const { errors } = formState;
   const navigate   = useNavigate();
-  const { register: authRegister } = useAuth();
+  const { register: authRegister, loginWithGoogle } = useAuth();
   const [showPass,    setShowPass]    = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
 
   const password = watch('password');
+
+  const googleBtnRef = useRef(null);
+  const [googleWidth, setGoogleWidth] = useState(400);
+  useEffect(() => {
+    if (googleBtnRef.current) setGoogleWidth(googleBtnRef.current.offsetWidth);
+  }, []);
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    try {
+      await loginWithGoogle(credentialResponse.credential);
+      toast.success('Welcome aboard!');
+      navigate('/dashboard', { replace: true });
+    } catch (err) {
+      toast.error(err.message || 'Google sign-in failed. Please try again.');
+    }
+  };
 
   const mutation = useMutation({
     mutationFn: (data) => authRegister(data),
@@ -527,6 +544,27 @@ const RegisterPage = () => {
 
           {/* Glass panel */}
           <div className="bg-[#12131C]/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-2xl mt-8">
+
+            {/* Google Sign-In */}
+            <div ref={googleBtnRef} className="w-full flex justify-center mb-5">
+              <GoogleLogin
+                onSuccess={handleGoogleSuccess}
+                onError={() => toast.error('Google sign-in failed. Please try again.')}
+                theme="filled_black"
+                size="large"
+                shape="rectangular"
+                text="signup_with"
+                width={googleWidth}
+              />
+            </div>
+
+            {/* OR Divider */}
+            <div className="flex items-center gap-3 mb-5">
+              <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+              <span className="text-[rgba(255,255,255,0.28)] text-[10px] font-roboto uppercase tracking-widest">or</span>
+              <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
+            </div>
+
             <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="flex flex-col gap-4">
 
               <FloatingInput

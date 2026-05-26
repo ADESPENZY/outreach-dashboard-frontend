@@ -44,3 +44,12 @@ export async function getMe() {
     throw new Error(parseApiError(err));
   }
 }
+
+export async function googleAuth(credential) {
+  try {
+    const response = await api.post("/api/accounts/auth/google/", { credential });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import api, { clearClientAuthState } from '../api';
-import { getMe, login as loginApi, register as registerApi } from '../services/apiAuth';
+import { getMe, login as loginApi, register as registerApi, googleAuth } from '../services/apiAuth';
 
 const AuthContext = createContext();
 
@@ -48,6 +48,12 @@ export const AuthProvider = ({ children }) => {
     await checkAuth();
   };
 
+  const loginWithGoogle = async (credential) => {
+    const { access } = await googleAuth(credential);
+    sessionStorage.setItem("access", access);
+    await checkAuth();
+  };
+
   const logout = async () => {
     try {
       await api.post("/api/accounts/auth/logout/");
@@ -62,7 +68,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, isAuthenticated, isLoading, login, register, logout, checkAuth }}>
+    <AuthContext.Provider value={{ currentUser, isAuthenticated, isLoading, login, register, loginWithGoogle, logout, checkAuth }}>
       {children}
     </AuthContext.Provider>
   );
