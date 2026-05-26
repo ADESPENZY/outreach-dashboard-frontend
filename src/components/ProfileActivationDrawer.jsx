@@ -11,10 +11,10 @@ import { getProfile, createProfile, updateProfile, uploadCV } from '../services/
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
     <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{label}</label>
+      <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">{label}</label>
       <input
         type={type}
-        className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-primary-light/50 focus:ring-2 focus:ring-primary-light/10 transition-all"
+        className="w-full border border-gray-200/60 bg-gray-50/50 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-primary-light/40 focus:ring-4 focus:ring-primary-light/10 transition-all duration-200"
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
@@ -159,7 +159,7 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
             className="fixed inset-0 z-[90] flex items-center justify-center p-4 pointer-events-none"
           >
             <div
-              className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden pointer-events-auto"
+              className="w-full max-w-xl bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-100/80 overflow-hidden pointer-events-auto"
               onClick={e => e.stopPropagation()}
             >
               {/* ── Header ──────────────────────────────────────────────── */}
@@ -219,7 +219,7 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
 
                 {/* CV upload — exact drop zone layout from Onboarding.jsx */}
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                     CV / Résumé (PDF) <span className="text-primary-light">*</span>
                   </label>
 

@@ -40,7 +40,7 @@ function TagInput({ value = [], onChange, placeholder, pillClass }) {
   };
 
   return (
-    <div className="flex flex-wrap gap-2 p-3 rounded-xl border border-gray-200 bg-white min-h-[52px] focus-within:border-primary-light/50 focus-within:ring-2 focus-within:ring-primary-light/10 transition-all cursor-text">
+    <div className="flex flex-wrap gap-2 p-3 rounded-xl border border-gray-200/60 bg-gray-50/50 min-h-[52px] focus-within:bg-white focus-within:border-primary-light/40 focus-within:ring-4 focus-within:ring-primary-light/10 transition-all duration-200 cursor-text">
       {value.map(tag => (
         <span key={tag} className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${pillClass}`}>
           {tag}
@@ -70,11 +70,11 @@ function TagInput({ value = [], onChange, placeholder, pillClass }) {
 function Field({ label, value, onChange, placeholder, type = 'text', rightSlot }) {
   return (
     <div>
-      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{label}</label>
+      <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">{label}</label>
       <div className="relative">
         <input
           type={type}
-          className={`w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm text-gray-700 focus:outline-none focus:border-primary-light/50 focus:ring-2 focus:ring-primary-light/10 transition-all ${rightSlot ? 'pr-10' : ''}`}
+          className={`w-full border border-gray-200/60 bg-gray-50/50 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-primary-light/40 focus:ring-4 focus:ring-primary-light/10 transition-all duration-200 ${rightSlot ? 'pr-10' : ''}`}
           placeholder={placeholder}
           value={value}
           onChange={e => onChange(e.target.value)}
@@ -295,7 +295,7 @@ export default function Onboarding() {
         </h1>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 w-full max-w-2xl">
+      <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 w-full max-w-2xl">
 
         {/* Progress header */}
         <div className="p-6 border-b border-gray-100">
@@ -339,7 +339,7 @@ export default function Onboarding() {
 
               {/* CV upload */}
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                   CV / Résumé (PDF) <span className="text-primary-light">*</span>
                 </label>
 
@@ -413,7 +413,7 @@ export default function Onboarding() {
 
               <div className="space-y-5">
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                     Target Job Titles <span className="text-primary-light">*</span>
                   </label>
                   <TagInput
@@ -426,7 +426,7 @@ export default function Onboarding() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
                     Target Locations <span className="text-primary-light">*</span>
                   </label>
                   <TagInput
@@ -583,7 +583,7 @@ export default function Onboarding() {
                     <button
                       onClick={handleConnectGmail}
                       disabled={gmailConnecting || !gmailEmail.trim() || !gmailPassword.trim()}
-                      className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:opacity-90 transition-all"
+                      className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-200"
                     >
                       {gmailConnecting
                         ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -635,7 +635,7 @@ export default function Onboarding() {
             <button
               onClick={() => setStep(s => s - 1)}
               disabled={saving}
-              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl hover:border-gray-300 transition-all disabled:opacity-50"
+              className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold text-gray-500 hover:text-gray-700 border border-gray-200 rounded-xl hover:border-gray-300 hover:-translate-y-[1px] hover:shadow-sm active:scale-[0.98] transition-all duration-200 disabled:opacity-50"
             >
               <ChevronLeft className="w-4 h-4" /> Back
             </button>
@@ -645,7 +645,7 @@ export default function Onboarding() {
             <button
               onClick={handleNext}
               disabled={nextDisabled}
-              className="flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl disabled:opacity-50 hover:opacity-90 transition-all shadow-sm"
+              className="flex items-center gap-1.5 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl shadow-sm disabled:opacity-50 hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-200"
             >
               {saving && <Loader2 className="w-4 h-4 animate-spin" />}
               {saving ? 'Saving…' : 'Next'}
@@ -655,7 +655,7 @@ export default function Onboarding() {
             <button
               onClick={handleComplete}
               disabled={saving}
-              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl disabled:opacity-60 hover:opacity-90 transition-all shadow-sm"
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl shadow-sm disabled:opacity-60 hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-200"
             >
               {saving
                 ? <Loader2 className="w-4 h-4 animate-spin" />

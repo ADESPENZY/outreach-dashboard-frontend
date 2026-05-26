@@ -8,42 +8,25 @@ import { motion } from 'framer-motion';
 import SmallSpinner from '../components/SmallSpinner';
 import { useAuth } from '../context/AuthContext';
 
-/* ─── FLOATING LABEL INPUT ─── */
-function FloatingInput({ id, label, type = 'text', register, error, rightSlot }) {
-  const [focused, setFocused] = useState(false);
-  const [hasValue, setHasValue] = useState(false);
-  const floated = focused || hasValue;
+/* ─── PREMIUM FIELD ─── */
+function Field({ id, label, type = 'text', register, error, rightSlot }) {
   return (
-    <div className="relative">
-      <div className={`relative rounded-lg border transition-all duration-200 ${
-        error
-          ? 'border-red-500/60 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'
-          : focused
-          ? 'border-[rgba(255,91,46,0.60)] shadow-[0_0_0_3px_rgba(184,46,7,0.15)]'
-          : 'border-[rgba(255,255,255,0.10)]'
-      } bg-[#000000]`}>
-        <label
-          htmlFor={id}
-          className={`absolute left-3 transition-all duration-200 pointer-events-none font-roboto ${
-            floated
-              ? `top-1.5 text-[10px] ${error ? 'text-red-400' : 'text-[rgba(255,91,46,0.80)]'}`
-              : 'top-1/2 -translate-y-1/2 text-sm text-[rgba(255,255,255,0.40)]'
-          }`}
-        >
-          {label}
-        </label>
+    <div>
+      <label htmlFor={id} className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-2">
+        {label}
+      </label>
+      <div className="relative">
         <input
           id={id}
           type={type}
-          onFocus={() => setFocused(true)}
-          onBlur={(e) => { setFocused(false); setHasValue(e.target.value.length > 0); }}
-          onChange={(e) => setHasValue(e.target.value.length > 0)}
-          className="w-full bg-transparent pt-5 pb-2 px-3 text-sm text-white font-roboto outline-none pr-10"
+          className={`w-full border border-gray-200/60 bg-gray-50/50 rounded-xl px-4 py-3 text-sm text-gray-800 placeholder:text-gray-400 focus:outline-none focus:bg-white focus:border-primary-light/40 focus:ring-4 focus:ring-primary-light/10 transition-all duration-200${rightSlot ? ' pr-10' : ''}`}
           {...register}
         />
-        {rightSlot && <div className="absolute right-3 top-1/2 -translate-y-1/2">{rightSlot}</div>}
+        {rightSlot && (
+          <div className="absolute right-3 top-1/2 -translate-y-1/2">{rightSlot}</div>
+        )}
       </div>
-      {error && <p className="text-red-400 text-xs mt-1 font-roboto">{error}</p>}
+      {error && <p className="text-red-500 text-xs mt-1.5">{error}</p>}
     </div>
   );
 }
@@ -84,10 +67,12 @@ const RegisterPage = () => {
   });
 
   return (
-    <section className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#0B0C10] text-white">
-      {/* ── LEFT: Form Panel ── */}
-      <div className="lg:col-span-5 flex flex-col justify-between p-8 sm:p-12 lg:p-16 relative z-10">
-        {/* Brand */}
+    <section className="min-h-screen grid grid-cols-1 lg:grid-cols-2 bg-gray-50">
+
+      {/* ── LEFT: Form Panel (light) ── */}
+      <div className="flex flex-col justify-between p-8 sm:p-12 lg:p-16 relative z-10">
+
+        {/* Brand mark */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
@@ -97,9 +82,9 @@ const RegisterPage = () => {
           <Rocket
             size={18}
             className="rotate-45"
-            style={{ color: '#FF5B2E', filter: 'drop-shadow(0 0 6px rgba(255,91,46,0.50))' }}
+            style={{ color: '#FF5B2E', filter: 'drop-shadow(0 0 5px rgba(255,91,46,0.40))' }}
           />
-          <span className="font-montserrat font-semibold text-white text-lg">
+          <span className="font-montserrat font-semibold text-gray-900 text-lg">
             Apply
             <span className="font-extrabold bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent">
               DIR
@@ -114,32 +99,34 @@ const RegisterPage = () => {
           transition={{ delay: 0.15, duration: 0.5 }}
           className="max-w-md w-full mx-auto my-auto"
         >
-          {/* Heading */}
-          <div className="flex items-start gap-3">
+          {/* Page heading */}
+          <div className="flex items-start gap-3 mb-8">
             <div
               className="w-0.5 h-8 rounded-full flex-shrink-0 mt-1"
               style={{ background: 'linear-gradient(to bottom, #B82E07, #FF5B2E)' }}
             />
             <div>
-              <p className="text-[rgba(255,255,255,0.45)] font-montserrat text-sm mb-1">
+              <p className="text-gray-500 font-montserrat text-sm mb-1">
                 Get started,
               </p>
-              <h1 className="text-white font-montserrat font-bold text-2xl leading-tight">
+              <h1 className="text-gray-900 font-montserrat font-bold text-2xl leading-tight">
                 Create your career pipeline.
               </h1>
             </div>
           </div>
 
-          {/* Glass panel */}
-          <div className="bg-[#12131C]/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-2xl mt-8">
-            <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="flex flex-col gap-4">
-              <FloatingInput
+          {/* Premium floating white card */}
+          <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-gray-100 p-8">
+            <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="flex flex-col gap-5">
+
+              <Field
                 id="full_name"
                 label="Full Name"
                 register={register('full_name', { required: 'Full name is required' })}
                 error={errors?.full_name?.message}
               />
-              <FloatingInput
+
+              <Field
                 id="email"
                 label="Email Address"
                 type="email"
@@ -149,15 +136,16 @@ const RegisterPage = () => {
                 })}
                 error={errors?.email?.message}
               />
-              <FloatingInput
+
+              <Field
                 id="username"
                 label="Username"
                 register={register('username', { required: 'Username is required' })}
                 error={errors?.username?.message}
               />
 
-              <div className="grid grid-cols-2 gap-3">
-                <FloatingInput
+              <div className="grid grid-cols-2 gap-4">
+                <Field
                   id="password"
                   label="Password"
                   type={showPass ? 'text' : 'password'}
@@ -165,22 +153,19 @@ const RegisterPage = () => {
                     required: 'Password is required',
                     minLength: { value: 8, message: 'Must be at least 8 characters' },
                     validate: {
-                      hasUppercase: (v) => /[A-Z]/.test(v) || 'Must contain at least one uppercase letter',
-                      hasNumber: (v) => /[0-9]/.test(v) || 'Must contain at least one number',
+                      hasUppercase: (v) => /[A-Z]/.test(v) || 'Needs an uppercase letter',
+                      hasNumber:    (v) => /[0-9]/.test(v) || 'Needs a number',
                     },
                   })}
                   error={errors?.password?.message}
                   rightSlot={
-                    <button
-                      type="button"
-                      onClick={() => setShowPass((p) => !p)}
-                      className="text-[rgba(255,255,255,0.30)] hover:text-[rgba(255,255,255,0.70)] transition-colors"
-                    >
+                    <button type="button" onClick={() => setShowPass((p) => !p)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors">
                       {showPass ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   }
                 />
-                <FloatingInput
+                <Field
                   id="confirmPassword"
                   label="Confirm"
                   type={showConfirm ? 'text' : 'password'}
@@ -190,42 +175,31 @@ const RegisterPage = () => {
                   })}
                   error={errors?.confirmPassword?.message}
                   rightSlot={
-                    <button
-                      type="button"
-                      onClick={() => setShowConfirm((p) => !p)}
-                      className="text-[rgba(255,255,255,0.30)] hover:text-[rgba(255,255,255,0.70)] transition-colors"
-                    >
+                    <button type="button" onClick={() => setShowConfirm((p) => !p)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors">
                       {showConfirm ? <EyeOff size={14} /> : <Eye size={14} />}
                     </button>
                   }
                 />
               </div>
 
-              <motion.button
+              <button
                 type="submit"
                 disabled={mutation.isPending}
-                whileHover={{ y: -1, boxShadow: '0 0 20px rgba(255,91,46,0.35), 0 0 40px rgba(184,46,7,0.20)' }}
-                whileTap={{ y: 0, boxShadow: 'none' }}
-                className="w-full h-12 rounded-lg text-white font-montserrat font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed transition-all duration-200 mt-2"
+                className="w-full h-12 rounded-xl text-white font-montserrat font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed hover:-translate-y-[1px] hover:shadow-md active:scale-[0.98] transition-all duration-200 mt-1"
                 style={{ background: 'linear-gradient(135deg, #B82E07 70%, #FF5B2E 30%)' }}
               >
                 {mutation.isPending ? (
-                  <>
-                    <SmallSpinner />
-                    <span>Creating account...</span>
-                  </>
+                  <><SmallSpinner /><span>Creating account...</span></>
                 ) : (
                   <span>Create Account</span>
                 )}
-              </motion.button>
+              </button>
             </form>
 
-            <p className="text-[rgba(255,255,255,0.35)] text-sm font-roboto text-center mt-6">
+            <p className="text-gray-500 text-sm text-center mt-6">
               Already have an account?{' '}
-              <Link
-                to="/"
-                className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold transition-colors"
-              >
+              <Link to="/" className="text-primary-light hover:text-primary-dark font-semibold transition-colors">
                 Sign in
               </Link>
             </p>
@@ -233,106 +207,113 @@ const RegisterPage = () => {
         </motion.div>
 
         {/* Footer */}
-        <p className="text-[rgba(255,255,255,0.20)] text-xs font-roboto text-center">
+        <p className="text-gray-400 text-xs font-roboto text-center">
           © 2025 Jatotech. Enterprise Automation Platform.
         </p>
       </div>
 
-      {/* ── RIGHT: Value Panel ── */}
+      {/* ── RIGHT: Brand Panel (dark, immersive) ── */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.2, duration: 0.6 }}
-        className="hidden lg:flex lg:col-span-7 flex-col justify-between p-12 relative overflow-hidden"
-        style={{ background: 'radial-gradient(ellipse at 60% 40%, #0D0E18 0%, #0B0C10 100%)' }}
+        transition={{ delay: 0.18, duration: 0.7 }}
+        className="hidden lg:flex flex-col justify-between p-16 relative overflow-hidden bg-slate-900 min-h-screen"
       >
-        {/* Background circuit grid */}
+        {/* Glow orb — top right */}
         <div
-          className="absolute inset-0 opacity-20 pointer-events-none"
+          className="absolute -top-40 -right-40 w-[560px] h-[560px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(184,46,7,0.22) 0%, transparent 70%)', filter: 'blur(80px)' }}
+        />
+        {/* Glow orb — bottom left */}
+        <div
+          className="absolute -bottom-32 -left-32 w-[440px] h-[440px] rounded-full pointer-events-none"
+          style={{ background: 'radial-gradient(circle, rgba(255,91,46,0.14) 0%, transparent 70%)', filter: 'blur(100px)' }}
+        />
+
+        {/* Subtle dot-grid texture */}
+        <div
+          className="absolute inset-0 opacity-[0.035] pointer-events-none"
           style={{
-            backgroundImage: `
-              linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
-              linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px)
-            `,
-            backgroundSize: '28px 28px',
+            backgroundImage: 'radial-gradient(circle, rgba(255,255,255,0.9) 1px, transparent 1px)',
+            backgroundSize: '26px 26px',
           }}
         />
 
-        {/* Ambient glow */}
-        <div
-          className="absolute top-1/4 right-1/3 w-96 h-96 rounded-full opacity-10 blur-3xl pointer-events-none"
-          style={{ background: 'radial-gradient(circle, #FF5B2E 0%, transparent 70%)' }}
-        />
-
-        {/* Top: Value headline + feature list */}
-        <div className="relative z-10 max-w-lg">
+        {/* ── Top: Headline + feature list ── */}
+        <div className="relative z-10 max-w-md">
           <motion.div
-            initial={{ opacity: 0, y: 16 }}
+            initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4, duration: 0.6 }}
+            transition={{ delay: 0.38, duration: 0.65 }}
           >
-            <p className="text-[rgba(255,255,255,0.35)] font-montserrat text-xs tracking-widest uppercase mb-4">
+            <p className="text-white/35 font-montserrat text-[10px] tracking-[0.22em] uppercase mb-6">
               Your Career OS
             </p>
-            <h2 className="text-4xl font-montserrat font-extrabold text-white leading-tight mb-4">
-              Build your automated<br />
+            <h2 className="text-[3.25rem] font-montserrat font-extrabold text-white leading-[1.08] mb-5">
+              Stop applying.<br />
               <span className="bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent">
-                career pipeline.
+                Start landing.
               </span>
             </h2>
-            <p className="text-[rgba(255,255,255,0.50)] font-roboto text-sm leading-relaxed">
-              Upload once, match forever. ApplyDIR&apos;s AI continuously hunts, scores, and applies
-              to roles that fit — while you focus on what matters.
+            <p className="text-white/50 font-roboto text-[0.9375rem] leading-relaxed">
+              ApplyDIR's AI hunts for roles, scores every match, and tailors your CV
+              and cold email — automatically. Upload once. Let the pipeline work.
             </p>
           </motion.div>
 
           <motion.ul
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.6, duration: 0.5 }}
-            className="mt-8 space-y-3"
+            transition={{ delay: 0.62, duration: 0.5 }}
+            className="mt-10 space-y-4"
           >
             {FEATURES.map((f, i) => (
               <motion.li
                 key={f}
-                initial={{ opacity: 0, x: -10 }}
+                initial={{ opacity: 0, x: -14 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.7 + i * 0.1, duration: 0.4 }}
-                className="flex items-center gap-3"
+                transition={{ delay: 0.68 + i * 0.08, duration: 0.42 }}
+                className="flex items-center gap-3.5"
               >
-                <CheckCircle2 size={16} className="text-[#0A9396] flex-shrink-0" />
-                <span className="text-[rgba(255,255,255,0.70)] text-sm font-roboto">{f}</span>
+                <div className="w-[22px] h-[22px] rounded-full bg-primary-light/15 border border-primary-light/25 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 size={12} style={{ color: '#FF5B2E' }} />
+                </div>
+                <span className="text-white/70 text-sm font-roboto">{f}</span>
               </motion.li>
             ))}
           </motion.ul>
         </div>
 
-        {/* Bottom: Trust quote */}
+        {/* ── Bottom: Testimonial ── */}
         <motion.div
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.9, duration: 0.5 }}
-          className="relative z-10 rounded-2xl border border-white/5 p-6"
-          style={{ background: 'rgba(255,255,255,0.03)', backdropFilter: 'blur(8px)' }}
+          transition={{ delay: 0.88, duration: 0.55 }}
+          className="relative z-10"
         >
-          <Quote size={20} className="text-[rgba(255,91,46,0.40)] mb-3" />
-          <p className="text-[rgba(255,255,255,0.75)] text-sm font-roboto italic leading-relaxed mb-4">
-            &ldquo;{TRUST_QUOTE.text}&rdquo;
-          </p>
-          <div className="flex items-center gap-3">
-            <div
-              className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
-              style={{ background: 'linear-gradient(135deg, #B82E07, #FF5B2E)' }}
-            >
-              <span className="text-white text-xs font-montserrat font-bold">{TRUST_QUOTE.initial}</span>
-            </div>
-            <div>
-              <p className="text-white text-xs font-montserrat font-semibold">{TRUST_QUOTE.name}</p>
-              <p className="text-[rgba(255,255,255,0.40)] text-xs font-roboto">{TRUST_QUOTE.role}</p>
+          <div className="w-10 h-px bg-white/10 mb-8" />
+
+          <div className="rounded-2xl border border-white/[0.08] bg-white/[0.04] p-7 backdrop-blur-sm">
+            <Quote size={18} className="mb-4" style={{ color: 'rgba(255,91,46,0.50)' }} />
+            <p className="text-white/88 text-xl font-medium font-roboto leading-relaxed mb-6">
+              &ldquo;{TRUST_QUOTE.text}&rdquo;
+            </p>
+            <div className="flex items-center gap-3">
+              <div
+                className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0"
+                style={{ background: 'linear-gradient(135deg, #B82E07, #FF5B2E)' }}
+              >
+                <span className="text-white text-sm font-montserrat font-bold">{TRUST_QUOTE.initial}</span>
+              </div>
+              <div>
+                <p className="text-white/90 text-sm font-montserrat font-semibold">{TRUST_QUOTE.name}</p>
+                <p className="text-white/40 text-xs font-roboto mt-0.5">{TRUST_QUOTE.role}</p>
+              </div>
             </div>
           </div>
         </motion.div>
       </motion.div>
+
     </section>
   );
 };
