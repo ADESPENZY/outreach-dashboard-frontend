@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router';
@@ -11,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   getJobsPage, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
+  getScrapeStatus,
 } from '../services/apiJobs';
 import { getAutoScoutSettings } from '../services/apiSettings';
 import { getProfile } from '../services/apiProfile';
@@ -83,14 +84,80 @@ const JobsPage = () => {
     // on the first page of a new filter set.
     useEffect(() => { setCurrentPage(1); }, [filterTab]);
 
-    // While a scrape is running, poll the job list every 8 seconds so the
-    // page detects new arrivals without a manual refresh.
+    // While a scrape is running, poll the job list every 8 seconds so jobs
+    // appear incrementally on the page as the background thread saves them.
     useEffect(() => {
         if (!isScrapeActive) return;
         const id = setInterval(() => {
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
         }, 8000);
         return () => clearInterval(id);
+    }, [isScrapeActive, queryClient]);
+
+    // Keep a live ref to totalCount so async lock-poll callbacks always read
+    // the latest value without stale-closure issues.
+    const totalCountRef = useRef(totalCount);
+    useEffect(() => { totalCountRef.current = totalCount; }, [totalCount]);
+
+    // Poll the backend lock status every 3 s while a scrape is active.
+    // Only declare the scrape finished — and show the final job count —
+    // once the background thread actually releases the lock, not the moment
+    // the first few jobs appear (which caused the premature partial-count bug).
+    useEffect(() => {
+        if (!isScrapeActive) return;
+
+        const countAtStart = parseInt(localStorage.getItem('applydir_scraping_job_count') || '0', 10);
+        let done = false;
+
+        const _clearScrapeState = () => {
+            localStorage.removeItem('applydir_is_scraping');
+            localStorage.removeItem('applydir_scraping_started_at');
+            localStorage.removeItem('applydir_scraping_job_count');
+            setIsScrapeActive(false);
+        };
+
+        const poll = async () => {
+            if (done) return;
+            try {
+                const { is_active } = await getScrapeStatus();
+                if (!is_active) {
+                    done = true;
+                    // One final refresh so we capture any jobs saved between
+                    // the last 8-second poll and the moment the lock dropped.
+                    queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
+                    // Wait briefly for React Query to resolve the refetch,
+                    // then read the latest count from the ref.
+                    setTimeout(() => {
+                        const delta = totalCountRef.current - countAtStart;
+                        if (delta > 0) {
+                            setNewJobsCount(delta);
+                            setShowNewJobsBanner(true);
+                        } else {
+                            toast.info(
+                                'No new jobs found — they may already be in your list or try different keywords.',
+                                { autoClose: 6000 },
+                            );
+                        }
+                        _clearScrapeState();
+                    }, 2000);
+                }
+            } catch {
+                // Status endpoint unreachable — keep polling silently.
+            }
+        };
+
+        const intervalId = setInterval(poll, 3000);
+
+        // 5-minute hard timeout mirrors the backend lock TTL.
+        const timeoutId = setTimeout(() => {
+            if (!done) { done = true; _clearScrapeState(); }
+        }, 5 * 60 * 1000);
+
+        return () => {
+            done = true;
+            clearInterval(intervalId);
+            clearTimeout(timeoutId);
+        };
     }, [isScrapeActive, queryClient]);
 
     const updateStatusMutation = useMutation({
@@ -296,47 +363,6 @@ const JobsPage = () => {
     // Show the loading banner only before any jobs have arrived for this user.
     const showScrapingBanner = isScrapingInProgress && totalCount === 0 && jobs.length === 0;
 
-    // Scrape-lock lifecycle: clears isScrapeActive once the background job
-    // is finished and shows the "new jobs" arrival banner. Exit conditions:
-    //   1. Unactivated user — any job arrival confirms the scrape landed.
-    //   2. Activated user — total_count grew past the pre-scrape snapshot.
-    //   3. Safety timeout — 5 minutes elapsed regardless of outcome.
-    useEffect(() => {
-        if (localStorage.getItem('applydir_is_scraping') !== 'true') return;
-
-        const countAtStart = parseInt(localStorage.getItem('applydir_scraping_job_count') || '0');
-
-        const _clearScrapeState = () => {
-            localStorage.removeItem('applydir_is_scraping');
-            localStorage.removeItem('applydir_scraping_started_at');
-            localStorage.removeItem('applydir_scraping_job_count');
-            setIsScrapeActive(false);
-        };
-
-        const _showArrivalBanner = (delta) => {
-            if (delta > 0) {
-                setNewJobsCount(delta);
-                setShowNewJobsBanner(true);
-            }
-        };
-
-        if (!isActivated && totalCount > 0) {
-            _showArrivalBanner(totalCount - countAtStart);
-            _clearScrapeState();
-            return;
-        }
-
-        if (isActivated && totalCount > countAtStart) {
-            _showArrivalBanner(totalCount - countAtStart);
-            _clearScrapeState();
-            return;
-        }
-
-        const startedAt = parseInt(localStorage.getItem('applydir_scraping_started_at') || '0');
-        if (startedAt && Date.now() - startedAt > 5 * 60 * 1000) {
-            _clearScrapeState();
-        }
-    }, [totalCount, isActivated]);
 
     // Auto-open modal and activate tour step 1 on mount when tour param is present
     useEffect(() => {

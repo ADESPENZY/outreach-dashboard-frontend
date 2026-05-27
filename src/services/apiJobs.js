@@ -148,3 +148,17 @@ export async function autoScrapeAts({ title, location }) {
     throw new Error(parseApiError(err));
   }
 }
+
+/**
+ * Poll whether a background scrape thread is still running for the current user.
+ * Returns { is_active: boolean } — true while the lock is held, false once the
+ * thread finishes (or the 5-minute TTL safety net fires).
+ */
+export async function getScrapeStatus() {
+  try {
+    const response = await api.get("/api/jobs/scrape/status/");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
