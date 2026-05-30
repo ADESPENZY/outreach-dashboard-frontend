@@ -149,6 +149,24 @@ export async function autoScrapeAts({ title, location }) {
   }
 }
 
+export async function scrapeYcJobs({ keywords, location }) {
+  try {
+    const response = await api.post("/api/jobs/scrape/yc/", { keywords, location });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function scrapeWellfoundJobs({ keywords, location }) {
+  try {
+    const response = await api.post("/api/jobs/scrape/wellfound/", { keywords, location });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 /**
  * Poll whether a background scrape thread is still running for the current user.
  * Returns { is_active: boolean } — true while the lock is held, false once the

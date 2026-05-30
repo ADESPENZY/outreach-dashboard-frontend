@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   getJobsPage, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
-  getScrapeStatus,
+  scrapeYcJobs, scrapeWellfoundJobs, getScrapeStatus,
 } from '../services/apiJobs';
 import { getAutoScoutSettings } from '../services/apiSettings';
 import { getProfile } from '../services/apiProfile';
@@ -33,6 +33,7 @@ const JobsPage = () => {
     const [scrapeForm, setScrapeForm] = useState({
         source: 'linkedin', keywords: '', locations: ['remote'],
         time_range: '24h', count: 25, search_url: '', atsTitle: '', atsLocation: '',
+        startupLocation: '',
     });
     const [cvModal, setCvModal]                   = useState(null);
     const [loadingCvPreview, setLoadingCvPreview] = useState(null);
@@ -219,6 +220,10 @@ const JobsPage = () => {
                 return scrapeRemoteJobs(form.keywords);
             } else if (form.source === 'ats') {
                 return autoScrapeAts({ title: form.atsTitle, location: form.atsLocation });
+            } else if (form.source === 'yc') {
+                return scrapeYcJobs({ keywords: form.keywords, location: form.startupLocation });
+            } else if (form.source === 'wellfound') {
+                return scrapeWellfoundJobs({ keywords: form.keywords, location: form.startupLocation });
             } else {
                 return scrapeApifyJobs(form);
             }
@@ -324,6 +329,10 @@ const JobsPage = () => {
                 toast.error('Location is required');
                 return;
             }
+        }
+        if ((scrapeForm.source === 'yc' || scrapeForm.source === 'wellfound') && !scrapeForm.keywords.trim()) {
+            toast.error('Keywords are required');
+            return;
         }
         scrapeMutation.mutate(scrapeForm);
     };
@@ -859,10 +868,12 @@ const JobsPage = () => {
 
                                 <div className="grid grid-cols-2 gap-2">
                                     {[
-                                        { key: 'linkedin', label: 'LinkedIn',      sub: 'via Apify',              icon: null },
-                                        { key: 'remote',   label: 'Remote Boards', sub: 'Remotive · WWR · more',  icon: null },
-                                        { key: 'custom',   label: 'Custom URL',    sub: 'paste any LI URL',       icon: null },
-                                        { key: 'ats',      label: 'Auto-Finder',   sub: 'Greenhouse · Lever',     icon: Link2 },
+                                        { key: 'linkedin',   label: 'LinkedIn',      sub: 'via Apify',              icon: null },
+                                        { key: 'remote',     label: 'Remote Boards', sub: 'Remotive · WWR · more',  icon: null },
+                                        { key: 'custom',     label: 'Custom URL',    sub: 'paste any LI URL',       icon: null },
+                                        { key: 'ats',        label: 'Auto-Finder',   sub: 'Greenhouse · Lever',     icon: Link2 },
+                                        { key: 'yc',         label: 'Y Combinator',  sub: 'Work at a Startup',      icon: Sparkles },
+                                        { key: 'wellfound',  label: 'Wellfound',      sub: 'Startup Intelligence',   icon: Sparkles },
                                     ].map(s => (
                                         <button
                                             key={s.key}
@@ -989,6 +1000,34 @@ const JobsPage = () => {
                                     />
                                     <p className="text-xs text-secondary-dark/60 mt-1.5">
                                         Searches Greenhouse &amp; Lever automatically via Google. Up to 10 jobs found, scraped, and scored by AI. Daily limit: 50 jobs.
+                                    </p>
+                                </div>
+                            </>)}
+
+                            {(scrapeForm.source === 'yc' || scrapeForm.source === 'wellfound') && (<>
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Keywords</label>
+                                    <input
+                                        type="text" required
+                                        value={scrapeForm.keywords}
+                                        onChange={e => setScrapeForm(p => ({ ...p, keywords: e.target.value }))}
+                                        placeholder="e.g. Full Stack Engineer, Product Manager"
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Location <span className="text-secondary-dark/60 font-normal normal-case">(optional)</span></label>
+                                    <input
+                                        type="text"
+                                        value={scrapeForm.startupLocation}
+                                        onChange={e => setScrapeForm(p => ({ ...p, startupLocation: e.target.value }))}
+                                        placeholder="e.g. Remote, San Francisco, New York"
+                                        className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                    />
+                                    <p className="text-xs text-secondary-dark/60 mt-1.5">
+                                        {scrapeForm.source === 'yc'
+                                            ? 'Searches Y Combinator\'s Work at a Startup. Up to 25 jobs scored and CV-tailored by AI.'
+                                            : 'Searches Wellfound (AngelList Talent) for startup roles. Up to 25 jobs scored and CV-tailored by AI.'}
                                     </p>
                                 </div>
                             </>)}
