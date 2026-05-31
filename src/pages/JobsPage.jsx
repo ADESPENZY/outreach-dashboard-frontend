@@ -866,29 +866,50 @@ const JobsPage = () => {
                                     )}
                                 </AnimatePresence>
 
-                                <div className="grid grid-cols-2 gap-2">
-                                    {[
-                                        { key: 'linkedin',   label: 'LinkedIn',      sub: 'via Apify',              icon: null },
-                                        { key: 'remote',     label: 'Remote Boards', sub: 'Remotive · WWR · more',  icon: null },
-                                        { key: 'custom',     label: 'Custom URL',    sub: 'paste any LI URL',       icon: null },
-                                        { key: 'ats',        label: 'Auto-Finder',   sub: 'Greenhouse · Lever',     icon: Link2 },
-                                        { key: 'yc',         label: 'Y Combinator',  sub: 'Work at a Startup',      icon: Sparkles },
-                                        { key: 'wellfound',  label: 'Wellfound',      sub: 'Startup Intelligence',   icon: Sparkles },
-                                    ].map(s => (
-                                        <button
-                                            key={s.key}
-                                            type="button"
-                                            onClick={() => setScrapeForm(p => ({ ...p, source: s.key }))}
-                                            className={`rounded-xl p-3 text-left border transition-all ${scrapeForm.source === s.key ? 'bg-primary-light/10 border-primary-light/40 text-primary-dark' : 'border-neutral-dark hover:bg-neutral text-secondary-dark'}`}
-                                        >
-                                            <p className="text-xs font-bold flex items-center gap-1.5">
-                                                {s.icon && <s.icon className="w-3 h-3 shrink-0" />}
-                                                {s.label}
-                                            </p>
-                                            <p className="text-[10px] mt-0.5 opacity-70">{s.sub}</p>
-                                        </button>
-                                    ))}
-                                </div>
+                                {(() => {
+                                    const SOURCES = [
+                                        { key: 'linkedin',  label: 'LinkedIn',      icon: null,     premium: false, desc: 'Searches LinkedIn via Apify. Filter by location, time range, and count.' },
+                                        { key: 'remote',    label: 'Remote Boards',  icon: null,     premium: false, desc: 'Searches Remotive, RemoteOK, Himalayas & WeWorkRemotely simultaneously.' },
+                                        { key: 'custom',    label: 'Custom URL',    icon: null,     premium: false, desc: 'Paste any LinkedIn jobs search URL directly.' },
+                                        { key: 'ats',       label: 'Auto-Finder',   icon: Link2,    premium: false, desc: 'Auto-discovers Greenhouse & Lever pages via Google. Up to 10 jobs scored by AI.' },
+                                        { key: 'yc',        label: 'Y Combinator',  icon: Sparkles, premium: true,  desc: 'Scrapes Work at a Startup (workatastartup.com). Up to 25 jobs — AI scores & tailors your CV.' },
+                                        { key: 'wellfound', label: 'Wellfound',      icon: Sparkles, premium: true,  desc: 'Scrapes Wellfound (AngelList Talent). Up to 25 startup jobs — AI scores & tailors your CV.' },
+                                    ];
+                                    const active = SOURCES.find(s => s.key === scrapeForm.source);
+                                    return (
+                                        <>
+                                            <div
+                                                className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1"
+                                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                                            >
+                                                {SOURCES.map(s => (
+                                                    <button
+                                                        key={s.key}
+                                                        type="button"
+                                                        onClick={() => setScrapeForm(p => ({ ...p, source: s.key }))}
+                                                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all shrink-0 ${
+                                                            scrapeForm.source === s.key
+                                                                ? 'bg-primary-light text-white border-primary-light shadow-sm'
+                                                                : 'border-neutral-dark text-secondary-dark hover:bg-neutral'
+                                                        }`}
+                                                    >
+                                                        {s.icon && (
+                                                            <s.icon className={`w-3 h-3 shrink-0 ${
+                                                                scrapeForm.source === s.key ? 'text-white' : s.premium ? 'text-amber-500' : ''
+                                                            }`} />
+                                                        )}
+                                                        {s.label}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                            {active && (
+                                                <p className="text-[11px] text-secondary-dark/60 mt-2 leading-relaxed">
+                                                    {active.desc}
+                                                </p>
+                                            )}
+                                        </>
+                                    );
+                                })()}
                             </div>
 
                             {scrapeForm.source === 'linkedin' && (<>
