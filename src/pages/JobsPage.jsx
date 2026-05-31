@@ -5,7 +5,7 @@ import { useNavigate, useSearchParams } from 'react-router';
 import {
   CheckCircle, XCircle, Search, Plus, MapPin, Building, Briefcase,
   ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2,
-  Lock, Sparkles,
+  Lock, Sparkles, ChevronDown,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -43,6 +43,7 @@ const JobsPage = () => {
     const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
     const [newJobsCount, setNewJobsCount] = useState(0);
     const [showNewJobsBanner, setShowNewJobsBanner] = useState(false);
+    const [isScrapeSourceOpen, setIsScrapeSourceOpen] = useState(false);
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
