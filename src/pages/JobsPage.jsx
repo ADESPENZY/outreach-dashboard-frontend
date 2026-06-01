@@ -876,39 +876,79 @@ const JobsPage = () => {
                                         { key: 'yc',        label: 'Y Combinator',  icon: Sparkles, premium: true,  desc: 'Scrapes Work at a Startup (workatastartup.com). Up to 25 jobs — AI scores & tailors your CV.' },
                                         { key: 'wellfound', label: 'Wellfound',      icon: Sparkles, premium: true,  desc: 'Scrapes Wellfound (AngelList Talent). Up to 25 startup jobs — AI scores & tailors your CV.' },
                                     ];
-                                    const active = SOURCES.find(s => s.key === scrapeForm.source);
+                                    const active = SOURCES.find(s => s.key === scrapeForm.source) || SOURCES[0];
                                     return (
-                                        <>
-                                            <div
-                                                className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1"
-                                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-                                            >
-                                                {SOURCES.map(s => (
-                                                    <button
-                                                        key={s.key}
-                                                        type="button"
-                                                        onClick={() => setScrapeForm(p => ({ ...p, source: s.key }))}
-                                                        className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-semibold whitespace-nowrap border transition-all shrink-0 ${
-                                                            scrapeForm.source === s.key
-                                                                ? 'bg-primary-light text-white border-primary-light shadow-sm'
-                                                                : 'border-neutral-dark text-secondary-dark hover:bg-neutral'
-                                                        }`}
-                                                    >
-                                                        {s.icon && (
-                                                            <s.icon className={`w-3 h-3 shrink-0 ${
-                                                                scrapeForm.source === s.key ? 'text-white' : s.premium ? 'text-amber-500' : ''
-                                                            }`} />
-                                                        )}
-                                                        {s.label}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                            {active && (
-                                                <p className="text-[11px] text-secondary-dark/60 mt-2 leading-relaxed">
-                                                    {active.desc}
-                                                </p>
+                                        <div className="relative">
+                                            {/* Backdrop — closes dropdown when clicking outside */}
+                                            {isScrapeSourceOpen && (
+                                                <div
+                                                    className="fixed inset-0 z-10"
+                                                    onClick={() => setIsScrapeSourceOpen(false)}
+                                                />
                                             )}
-                                        </>
+
+                                            {/* Trigger button */}
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsScrapeSourceOpen(p => !p)}
+                                                className="w-full flex items-center justify-between gap-3 px-3.5 py-3 bg-white border border-neutral-dark rounded-xl hover:border-primary-light/50 transition-all"
+                                            >
+                                                <div className="flex items-center gap-2.5">
+                                                    <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${active.premium ? 'bg-amber-50' : 'bg-neutral'}`}>
+                                                        {active.icon
+                                                            ? <active.icon className={`w-3.5 h-3.5 ${active.premium ? 'text-amber-500' : 'text-secondary-dark'}`} />
+                                                            : <span className="w-2 h-2 rounded-full bg-primary-light/60" />}
+                                                    </div>
+                                                    <div className="text-left">
+                                                        <p className="text-xs font-bold text-black leading-none">{active.label}</p>
+                                                        <p className="text-[10px] text-secondary-dark/60 mt-0.5 leading-none">{active.desc.split('.')[0]}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    <span className="text-[10px] text-secondary-dark/50 hidden sm:block">6 sources</span>
+                                                    <ChevronDown className={`w-4 h-4 text-secondary-dark transition-transform duration-200 ${isScrapeSourceOpen ? 'rotate-180' : ''}`} />
+                                                </div>
+                                            </button>
+
+                                            {/* Dropdown list */}
+                                            {isScrapeSourceOpen && (
+                                                <div className="absolute top-full left-0 right-0 z-20 mt-1.5 bg-white border border-neutral-dark rounded-xl shadow-xl overflow-hidden">
+                                                    {SOURCES.map((s, i) => (
+                                                        <button
+                                                            key={s.key}
+                                                            type="button"
+                                                            onClick={() => {
+                                                                setScrapeForm(p => ({ ...p, source: s.key }));
+                                                                setIsScrapeSourceOpen(false);
+                                                            }}
+                                                            className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
+                                                                i < SOURCES.length - 1 ? 'border-b border-neutral-dark/60' : ''
+                                                            } ${scrapeForm.source === s.key ? 'bg-primary-light/5' : 'hover:bg-neutral'}`}
+                                                        >
+                                                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 mt-0.5 ${
+                                                                scrapeForm.source === s.key ? 'bg-primary-light/15' : s.premium ? 'bg-amber-50' : 'bg-neutral-dark'
+                                                            }`}>
+                                                                {s.icon
+                                                                    ? <s.icon className={`w-3.5 h-3.5 ${scrapeForm.source === s.key ? 'text-primary-light' : s.premium ? 'text-amber-500' : 'text-secondary-dark'}`} />
+                                                                    : <span className={`w-2 h-2 rounded-full ${scrapeForm.source === s.key ? 'bg-primary-light' : 'bg-secondary-dark/30'}`} />}
+                                                            </div>
+                                                            <div className="flex-1 min-w-0">
+                                                                <div className="flex items-center gap-2 flex-wrap">
+                                                                    <span className={`text-xs font-bold ${scrapeForm.source === s.key ? 'text-primary-dark' : 'text-black'}`}>{s.label}</span>
+                                                                    {s.premium && (
+                                                                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
+                                                                            Premium
+                                                                        </span>
+                                                                    )}
+                                                                    {scrapeForm.source === s.key && <CheckCircle className="w-3 h-3 text-primary-light ml-auto shrink-0" />}
+                                                                </div>
+                                                                <p className="text-[11px] text-secondary-dark/55 mt-0.5 leading-relaxed">{s.desc}</p>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
                                     );
                                 })()}
                             </div>
