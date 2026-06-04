@@ -122,13 +122,23 @@ const OutreachPage = () => {
   const bulkSearchMutation = useMutation({
     mutationFn: bulkContactSearch,
     onSuccess: (data) => {
-      setBulkResultModal(data);
-      queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
-      queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
-      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
-      queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
+      if (data.status === 'started') {
+        toast.success(`Searching contacts for ${data.total} jobs in the background. Check the Contacts tab in ~2 minutes.`);
+        setTimeout(() => {
+          queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+          queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
+          queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
+          queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
+        }, 120_000);
+      } else {
+        setBulkResultModal(data);
+        queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
+        queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
+        queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+        queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
+      }
     },
-    onError: (err) => toast.error('Bulk search failed: ' + err.message),
+    onError: (err) => toast.error(err.message || 'Bulk search failed. Please try again.'),
   });
 
   // ── Queue mutations ────────────────────────────────────────────────────────
