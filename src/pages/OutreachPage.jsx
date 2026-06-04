@@ -102,6 +102,11 @@ const OutreachPage = () => {
   const { data: sentEmails = [],      isLoading: loadingSent }     = useQuery({ queryKey: ['outreach-sent'],       queryFn: getSentEmails });
   const { data: manualApplyJobs = [], isLoading: loadingManual }   = useQuery({ queryKey: ['manual-apply-jobs'],   queryFn: getManualApplyJobs });
   const { data: approvedJobs = [],    isLoading: loadingApproved } = useQuery({ queryKey: ['approved-jobs'],       queryFn: getApprovedJobs });
+
+  // Staging = approved jobs that don't have a contact yet
+  const contactedJobIds = new Set(contacts.map(c => c.job?.id ?? c.job));
+  const stagingJobs = approvedJobs.filter(j => !contactedJobIds.has(j.id));
+
   const { data: hunterQuota = null } = useQuery({
     queryKey: ['hunter-quota'],
     queryFn: () => getHunterQuota().catch(() => null),
@@ -291,7 +296,7 @@ const OutreachPage = () => {
 
   // Stats
   const stats = {
-    staging:  approvedJobs.length,
+    staging:  stagingJobs.length,
     contacts: contacts.length,
     drafts:   drafts.length,
     queued:   sentEmails.filter(e => e.is_queued && e.status === 'approved').length,
@@ -362,7 +367,7 @@ const OutreachPage = () => {
           {TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
-            const count = tab.key === 'staging'  ? approvedJobs.length
+            const count = tab.key === 'staging'  ? stagingJobs.length
                         : tab.key === 'contacts' ? contacts.length
                         : tab.key === 'drafts'   ? drafts.length
                         : tab.key === 'manual'   ? manualApplyJobs.length
@@ -378,7 +383,7 @@ const OutreachPage = () => {
                       : tab.key === 'manual'
                         ? 'text-orange-700 border-orange-500 bg-orange-50/50'
                         : 'text-primary-dark border-primary-light bg-primary-light/5'
-                    : tab.key === 'staging' && approvedJobs.length > 0
+                    : tab.key === 'staging' && stagingJobs.length > 0
                       ? 'text-blue-600 border-transparent hover:bg-blue-50/30'
                       : tab.key === 'manual' && manualApplyJobs.length > 0
                         ? 'text-orange-600 border-transparent hover:bg-orange-50/30'
@@ -406,7 +411,7 @@ const OutreachPage = () => {
             <>
               {activeTab === 'staging' && (
                 <StagingTab
-                  jobs={approvedJobs}
+                  jobs={stagingJobs}
                   onRunBulkSearch={() => requireInbox(() => bulkSearchMutation.mutate())}
                   isSearching={bulkSearchMutation.isPending}
                   hunterQuota={hunterQuota}
