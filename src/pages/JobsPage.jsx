@@ -32,7 +32,7 @@ const JobsPage = () => {
     const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
     const [scrapeForm, setScrapeForm] = useState({
         source: 'linkedin', keywords: '', locations: ['remote'],
-        time_range: '24h', count: 25, search_url: '', atsTitle: '', atsLocation: '',
+        time_range: '24h', count: 10, search_url: '', atsTitle: '', atsLocation: '',
         startupLocation: '',
     });
     const [cvModal, setCvModal]                   = useState(null);
@@ -44,6 +44,7 @@ const JobsPage = () => {
     const [newJobsCount, setNewJobsCount] = useState(0);
     const [showNewJobsBanner, setShowNewJobsBanner] = useState(false);
     const [isScrapeSourceOpen, setIsScrapeSourceOpen] = useState(false);
+    const [scrapePhase, setScrapePhase] = useState('scraping'); // 'scraping' | 'scoring'
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
@@ -116,12 +117,14 @@ const JobsPage = () => {
             localStorage.removeItem('applydir_scraping_started_at');
             localStorage.removeItem('applydir_scraping_job_count');
             setIsScrapeActive(false);
+            setScrapePhase('scraping');
         };
 
         const poll = async () => {
             if (done) return;
             try {
-                const { is_active } = await getScrapeStatus();
+                const { is_active, phase } = await getScrapeStatus();
+                if (phase) setScrapePhase(phase);
                 if (!is_active) {
                     done = true;
                     // One final refresh so we capture any jobs saved between
@@ -230,42 +233,17 @@ const JobsPage = () => {
             }
         },
         onMutate: () => {
+            setScrapePhase('scraping');
             setIsScrapeActive(true);
             setCurrentPage(1);
             localStorage.setItem('applydir_is_scraping', 'true');
             localStorage.setItem('applydir_scraping_started_at', Date.now().toString());
             const countNow = String(pageData?.total_count ?? 0);
             localStorage.setItem('applydir_scraping_job_count', countNow);
-            toast.info('Scrape initiated. This may take a few moments.');
         },
         onSuccess: (data) => {
             setIsScrapeModalOpen(false);
-            // Single clean fetch the moment the server acknowledges the scrape request.
-            // This hydrates the page immediately and gives the scrape-lock lifecycle
-            // effect its first updated totalCount to compare against countAtStart.
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-
-            if (data?.status === 'processing') {
-                // 202: background thread owns the work. isScrapeActive stays true so the
-                // banner remains visible. The scrape-lock lifecycle effect (keyed on
-                // totalCount) will clear the banner once new jobs arrive in the database.
-                toast.success('Scrape successful! Jobs are being added to your dashboard.', { autoClose: 5000 });
-            } else {
-                // Synchronous response path (legacy / should not occur after 202 refactor).
-                setIsScrapeActive(false);
-                localStorage.removeItem('applydir_is_scraping');
-                localStorage.removeItem('applydir_scraping_started_at');
-                localStorage.removeItem('applydir_scraping_job_count');
-                const count = typeof data.new_jobs === 'object'
-                    ? Object.values(data.new_jobs).reduce((a, b) => a + b, 0)
-                    : data.new_jobs;
-                if (count > 0) {
-                    toast.success(`${count} new jobs scraped! AI is now evaluating your matches...`, { autoClose: 4000 });
-                } else {
-                    toast.info('No new jobs found — they may already be in your list or try different keywords.', { autoClose: 6000 });
-                }
-            }
-
             if (autoScoutSettings?.is_active === false && localStorage.getItem('applydirAutoScoutPrompted') !== 'true') {
                 setShowAutoScoutBanner(true);
             }
@@ -370,8 +348,7 @@ const JobsPage = () => {
         : jobs.filter(j => j.status === 'approved').length;
 
     const isScrapingInProgress = scrapeMutation.isPending || isScrapeActive;
-    // Show the loading banner only before any jobs have arrived for this user.
-    const showScrapingBanner = isScrapingInProgress && totalCount === 0 && jobs.length === 0;
+    const showScrapingBanner = isScrapingInProgress;
 
 
     // Auto-open modal and activate tour step 1 on mount when tour param is present
@@ -535,24 +512,41 @@ const JobsPage = () => {
                             transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
                         />
 
-                        {/* Spinner icon */}
+                        {/* Icon — changes per phase */}
                         <div className="relative z-10 w-9 h-9 rounded-xl bg-primary-light/15 border border-primary-light/30 flex items-center justify-center shrink-0">
                             <motion.div
-                                animate={{ rotate: 360 }}
-                                transition={{ duration: 1.6, repeat: Infinity, ease: 'linear' }}
+                                animate={{ rotate: scrapePhase === 'scoring' ? 0 : 360 }}
+                                transition={{ duration: 1.6, repeat: scrapePhase === 'scoring' ? 0 : Infinity, ease: 'linear' }}
                             >
-                                <Loader2 className="w-4 h-4 text-primary-light" />
+                                {scrapePhase === 'scoring'
+                                    ? <Sparkles className="w-4 h-4 text-primary-light" />
+                                    : <Loader2 className="w-4 h-4 text-primary-light" />
+                                }
                             </motion.div>
                         </div>
 
-                        {/* Copy */}
+                        {/* Copy — updates when phase changes */}
                         <div className="relative z-10 min-w-0 flex-1">
-                            <p className="text-white font-bold text-sm font-montserrat leading-snug">
-                                Auto-Scout is hunting for roles...
-                            </p>
-                            <p className="text-white/50 text-xs mt-0.5 font-roboto">
-                                AI evaluation will follow shortly — new matches will stream in below
-                            </p>
+                            <AnimatePresence mode="wait">
+                                <motion.div
+                                    key={scrapePhase}
+                                    initial={{ opacity: 0, y: 6 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -6 }}
+                                    transition={{ duration: 0.2 }}
+                                >
+                                    <p className="text-white font-bold text-sm font-montserrat leading-snug">
+                                        {scrapePhase === 'scoring'
+                                            ? 'AI is scoring your matches...'
+                                            : 'Fetching jobs in the background...'}
+                                    </p>
+                                    <p className="text-white/50 text-xs mt-0.5 font-roboto">
+                                        {scrapePhase === 'scoring'
+                                            ? 'Evaluating fit, generating tailored CVs for top matches'
+                                            : 'Searching job boards — this takes 30–60 seconds'}
+                                    </p>
+                                </motion.div>
+                            </AnimatePresence>
                         </div>
 
                         {/* Pulsing dots */}
