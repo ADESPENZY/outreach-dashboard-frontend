@@ -422,12 +422,9 @@ const OutreachPage = () => {
                   contacts={filteredContacts}
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
-                  onFindContacts={handleFindContacts}
-                  findingContacts={findingContacts}
                   onGenerateEmail={handleGenerateEmail}
                   generatingFor={generatingFor}
                   hasEmailForJob={hasEmailForJob}
-                  hunterQuota={hunterQuota}
                 />
               )}
               {activeTab === 'drafts' && (
@@ -509,10 +506,10 @@ function HunterQuotaBadge({ quota }) {
   );
 }
 
-function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, findingContacts, onGenerateEmail, generatingFor, hasEmailForJob, hunterQuota }) {
+function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, generatingFor, hasEmailForJob }) {
+  const pendingGenerate = contacts.filter(c => !hasEmailForJob(c.job?.id)).length;
   return (
     <div className="space-y-4">
-      <HunterQuotaBadge quota={hunterQuota} />
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
         <div className="relative w-full md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-dark/50 w-4 h-4" />
@@ -522,13 +519,11 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onFindContacts, fi
             className="w-full pl-9 pr-4 py-2 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/40 outline-none"
           />
         </div>
-        <button
-          onClick={onFindContacts} disabled={findingContacts}
-          className="flex items-center gap-2 bg-black text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-black/10 hover:bg-black/80 transition-all active:scale-95 disabled:opacity-60"
-        >
-          {findingContacts ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserCheck className="w-4 h-4" />}
-          {findingContacts ? 'Scanning for Decision Makers...' : 'Find Decision Makers'}
-        </button>
+        {pendingGenerate > 0 && (
+          <span className="text-sm text-secondary-dark">
+            <span className="font-semibold text-black">{pendingGenerate}</span> contact{pendingGenerate !== 1 ? 's' : ''} ready to generate email
+          </span>
+        )}
       </div>
 
       {contacts.length === 0 ? (
