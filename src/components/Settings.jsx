@@ -241,7 +241,7 @@ function AccountTab() {
       toast.success('Profile updated');
       queryClient.invalidateQueries({ queryKey: ['account-settings'] });
     },
-    onError: () => toast.error('Failed to save profile'),
+    onError: (err) => toast.error(err.message || 'Failed to save profile'),
   });
 
   const handleSave = () => saveMutation.mutate({

@@ -101,7 +101,7 @@ const JobTracker = () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       queryClient.invalidateQueries({ queryKey: ['jobStats'] });
     },
-    onError: () => toast.error('Failed to move job'),
+    onError: (err) => toast.error(err.message || 'Failed to move job'),
   });
 
   const deleteMutation = useMutation({
@@ -112,7 +112,7 @@ const JobTracker = () => {
       queryClient.invalidateQueries({ queryKey: ['jobStats'] });
       setDetailJob(null);
     },
-    onError: () => toast.error('Failed to delete job'),
+    onError: (err) => toast.error(err.message || 'Failed to delete job'),
   });
 
   // ---------------------------------------------------------------------------

@@ -171,7 +171,7 @@ const JobsPage = () => {
             toast.success(`Job marked as ${newStatus}`);
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
         },
-        onError: () => toast.error('Failed to update status. Please try again.'),
+        onError: (err) => toast.error(err.message || 'Failed to update status. Please try again.'),
     });
 
     const generateCvMutation = useMutation({
@@ -184,7 +184,7 @@ const JobsPage = () => {
             toast.success('Tailored CV ready!');
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
         },
-        onError: () => toast.error('CV generation failed. Please try again.'),
+        onError: (err) => toast.error(err.message || 'CV generation failed. Please try again.'),
     });
 
     const trackJobMutation = useMutation({
@@ -198,7 +198,7 @@ const JobsPage = () => {
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
             navigate('/dashboard/job-tracker');
         },
-        onError: () => toast.error('Could not add to tracker. Please try again in a moment.'),
+        onError: (err) => toast.error(err.message || 'Could not add to tracker. Please try again in a moment.'),
     });
 
     const findContactMutation = useMutation({
@@ -259,7 +259,7 @@ const JobsPage = () => {
             localStorage.removeItem('applydir_is_scraping');
             localStorage.removeItem('applydir_scraping_started_at');
             localStorage.removeItem('applydir_scraping_job_count');
-            toast.error('Failed to start scrape. Please try again.');
+            toast.error(err.message || 'Failed to start scrape. Please try again.');
         },
     });
 
