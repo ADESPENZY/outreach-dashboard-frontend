@@ -107,17 +107,17 @@ const OutreachPage = () => {
   const contactedJobIds = new Set(contacts.map(c => c.job?.id ?? c.job));
   const stagingJobs = approvedJobs.filter(j => !contactedJobIds.has(j.id));
 
-  const { data: connectedInboxes = [], isLoading: loadingInboxes } = useQuery({
+  const { data: connectedInboxes = [] } = useQuery({
     queryKey: ['gmail-accounts'],
     queryFn: getGmailAccounts,
   });
 
-  // Auto-show add-inbox modal the moment user lands on Sending tab with no inbox
+  // Auto-show add-inbox modal when user lands on Sending tab with no inbox
   React.useEffect(() => {
-    if (activeTab === 'queue' && !loadingInboxes && connectedInboxes.length === 0) {
+    if (activeTab === 'queue' && connectedInboxes.length === 0) {
       setNoInboxModal(true);
     }
-  }, [activeTab, loadingInboxes, connectedInboxes.length]);
+  }, [activeTab]);
 
   const requireInbox = (action) => {
     if (connectedInboxes.length === 0) { setNoInboxModal(true); return; }
