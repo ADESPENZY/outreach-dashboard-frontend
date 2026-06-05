@@ -26,7 +26,7 @@ const TABS = [
   { key: 'staging',  label: 'Staging',         icon: Layers },
   { key: 'contacts', label: 'Contacts',        icon: Users },
   { key: 'drafts',   label: 'Drafts',          icon: FileText },
-  { key: 'queue',    label: 'Queue & Sent',    icon: Send },
+  { key: 'queue',    label: 'Sending',         icon: Send },
   { key: 'manual',   label: 'Manual Apply',    icon: AlertTriangle },
 ];
 
@@ -302,6 +302,9 @@ const OutreachPage = () => {
   const hasEmailForJob = (jobId) =>
     drafts.some(d => d.job_id === jobId) || sentEmails.some(s => s.job_id === jobId);
 
+  const getEmailForJob = (jobId) =>
+    drafts.find(d => d.job_id === jobId) || sentEmails.find(s => s.job_id === jobId) || null;
+
   // Stats
   const stats = {
     staging:  stagingJobs.length,
@@ -443,7 +446,8 @@ const OutreachPage = () => {
                   onGenerateAll={handleGenerateAll}
                   generatingAll={generatingAll}
                   generatingFor={generatingFor}
-                  hasEmailForJob={hasEmailForJob}
+                  getEmailForJob={getEmailForJob}
+                  onSwitchTab={setActiveTab}
                 />
               )}
               {activeTab === 'drafts' && (
@@ -460,9 +464,15 @@ const OutreachPage = () => {
                   generatingCvFor={generatingCvFor}
                 />
               )}
+              {activeTab === 'queue' && connectedInboxes.length === 0 && !noInboxModal && (
+                // Auto-show the add-inbox modal the first time user lands here without an inbox
+                <AutoShowInboxModal onOpen={() => setNoInboxModal(true)} />
+              )}
               {activeTab === 'queue' && (
                 <QueueTab
                   emails={sentEmails}
+                  connectedInboxes={connectedInboxes}
+                  onAddInbox={() => setNoInboxModal(true)}
                   onQueueSingle={(id) => requireInbox(() => queueSingleMutation.mutate(id))}
                   queuingId={queueSingleMutation.isPending ? queueSingleMutation.variables : null}
                   onQueueAll={() => requireInbox(() => queueAllMutation.mutate())}
@@ -507,11 +517,67 @@ const OutreachPage = () => {
   );
 };
 
+// Fires onOpen once when rendered — used to auto-trigger modal on tab switch
+function AutoShowInboxModal({ onOpen }) {
+  React.useEffect(() => { onOpen(); }, []);
+  return null;
+}
+
 // ═════════════════════════════════════════════════════════════════════════════
 // TAB 1 — CONTACTS
 // ═════════════════════════════════════════════════════════════════════════════
-function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, onGenerateAll, generatingAll, generatingFor, hasEmailForJob }) {
-  const pendingGenerate = contacts.filter(c => !hasEmailForJob(c.job?.id)).length;
+function ContactPipelineAction({ email, jobId, onGenerateEmail, generatingFor, onSwitchTab }) {
+  if (!email) {
+    return (
+      <button
+        onClick={() => onGenerateEmail(jobId)}
+        disabled={generatingFor.has(jobId)}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
+      >
+        {generatingFor.has(jobId) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+        {generatingFor.has(jobId) ? 'Writing…' : 'Write Email'}
+      </button>
+    );
+  }
+  if (email.status === 'draft') {
+    return (
+      <button
+        onClick={() => onSwitchTab('drafts')}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white text-xs font-semibold rounded-lg transition-all"
+      >
+        Review Draft <ArrowRight className="w-3 h-3" />
+      </button>
+    );
+  }
+  if (email.status === 'approved' && !email.is_queued) {
+    return (
+      <button
+        onClick={() => onSwitchTab('queue')}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-xs font-semibold rounded-lg transition-all"
+      >
+        Schedule to Send <ArrowRight className="w-3 h-3" />
+      </button>
+    );
+  }
+  if (email.is_queued && email.status === 'approved') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-neutral border border-neutral-dark text-secondary-dark text-xs font-semibold rounded-full">
+        <Clock className="w-3 h-3" /> Scheduled
+      </span>
+    );
+  }
+  if (['sent', 'opened', 'replied'].includes(email.status)) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-600 text-xs font-semibold rounded-full border border-emerald-100">
+        <CheckCircle className="w-3 h-3" /> Sent
+      </span>
+    );
+  }
+  return null;
+}
+
+function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, onGenerateAll, generatingAll, generatingFor, getEmailForJob, onSwitchTab }) {
+  const pendingGenerate = contacts.filter(c => !getEmailForJob(c.job?.id)).length;
   return (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
@@ -542,7 +608,7 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
       </div>
 
       {contacts.length === 0 ? (
-        <EmptyState icon={Users} title="No contacts yet" subtitle="Approve jobs on the Jobs page, then click Find Contacts." />
+        <EmptyState icon={Users} title="No contacts yet" subtitle="Approve jobs on the Jobs page, then run the contact search." />
       ) : (
         <div className="w-full overflow-x-auto overflow-y-hidden border border-neutral-dark sm:rounded-xl">
           <table className="w-full min-w-[800px] text-left border-collapse">
@@ -552,7 +618,7 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
                 <th className="p-3.5 hidden lg:table-cell">Contact</th>
                 <th className="p-3.5 hidden md:table-cell">Email</th>
                 <th className="p-3.5">Confidence</th>
-                <th className="p-3.5 text-right pr-4">Action</th>
+                <th className="p-3.5 text-right pr-4">Next Step</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral">
@@ -586,20 +652,13 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
                     ) : <span className="text-secondary-dark/40 text-xs">—</span>}
                   </td>
                   <td className="p-3.5 pr-4 text-right">
-                    {hasEmailForJob(c.job?.id) ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 text-emerald-600 text-xs font-semibold rounded-full border border-emerald-100">
-                        <CheckCircle className="w-3 h-3" /> Generated
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => onGenerateEmail(c.job?.id)}
-                        disabled={generatingFor.has(c.job?.id)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
-                      >
-                        {generatingFor.has(c.job?.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                        Generate
-                      </button>
-                    )}
+                    <ContactPipelineAction
+                      email={getEmailForJob(c.job?.id)}
+                      jobId={c.job?.id}
+                      onGenerateEmail={onGenerateEmail}
+                      generatingFor={generatingFor}
+                      onSwitchTab={onSwitchTab}
+                    />
                   </td>
                 </tr>
               ))}
@@ -655,31 +714,51 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
 // TAB 3 — QUEUE & SENT
 // ═════════════════════════════════════════════════════════════════════════════
 function QueueTab({
-  emails, onQueueSingle, queuingId, onQueueAll, queuingAll,
+  emails, connectedInboxes, onAddInbox, onQueueSingle, queuingId, onQueueAll, queuingAll,
   onUnqueue, unqueuingId, onReschedule, reschedulingId,
   onDelete, deleting, onMarkReplied, replyingId, onRunFollowups,
   runningFollowups, onGenerateCv, generatingCvFor,
 }) {
+  const noInbox          = !connectedInboxes || connectedInboxes.length === 0;
   const approvedUnqueued = emails.filter(e => e.status === 'approved' && !e.is_queued);
-  const queued           = emails.filter(e => e.is_queued && e.status === 'approved').sort((a, b) => new Date(a.scheduled_send_at) - new Date(b.scheduled_send_at));
+  const scheduled        = emails.filter(e => e.is_queued && e.status === 'approved').sort((a, b) => new Date(a.scheduled_send_at) - new Date(b.scheduled_send_at));
   const sent             = emails.filter(e => ['sent','opened','replied','bounced'].includes(e.status));
   const dueFollowups     = sent.filter(e => ['sent','opened'].includes(e.status) && e.next_followup_at && new Date(e.next_followup_at) <= new Date()).length;
-
-  const nextSlot = queued[0]?.scheduled_send_at;
+  const nextSlot         = scheduled[0]?.scheduled_send_at;
 
   return (
     <div className="space-y-6">
+
+      {/* No inbox warning — shown prominently if inbox not connected */}
+      {noInbox && (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0" />
+          <div className="flex-1">
+            <p className="text-sm font-bold text-amber-900">No email account connected</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              You need to connect your Gmail before we can send anything. It only takes 30 seconds.
+            </p>
+          </div>
+          <button
+            onClick={onAddInbox}
+            className="shrink-0 flex items-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-bold rounded-xl transition-all active:scale-95 whitespace-nowrap"
+          >
+            + Connect Gmail
+          </button>
+        </div>
+      )}
+
       {/* Action bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
           {approvedUnqueued.length > 0 && (
             <span className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-full text-xs font-semibold">
-              {approvedUnqueued.length} approved, not queued
+              {approvedUnqueued.length} email{approvedUnqueued.length !== 1 ? 's' : ''} approved, not scheduled yet
             </span>
           )}
-          {queued.length > 0 && (
+          {scheduled.length > 0 && (
             <span className="flex items-center gap-1.5 px-3 py-1.5 bg-neutral border border-neutral-dark rounded-full text-xs font-semibold text-secondary-dark">
-              <Clock className="w-3 h-3" /> {queued.length} queued
+              <Clock className="w-3 h-3" /> {scheduled.length} scheduled
               {nextSlot && <span className="text-secondary-dark/60">· next {fmtShortTime(nextSlot)}</span>}
             </span>
           )}
@@ -696,7 +775,7 @@ function QueueTab({
               className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-black/10 hover:bg-black/80 transition-all active:scale-95 disabled:opacity-60"
             >
               {queuingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListOrdered className="w-4 h-4" />}
-              {queuingAll ? 'Queuing…' : `Queue All (${approvedUnqueued.length})`}
+              {queuingAll ? 'Scheduling…' : `Schedule All (${approvedUnqueued.length})`}
             </button>
           )}
           <button
@@ -704,22 +783,22 @@ function QueueTab({
             className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-violet-200 hover:opacity-90 transition-all active:scale-95 disabled:opacity-70"
           >
             {runningFollowups ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Follow-ups
+            Send Follow-ups
           </button>
         </div>
       </div>
 
-      {/* Business hours notice */}
+      {/* How it works notice */}
       <div className="flex items-center gap-2 text-xs text-secondary-dark/70 bg-neutral border border-neutral-dark rounded-xl px-4 py-2.5">
         <Clock className="w-3.5 h-3.5 shrink-0" />
-        Emails send Mon–Fri, 8:00 AM – 5:00 PM UTC · one email per 5 minutes · never batched
+        Emails go out Mon–Fri, 8 AM – 5 PM · one every 5 minutes so they don't look like spam
       </div>
 
-      {/* Not queued yet */}
+      {/* Approved but not scheduled yet */}
       {approvedUnqueued.length > 0 && (
         <section>
           <h3 className="text-xs font-bold uppercase tracking-wider text-secondary-dark mb-3 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-blue-400" /> Ready to queue ({approvedUnqueued.length})
+            <span className="w-2 h-2 rounded-full bg-blue-400" /> Ready to schedule ({approvedUnqueued.length})
           </h3>
           <div className="grid gap-3">
             {approvedUnqueued.map(email => (
@@ -739,14 +818,14 @@ function QueueTab({
         </section>
       )}
 
-      {/* Queued */}
-      {queued.length > 0 && (
+      {/* Scheduled */}
+      {scheduled.length > 0 && (
         <section>
           <h3 className="text-xs font-bold uppercase tracking-wider text-secondary-dark mb-3 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-gray-400" /> Scheduled ({queued.length})
+            <span className="w-2 h-2 rounded-full bg-gray-400" /> Scheduled to send ({scheduled.length})
           </h3>
           <div className="grid gap-3">
-            {queued.map(email => (
+            {scheduled.map(email => (
               <EmailCard
                 key={email.id}
                 email={email}
@@ -765,11 +844,11 @@ function QueueTab({
         </section>
       )}
 
-      {/* Sent / Opened / Replied */}
+      {/* Sent history */}
       {sent.length > 0 && (
         <section>
           <h3 className="text-xs font-bold uppercase tracking-wider text-secondary-dark mb-3 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Sent history ({sent.length})
+            <span className="w-2 h-2 rounded-full bg-emerald-500" /> Sent ({sent.length})
           </h3>
           <div className="grid gap-3">
             {sent.map(email => (
@@ -788,8 +867,8 @@ function QueueTab({
         </section>
       )}
 
-      {approvedUnqueued.length === 0 && queued.length === 0 && sent.length === 0 && (
-        <EmptyState icon={Send} title="Nothing here yet" subtitle="Approve email drafts then queue them to send." />
+      {approvedUnqueued.length === 0 && scheduled.length === 0 && sent.length === 0 && (
+        <EmptyState icon={Send} title="Nothing here yet" subtitle="Go to Drafts, approve an email, then come back here to schedule it." />
       )}
     </div>
   );
@@ -983,14 +1062,14 @@ function EmailCard({
               Approve
             </button>
           )}
-          {/* Queue single */}
+          {/* Schedule single */}
           {showQueue && (
             <button
               onClick={onQueue} disabled={queueing}
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-all disabled:opacity-60"
             >
               {queueing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
-              Queue
+              {queueing ? 'Scheduling…' : 'Schedule'}
             </button>
           )}
           {/* Reschedule + Unqueue for queued emails */}
@@ -1007,7 +1086,7 @@ function EmailCard({
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-secondary-dark bg-neutral border border-neutral-dark rounded-xl hover:bg-neutral-dark transition-all disabled:opacity-60"
               >
                 {unqueueing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
-                Unqueue
+                Cancel
               </button>
             </>
           )}
@@ -1463,15 +1542,30 @@ function ManualApplyCard({ job, onGenerateCv, generatingCvFor }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // GENERATE MODAL — pre-generation questionnaire
 // ═════════════════════════════════════════════════════════════════════════════
+const HIGHLIGHT_CHIPS = [
+  { label: "I genuinely care about what they're building", value: "I genuinely care about the problem they're solving — this isn't just another application" },
+  { label: 'I learn fast and figure things out',           value: 'I learn fast, figure things out, and never wait to be told what to do next' },
+  { label: 'I have done this exact type of work before',   value: 'I have done this exact type of work before and can hit the ground running' },
+  { label: 'I ship things and get results',                value: 'I ship things, not just plans — I have real results to show for my work' },
+  { label: 'I work great without hand-holding',            value: 'I work independently, communicate clearly, and do not need to be micromanaged' },
+  { label: 'I have a relevant project to show',            value: 'I have a relevant project or piece of work that speaks directly to what they need' },
+  { label: 'Available to start soon',                      value: 'I am available to start soon and can commit fully to the role' },
+  { label: 'I am a culture and mission fit',               value: 'I connect with their mission and think I would fit the team well' },
+];
+
 function GenerateModal({ contact, bulkCount, onConfirm, onClose }) {
   const [highlight, setHighlight] = useState('');
   const [tone, setTone]           = useState('professional');
 
   const companyName = contact?.job?.company_name;
 
+  const addChip = (val) => {
+    setHighlight(prev => prev.trim() ? `${prev.trim()}, ${val}` : val);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-neutral-dark relative animate-fade-in">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-lg shadow-2xl border border-neutral-dark relative animate-fade-in max-h-[92vh] overflow-y-auto">
         <button
           onClick={onClose}
           className="absolute top-4 right-4 text-secondary-dark/50 hover:bg-neutral-dark rounded-full p-1.5 transition-colors"
@@ -1504,11 +1598,28 @@ function GenerateModal({ contact, bulkCount, onConfirm, onClose }) {
             <textarea
               value={highlight}
               onChange={e => setHighlight(e.target.value)}
-              placeholder="e.g. my experience with TypeScript, my startup background, my interest in fintech..."
+              placeholder="e.g. I genuinely love what they're building, I've done this exact work before, I'm available to start soon..."
               rows={3}
               className="w-full p-3 bg-neutral border border-neutral-dark rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-light/30 resize-none leading-relaxed"
             />
-            <p className="text-[10px] text-secondary-dark/60 mt-1">Optional — leave blank to let the AI decide</p>
+            <p className="text-[10px] text-secondary-dark/60 mt-1.5">Optional — leave blank to let the AI decide</p>
+
+            {/* Quick-pick chips */}
+            <div className="mt-3">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-secondary-dark/50 mb-2">Quick picks — tap to add</p>
+              <div className="flex flex-wrap gap-1.5">
+                {HIGHLIGHT_CHIPS.map(chip => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => addChip(chip.value)}
+                    className="px-2.5 py-1 bg-neutral border border-neutral-dark rounded-full text-[11px] font-medium text-secondary-dark hover:bg-primary-light/10 hover:border-primary-light/40 hover:text-primary-dark transition-all active:scale-95"
+                  >
+                    + {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           <div>
