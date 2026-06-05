@@ -93,10 +93,11 @@ export async function getSentEmails() {
   }
 }
 
-export async function generateEmail(jobId) {
+export async function generateEmail(jobId, extras = {}) {
   try {
     const response = await api.post("/api/outreach/generate-email/", {
       job_id: jobId,
+      ...extras,
     });
     return response.data;
   } catch (err) {

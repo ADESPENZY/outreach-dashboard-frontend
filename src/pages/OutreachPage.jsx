@@ -3,14 +3,14 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   Send, Users, FileText, CheckCircle, Search, Building, Mail,
-  Loader2, ChevronDown, ChevronUp, Sparkles, Pencil, X, UserCheck,
-  MailOpen, MessageSquare, ShieldCheck, Download, Clock, ListOrdered,
+  Loader2, ChevronDown, ChevronUp, Sparkles, Pencil, X,
+  MailOpen, MessageSquare, Download, Clock, ListOrdered,
   Trash2, CalendarClock, Ban, ExternalLink, AlertTriangle, MapPin,
   DollarSign, Briefcase, Layers, ArrowRight, Zap,
 } from 'lucide-react';
 import {
-  getContacts, getDraftEmails, getSentEmails, getHunterQuota,
-  findContacts, generateEmail, approveEmail,
+  getContacts, getDraftEmails, getSentEmails,
+  generateEmail, approveEmail,
   markEmailReplied, runFollowups, generateJobCV, editEmail,
   queueEmail, queueAllEmails,
   deleteEmail, unqueueEmail, rescheduleEmail,
@@ -86,11 +86,11 @@ const OutreachPage = () => {
   const [bulkResultModal, setBulkResultModal] = useState(null);
   const [noInboxModal, setNoInboxModal] = useState(false);
 
-  // Legacy loading states for non-mutation actions
-  const [findingContacts, setFindingContacts] = useState(false);
-  const [generatingAll, setGeneratingAll]     = useState(false);
-  const [generatingFor, setGeneratingFor]     = useState(null);
-  const [approvingId, setApprovingId]         = useState(null);
+  // Loading states
+  const [generatingAll, setGeneratingAll]         = useState(false);
+  const [generatingFor, setGeneratingFor]         = useState(new Set());
+  const [generateModalFor, setGenerateModalFor]   = useState(null);
+  const [approvingId, setApprovingId]             = useState(null);
   const [replyingId, setReplyingId]           = useState(null);
   const [runningFollowups, setRunningFollowups] = useState(false);
   const [generatingCvFor, setGeneratingCvFor] = useState(null);
@@ -107,10 +107,6 @@ const OutreachPage = () => {
   const contactedJobIds = new Set(contacts.map(c => c.job?.id ?? c.job));
   const stagingJobs = approvedJobs.filter(j => !contactedJobIds.has(j.id));
 
-  const { data: hunterQuota = null } = useQuery({
-    queryKey: ['hunter-quota'],
-    queryFn: () => getHunterQuota().catch(() => null),
-  });
   const { data: connectedInboxes = [] } = useQuery({
     queryKey: ['gmail-accounts'],
     queryFn: getGmailAccounts,
@@ -197,47 +193,59 @@ const OutreachPage = () => {
     onError: (err) => toast.error('Reschedule failed: ' + err.message),
   });
 
-  // ── Other handlers ─────────────────────────────────────────────────────────
-  const handleFindContacts = async () => {
-    setFindingContacts(true);
-    try {
-      const d = await findContacts(10);
-      if (d.new_contacts_found === 0 && d.skipped_already_searched > 0) {
-        toast.info(`Skipped ${d.skipped_already_searched} jobs we already checked. No new contacts found.`);
-      } else if (d.new_contacts_found > 0) {
-        toast.success(`Found ${d.new_contacts_found} new decision makers! (Skipped ${d.skipped_already_searched || 0} already checked)`);
-      } else {
-        toast.success(`Search complete. No new contacts found.`);
-      }
-      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
-    } catch (err) { toast.error('Failed: ' + err.message); }
-    finally { setFindingContacts(false); }
+  // ── Generate handlers ──────────────────────────────────────────────────────
+  const handleGenerateEmail = (jobId) => {
+    const contact = contacts.find(c => c.job?.id === jobId);
+    setGenerateModalFor({ jobId, contact, bulk: false });
   };
 
-  const handleGenerateEmail = async (jobId) => {
-    setGeneratingFor(jobId);
-    try {
-      await generateEmail(jobId);
-      toast.success('Draft generated!');
-      queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
-      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
-    } catch (err) { toast.error('Failed: ' + err.message); }
-    finally { setGeneratingFor(null); }
-  };
-
-  const handleGenerateAll = async () => {
-    setGeneratingAll(true);
-    let ok = 0, fail = 0;
+  const handleGenerateAll = () => {
     const pending = contacts.filter(c =>
       !drafts.some(d => d.job_id === c.job?.id) &&
       !sentEmails.some(s => s.job_id === c.job?.id)
     );
-    for (const c of pending) {
-      try { await generateEmail(c.job?.id); ok++; } catch { fail++; }
+    if (pending.length === 0) {
+      toast.info('No pending contacts — all have drafts already.');
+      return;
     }
-    toast.success(`Generated ${ok} drafts${fail ? `, ${fail} failed` : ''}`);
-    queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
-    setGeneratingAll(false);
+    setGenerateModalFor({ bulk: true, pendingContacts: pending });
+  };
+
+  const handleGenerateConfirm = async ({ highlight, tone_override }) => {
+    if (!generateModalFor) return;
+    const { jobId, bulk, pendingContacts } = generateModalFor;
+    setGenerateModalFor(null);
+
+    if (bulk) {
+      setGeneratingAll(true);
+      let ok = 0, fail = 0;
+      for (const c of pendingContacts) {
+        const id = c.job?.id;
+        setGeneratingFor(prev => new Set([...prev, id]));
+        try {
+          await generateEmail(id, { highlight, tone_override });
+          ok++;
+        } catch { fail++; }
+        finally {
+          setGeneratingFor(prev => { const s = new Set(prev); s.delete(id); return s; });
+        }
+      }
+      toast.success(`Generated ${ok} drafts${fail ? `, ${fail} failed` : ''}`);
+      queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+      setGeneratingAll(false);
+    } else {
+      setGeneratingFor(prev => new Set([...prev, jobId]));
+      try {
+        await generateEmail(jobId, { highlight, tone_override });
+        toast.success('Draft generated!');
+        queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+        queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+      } catch (err) { toast.error('Failed: ' + err.message); }
+      finally {
+        setGeneratingFor(prev => { const s = new Set(prev); s.delete(jobId); return s; });
+      }
+    }
   };
 
   const handleApprove = async (id) => {
@@ -312,6 +320,16 @@ const OutreachPage = () => {
 
       {/* No inbox gatekeeper modal */}
       {noInboxModal && <NoInboxModal onClose={() => setNoInboxModal(false)} />}
+
+      {/* Pre-generation questionnaire */}
+      {generateModalFor && (
+        <GenerateModal
+          contact={generateModalFor.contact}
+          bulkCount={generateModalFor.bulk ? generateModalFor.pendingContacts?.length : null}
+          onConfirm={handleGenerateConfirm}
+          onClose={() => setGenerateModalFor(null)}
+        />
+      )}
 
       {/* Bulk search result modal */}
       {bulkResultModal && (
@@ -414,7 +432,6 @@ const OutreachPage = () => {
                   jobs={stagingJobs}
                   onRunBulkSearch={() => requireInbox(() => bulkSearchMutation.mutate())}
                   isSearching={bulkSearchMutation.isPending}
-                  hunterQuota={hunterQuota}
                 />
               )}
               {activeTab === 'contacts' && (
@@ -423,6 +440,8 @@ const OutreachPage = () => {
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
                   onGenerateEmail={handleGenerateEmail}
+                  onGenerateAll={handleGenerateAll}
+                  generatingAll={generatingAll}
                   generatingFor={generatingFor}
                   hasEmailForJob={hasEmailForJob}
                 />
@@ -491,22 +510,7 @@ const OutreachPage = () => {
 // ═════════════════════════════════════════════════════════════════════════════
 // TAB 1 — CONTACTS
 // ═════════════════════════════════════════════════════════════════════════════
-function HunterQuotaBadge({ quota }) {
-  if (!quota) return null;
-  const { searches_remaining, searches_limit, plan, dry_run } = quota;
-  const color = searches_remaining > 10 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : searches_remaining >= 5  ? 'bg-amber-50 text-amber-700 border-amber-200'
-              : 'bg-red-50 text-red-600 border-red-200';
-  return (
-    <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold ${color}`}>
-      <ShieldCheck className="w-3.5 h-3.5" />
-      AI Search Credits ({plan}): {searches_remaining}/{searches_limit} remaining
-      {dry_run && <span className="ml-1 px-1.5 py-0.5 bg-neutral-dark text-secondary-dark rounded text-[10px] font-bold">DRY RUN</span>}
-    </div>
-  );
-}
-
-function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, generatingFor, hasEmailForJob }) {
+function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, onGenerateAll, generatingAll, generatingFor, hasEmailForJob }) {
   const pendingGenerate = contacts.filter(c => !hasEmailForJob(c.job?.id)).length;
   return (
     <div className="space-y-4">
@@ -519,11 +523,22 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, g
             className="w-full pl-9 pr-4 py-2 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/40 outline-none"
           />
         </div>
-        {pendingGenerate > 0 && (
-          <span className="text-sm text-secondary-dark">
-            <span className="font-semibold text-black">{pendingGenerate}</span> contact{pendingGenerate !== 1 ? 's' : ''} ready to generate email
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {pendingGenerate > 0 && (
+            <span className="text-sm text-secondary-dark">
+              <span className="font-semibold text-black">{pendingGenerate}</span> ready to generate
+            </span>
+          )}
+          {pendingGenerate > 0 && (
+            <button
+              onClick={onGenerateAll} disabled={generatingAll}
+              className="flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-orange-100 transition-all active:scale-95 disabled:opacity-70 whitespace-nowrap"
+            >
+              {generatingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {generatingAll ? 'Generating…' : `Generate All (${pendingGenerate})`}
+            </button>
+          )}
+        </div>
       </div>
 
       {contacts.length === 0 ? (
@@ -578,10 +593,10 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, g
                     ) : (
                       <button
                         onClick={() => onGenerateEmail(c.job?.id)}
-                        disabled={generatingFor === c.job?.id}
+                        disabled={generatingFor.has(c.job?.id)}
                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
                       >
-                        {generatingFor === c.job?.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                        {generatingFor.has(c.job?.id) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
                         Generate
                       </button>
                     )}
@@ -1108,10 +1123,7 @@ function EmptyState({ icon: Icon, title, subtitle }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // STAGING TAB — approved jobs waiting for bulk contact search
 // ═════════════════════════════════════════════════════════════════════════════
-function StagingTab({ jobs, onRunBulkSearch, isSearching, hunterQuota }) {
-  const remaining = hunterQuota?.searches_remaining ?? null;
-  const dryRun    = hunterQuota?.dry_run ?? false;
-
+function StagingTab({ jobs, onRunBulkSearch, isSearching }) {
   return (
     <div className="space-y-5">
       {/* Action banner */}
@@ -1126,12 +1138,6 @@ function StagingTab({ jobs, onRunBulkSearch, isSearching, hunterQuota }) {
               Uses our AI contact discovery engine to find a decision-maker at each approved company.
               Contacts found move to the <strong>Contacts</strong> tab. Jobs with no email move to <strong>Manual Apply</strong>.
             </p>
-            {remaining !== null && (
-              <p className={`text-[11px] mt-1.5 font-semibold ${remaining < 5 ? 'text-red-600' : 'text-blue-600'}`}>
-                AI Search Credits: {remaining} search{remaining !== 1 ? 'es' : ''} remaining
-                {dryRun && <span className="ml-2 px-1.5 py-0.5 bg-blue-200 text-blue-800 rounded text-[10px] font-bold">DRY RUN</span>}
-              </p>
-            )}
           </div>
         </div>
 
@@ -1448,6 +1454,103 @@ function ManualApplyCard({ job, onGenerateCv, generatingCvFor }) {
               No URL
             </span>
           )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// GENERATE MODAL — pre-generation questionnaire
+// ═════════════════════════════════════════════════════════════════════════════
+function GenerateModal({ contact, bulkCount, onConfirm, onClose }) {
+  const [highlight, setHighlight] = useState('');
+  const [tone, setTone]           = useState('professional');
+
+  const companyName = contact?.job?.company_name;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
+      <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl border border-neutral-dark relative animate-fade-in">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-secondary-dark/50 hover:bg-neutral-dark rounded-full p-1.5 transition-colors"
+        >
+          <X className="w-4 h-4" />
+        </button>
+
+        <div className="flex items-center gap-2.5 mb-1">
+          <div className="h-9 w-9 rounded-xl bg-primary-light/10 border border-primary-light/20 flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4 text-primary-light" />
+          </div>
+          <h2 className="text-base font-bold font-montserrat text-black">
+            {bulkCount ? `Generate ${bulkCount} Emails` : 'Generate Email'}
+          </h2>
+        </div>
+        <p className="text-xs text-secondary-dark mb-5 ml-11">
+          {bulkCount
+            ? `These settings apply to all ${bulkCount} pending contacts.`
+            : companyName
+              ? `for ${companyName}`
+              : 'Customise before generating'
+          }
+        </p>
+
+        <div className="space-y-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark mb-1.5">
+              What do you want to highlight?
+            </label>
+            <textarea
+              value={highlight}
+              onChange={e => setHighlight(e.target.value)}
+              placeholder="e.g. my experience with TypeScript, my startup background, my interest in fintech..."
+              rows={3}
+              className="w-full p-3 bg-neutral border border-neutral-dark rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-light/30 resize-none leading-relaxed"
+            />
+            <p className="text-[10px] text-secondary-dark/60 mt-1">Optional — leave blank to let the AI decide</p>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark mb-1.5">
+              Tone
+            </label>
+            <div className="flex gap-2">
+              {[
+                { key: 'professional', label: 'Professional' },
+                { key: 'warm',         label: 'Warm' },
+                { key: 'direct',       label: 'Direct' },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  onClick={() => setTone(t.key)}
+                  className={`flex-1 py-2 rounded-xl text-sm font-semibold border transition-all ${
+                    tone === t.key
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-secondary-dark border-neutral-dark hover:bg-neutral'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-2 justify-end pt-1">
+            <button
+              onClick={onClose}
+              className="px-4 py-2.5 text-sm font-medium text-secondary-dark bg-white border border-neutral-dark rounded-xl hover:bg-neutral transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => onConfirm({ highlight: highlight.trim(), tone_override: tone })}
+              className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-primary-light to-primary-dark rounded-xl shadow-md shadow-orange-100 hover:opacity-90 transition-all active:scale-95"
+            >
+              <Sparkles className="w-4 h-4" />
+              Generate
+            </button>
+          </div>
         </div>
       </div>
     </div>
