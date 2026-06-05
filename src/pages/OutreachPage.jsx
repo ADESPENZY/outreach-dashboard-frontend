@@ -113,11 +113,12 @@ const OutreachPage = () => {
   });
 
   // Auto-show add-inbox modal when user lands on Sending tab with no inbox
+  // Also re-fires when connectedInboxes updates (handles stale React Query cache)
   React.useEffect(() => {
     if (activeTab === 'queue' && connectedInboxes.length === 0) {
       setNoInboxModal(true);
     }
-  }, [activeTab]);
+  }, [activeTab, connectedInboxes.length]);
 
   const requireInbox = (action) => {
     if (connectedInboxes.length === 0) { setNoInboxModal(true); return; }
@@ -150,26 +151,35 @@ const OutreachPage = () => {
   });
 
   // ── Queue mutations ────────────────────────────────────────────────────────
+  const isNoInboxError = (err) =>
+    err.message?.toLowerCase().includes('inbox') || err.message?.toLowerCase().includes('gmail');
+
   const queueSingleMutation = useMutation({
     mutationFn: (id) => queueEmail(id),
     onSuccess: (data) => {
       if (data.status === 'already_sent') return toast.info('Already sent.');
-      if (data.status === 'already_queued') return toast.info('Already in queue.');
+      if (data.status === 'already_queued') return toast.info('Already scheduled.');
       const t = fmtTime(data.scheduled_send_at);
-      toast.success(`Queued! Sends ${t}`);
+      toast.success(`Scheduled! Sends ${t}`);
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     },
-    onError: (err) => toast.error('Queue failed: ' + err.message),
+    onError: (err) => {
+      if (isNoInboxError(err)) { setNoInboxModal(true); return; }
+      toast.error('Scheduling failed: ' + err.message);
+    },
   });
 
   const queueAllMutation = useMutation({
     mutationFn: queueAllEmails,
     onSuccess: (data) => {
-      if (!data.queued) return toast.info('No approved emails to queue.');
-      toast.success(`${data.queued} emails queued. Last one: ${data.estimated_completion}`, { autoClose: 8000 });
+      if (!data.queued) return toast.info('No approved emails to schedule.');
+      toast.success(`${data.queued} emails scheduled. Last one: ${data.estimated_completion}`, { autoClose: 8000 });
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     },
-    onError: (err) => toast.error('Queue all failed: ' + err.message),
+    onError: (err) => {
+      if (isNoInboxError(err)) { setNoInboxModal(true); return; }
+      toast.error('Scheduling failed: ' + err.message);
+    },
   });
 
   const deleteMutation = useMutation({
