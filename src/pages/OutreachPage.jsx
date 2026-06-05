@@ -107,10 +107,17 @@ const OutreachPage = () => {
   const contactedJobIds = new Set(contacts.map(c => c.job?.id ?? c.job));
   const stagingJobs = approvedJobs.filter(j => !contactedJobIds.has(j.id));
 
-  const { data: connectedInboxes = [] } = useQuery({
+  const { data: connectedInboxes = [], isLoading: loadingInboxes } = useQuery({
     queryKey: ['gmail-accounts'],
     queryFn: getGmailAccounts,
   });
+
+  // Auto-show add-inbox modal the moment user lands on Sending tab with no inbox
+  React.useEffect(() => {
+    if (activeTab === 'queue' && !loadingInboxes && connectedInboxes.length === 0) {
+      setNoInboxModal(true);
+    }
+  }, [activeTab, loadingInboxes, connectedInboxes.length]);
 
   const requireInbox = (action) => {
     if (connectedInboxes.length === 0) { setNoInboxModal(true); return; }
@@ -464,10 +471,6 @@ const OutreachPage = () => {
                   generatingCvFor={generatingCvFor}
                 />
               )}
-              {activeTab === 'queue' && connectedInboxes.length === 0 && !noInboxModal && (
-                // Auto-show the add-inbox modal the first time user lands here without an inbox
-                <AutoShowInboxModal onOpen={() => setNoInboxModal(true)} />
-              )}
               {activeTab === 'queue' && (
                 <QueueTab
                   emails={sentEmails}
@@ -516,12 +519,6 @@ const OutreachPage = () => {
     </div>
   );
 };
-
-// Fires onOpen once when rendered — used to auto-trigger modal on tab switch
-function AutoShowInboxModal({ onOpen }) {
-  React.useEffect(() => { onOpen(); }, []);
-  return null;
-}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // TAB 1 — CONTACTS
