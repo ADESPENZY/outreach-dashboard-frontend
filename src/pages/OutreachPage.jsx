@@ -269,7 +269,7 @@ const OutreachPage = () => {
     setApprovingId(id);
     try {
       await approveEmail(id);
-      toast.success('Approved → go to Queue & Sent to schedule it.');
+      toast.success('Approved → go to the Sending tab to schedule it.');
       queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) { toast.error('Failed: ' + err.message); }
@@ -450,7 +450,7 @@ const OutreachPage = () => {
               {activeTab === 'staging' && (
                 <StagingTab
                   jobs={stagingJobs}
-                  onRunBulkSearch={() => requireInbox(() => bulkSearchMutation.mutate())}
+                  onRunBulkSearch={() => bulkSearchMutation.mutate()}
                   isSearching={bulkSearchMutation.isPending}
                 />
               )}
@@ -798,7 +798,7 @@ function QueueTab({
       {/* How it works notice */}
       <div className="flex items-center gap-2 text-xs text-secondary-dark/70 bg-neutral border border-neutral-dark rounded-xl px-4 py-2.5">
         <Clock className="w-3.5 h-3.5 shrink-0" />
-        Emails go out Mon–Fri, 8 AM – 5 PM · one every 5 minutes so they don't look like spam
+        Emails go out Mon–Fri, 9 AM – 5 PM US Eastern · one every 5 minutes so they don't look like spam
       </div>
 
       {/* Approved but not scheduled yet */}

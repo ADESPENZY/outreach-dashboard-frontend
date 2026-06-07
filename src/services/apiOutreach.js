@@ -76,17 +76,19 @@ export async function getDraftEmails() {
  */
 export async function getSentEmails() {
   try {
-    const [approvedRes, sentRes, openedRes, repliedRes] = await Promise.all([
+    const [approvedRes, sentRes, openedRes, repliedRes, bouncedRes] = await Promise.all([
       api.get("/api/outreach/emails/", { params: { status: "approved" } }),
       api.get("/api/outreach/emails/", { params: { status: "sent" } }),
       api.get("/api/outreach/emails/", { params: { status: "opened" } }),
       api.get("/api/outreach/emails/", { params: { status: "replied" } }),
+      api.get("/api/outreach/emails/", { params: { status: "bounced" } }),
     ]);
     return [
       ...approvedRes.data,
       ...sentRes.data,
       ...openedRes.data,
       ...repliedRes.data,
+      ...bouncedRes.data,
     ];
   } catch (err) {
     throw new Error(parseApiError(err));
