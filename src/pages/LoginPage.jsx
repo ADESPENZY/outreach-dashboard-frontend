@@ -13,6 +13,7 @@ import {
 } from 'framer-motion';
 import { GoogleLogin } from '@react-oauth/google';
 import SmallSpinner from '../components/SmallSpinner';
+import UsernamePickerModal from '../components/UsernamePickerModal';
 import { useAuth } from '../context/AuthContext';
 
 /* ─── ACTIVITY LOG DATA ─── */
@@ -477,6 +478,7 @@ const LoginPage = () => {
   const navigate = useNavigate();
   const { login, loginWithGoogle } = useAuth();
   const [showPass, setShowPass] = useState(false);
+  const [showUsernamePicker, setShowUsernamePicker] = useState(false);
 
   const googleBtnRef = useRef(null);
   const [googleWidth, setGoogleWidth] = useState(400);
@@ -486,7 +488,11 @@ const LoginPage = () => {
 
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
-      await loginWithGoogle(credentialResponse.credential);
+      const { isNew } = await loginWithGoogle(credentialResponse.credential);
+      if (isNew) {
+        setShowUsernamePicker(true);
+        return;
+      }
       toast.success('Signed in with Google!');
       const from = location?.state?.from?.pathname || '/dashboard';
       navigate(from, { replace: true });
@@ -514,7 +520,13 @@ const LoginPage = () => {
     },
   });
 
+  const from = location?.state?.from?.pathname || '/dashboard';
+
   return (
+    <>
+    {showUsernamePicker && (
+      <UsernamePickerModal onDone={() => { setShowUsernamePicker(false); navigate(from, { replace: true }); }} />
+    )}
     <section className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#0B0C10] text-white">
       {/* ── LEFT: Auth Panel ── */}
       <div className="lg:col-span-5 flex flex-col justify-between p-8 sm:p-12 lg:p-16 relative z-10">
@@ -681,6 +693,7 @@ const LoginPage = () => {
         </motion.div>
       </motion.div>
     </section>
+    </>
   );
 };
 

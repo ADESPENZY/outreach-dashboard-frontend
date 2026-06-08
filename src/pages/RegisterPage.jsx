@@ -13,6 +13,7 @@ import {
 } from 'framer-motion';
 import { GoogleLogin } from '@react-oauth/google';
 import SmallSpinner from '../components/SmallSpinner';
+import UsernamePickerModal from '../components/UsernamePickerModal';
 import { useAuth } from '../context/AuthContext';
 
 /* ─── ACTIVITY LOG DATA ─── */
@@ -461,8 +462,9 @@ const RegisterPage = () => {
   const { errors } = formState;
   const navigate   = useNavigate();
   const { register: authRegister, loginWithGoogle } = useAuth();
-  const [showPass,    setShowPass]    = useState(false);
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [showPass,          setShowPass]          = useState(false);
+  const [showConfirm,       setShowConfirm]       = useState(false);
+  const [showUsernamePicker, setShowUsernamePicker] = useState(false);
 
   const password = watch('password');
 
@@ -474,7 +476,11 @@ const RegisterPage = () => {
 
   const handleGoogleSuccess = async (credentialResponse) => {
     try {
-      await loginWithGoogle(credentialResponse.credential);
+      const { isNew } = await loginWithGoogle(credentialResponse.credential);
+      if (isNew) {
+        setShowUsernamePicker(true);
+        return;
+      }
       toast.success('Welcome aboard!');
       navigate('/dashboard', { replace: true });
     } catch (err) {
@@ -494,6 +500,10 @@ const RegisterPage = () => {
   });
 
   return (
+    <>
+    {showUsernamePicker && (
+      <UsernamePickerModal onDone={() => { setShowUsernamePicker(false); navigate('/dashboard', { replace: true }); }} />
+    )}
     <section className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#0B0C10] text-white">
 
       {/* ── LEFT: Auth Panel ── */}
@@ -688,6 +698,7 @@ const RegisterPage = () => {
       </motion.div>
 
     </section>
+    </>
   );
 };
 

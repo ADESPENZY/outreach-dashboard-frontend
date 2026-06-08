@@ -49,9 +49,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const loginWithGoogle = async (credential) => {
-    const { access } = await googleAuth(credential);
-    sessionStorage.setItem("access", access);
+    const data = await googleAuth(credential);
+    sessionStorage.setItem("access", data.access);
     await checkAuth();
+    return { isNew: data.is_new === true };
   };
 
   const logout = async () => {

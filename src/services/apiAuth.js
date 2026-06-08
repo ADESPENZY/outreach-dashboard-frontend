@@ -53,3 +53,14 @@ export async function googleAuth(credential) {
     throw new Error(parseApiError(err));
   }
 }
+
+export async function setUsername(username) {
+  try {
+    const response = await api.patch("/api/accounts/auth/set-username/", { username });
+    return response.data;
+  } catch (err) {
+    // Return field-level error so the modal can display it inline
+    const detail = err.response?.data?.username || parseApiError(err);
+    throw new Error(detail);
+  }
+}
