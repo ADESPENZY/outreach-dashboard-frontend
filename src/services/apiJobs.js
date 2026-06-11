@@ -180,3 +180,12 @@ export async function getScrapeStatus() {
     throw new Error(parseApiError(err));
   }
 }
+
+export async function saveJobDescription(jobId, description) {
+  try {
+    const response = await api.post(`/api/jobs/${jobId}/refresh-description/`, { description });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

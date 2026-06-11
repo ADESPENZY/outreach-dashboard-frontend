@@ -11,7 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   getJobsPage, updateJobStatus, trackJob,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
-  scrapeYcJobs, scrapeWellfoundJobs, getScrapeStatus,
+  scrapeYcJobs, scrapeWellfoundJobs, getScrapeStatus, saveJobDescription,
 } from '../services/apiJobs';
 import { getAutoScoutSettings } from '../services/apiSettings';
 import { getProfile } from '../services/apiProfile';
@@ -45,6 +45,8 @@ const JobsPage = () => {
     const [showNewJobsBanner, setShowNewJobsBanner] = useState(false);
     const [isScrapeSourceOpen, setIsScrapeSourceOpen] = useState(false);
     const [scrapePhase, setScrapePhase] = useState('scraping'); // 'scraping' | 'scoring'
+    const [pasteDescOpen, setPasteDescOpen]   = useState(false);
+    const [pasteDescValue, setPasteDescValue] = useState('');
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
@@ -86,6 +88,11 @@ const JobsPage = () => {
     // Reset to page 1 whenever the filter tab changes so users always land
     // on the first page of a new filter set.
     useEffect(() => { setCurrentPage(1); }, [filterTab]);
+
+    // Reset paste-description state whenever the details modal is closed.
+    useEffect(() => {
+        if (!selectedJob) { setPasteDescOpen(false); setPasteDescValue(''); }
+    }, [selectedJob]);
 
     // While a scrape is running, poll the job list every 8 seconds so jobs
     // appear incrementally on the page as the background thread saves them.
@@ -214,6 +221,18 @@ const JobsPage = () => {
             }
         },
         onError: (err) => toast.error(err.message || 'Contact search failed.'),
+    });
+
+    const saveDescMutation = useMutation({
+        mutationFn: ({ jobId, description }) => saveJobDescription(jobId, description),
+        onSuccess: () => {
+            toast.success('Description saved!');
+            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
+            setSelectedJob(null);
+            setPasteDescOpen(false);
+            setPasteDescValue('');
+        },
+        onError: (err) => toast.error(err.message || 'Failed to save description'),
     });
 
     const scrapeMutation = useMutation({
@@ -1276,6 +1295,46 @@ const JobsPage = () => {
                                     <ExternalLink className="w-5 h-5 shrink-0" />
                                     View Job Post
                                 </a>
+                            )}
+
+                            {/* Paste Description — only when no description yet */}
+                            {!selectedJob.has_description && (
+                                pasteDescOpen ? (
+                                    <div className="p-3.5 space-y-2">
+                                        <p className="text-xs font-semibold text-secondary-dark uppercase tracking-wider">Paste Job Description</p>
+                                        <textarea
+                                            autoFocus
+                                            value={pasteDescValue}
+                                            onChange={e => setPasteDescValue(e.target.value)}
+                                            placeholder="Go to the Wellfound page, copy the full job description, and paste it here..."
+                                            rows={5}
+                                            className="w-full p-2.5 text-sm border border-neutral-dark rounded-xl resize-none focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
+                                        />
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => saveDescMutation.mutate({ jobId: selectedJob.id, description: pasteDescValue })}
+                                                disabled={!pasteDescValue.trim() || saveDescMutation.isPending}
+                                                className="flex-1 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-xl hover:opacity-90 disabled:opacity-60"
+                                            >
+                                                {saveDescMutation.isPending ? 'Saving...' : 'Save Description'}
+                                            </button>
+                                            <button
+                                                onClick={() => { setPasteDescOpen(false); setPasteDescValue(''); }}
+                                                className="px-4 py-2 text-xs font-semibold text-secondary-dark bg-neutral rounded-xl border border-neutral-dark"
+                                            >
+                                                Cancel
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => setPasteDescOpen(true)}
+                                        className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-amber-700 hover:bg-amber-50 transition-colors"
+                                    >
+                                        <FileText className="w-5 h-5 shrink-0" />
+                                        Paste Job Description
+                                    </button>
+                                )
                             )}
                         </div>
 
