@@ -27,15 +27,21 @@ const NAV_GROUPS = [
   {
     label: 'Main',
     items: [
-      { name: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
+      {
+        name: 'Dashboard',
+        icon: LayoutDashboard,
+        path: '/dashboard',
+        tooltip: 'Overview of your pipeline — jobs scraped, emails sent, and activity stats',
+      },
       {
         name: 'Jobs & Outreach',
         icon: Briefcase,
         id: 'jobs-outreach',
+        tooltip: 'Scrape jobs, review AI scores, and send cold emails to hiring managers',
         children: [
-          { name: 'Jobs',        icon: Briefcase,  path: '/dashboard/jobs' },
-          { name: 'Job Tracker', icon: ListChecks, path: '/dashboard/job-tracker' },
-          { name: 'Outreach',    icon: Send,       path: '/dashboard/outreach' },
+          { name: 'Jobs',        icon: Briefcase,  path: '/dashboard/jobs',        tooltip: 'Scrape and browse AI-scored job opportunities' },
+          { name: 'Job Tracker', icon: ListChecks, path: '/dashboard/job-tracker', tooltip: 'Track the status of jobs you have applied to' },
+          { name: 'Outreach',    icon: Send,       path: '/dashboard/outreach',    tooltip: 'Draft, approve, and send cold emails to hiring contacts' },
         ],
       },
     ],
@@ -43,9 +49,9 @@ const NAV_GROUPS = [
   {
     label: 'Tools',
     items: [
-      { name: 'Inboxes',        icon: Mail,    path: '/dashboard/inboxes' },
-      { name: 'Analytics',      icon: BarChart, path: '/dashboard/analytics' },
-      { name: 'Warmup Manager', icon: Flame,   path: '/dashboard/warmup' },
+      { name: 'Inboxes',        icon: Mail,    path: '/dashboard/inboxes',   tooltip: 'Connect and manage the Gmail accounts used for sending emails' },
+      { name: 'Analytics',      icon: BarChart, path: '/dashboard/analytics', tooltip: 'See open rates, reply rates, and outreach performance over time' },
+      { name: 'Warmup Manager', icon: Flame,   path: '/dashboard/warmup',    tooltip: 'Warm up your Gmail inbox to improve email deliverability' },
     ],
   },
   {
@@ -55,10 +61,11 @@ const NAV_GROUPS = [
         name: 'Account',
         icon: UserCircle,
         id: 'account',
+        tooltip: 'Manage your profile, preferences, and automated job scout settings',
         children: [
-          { name: 'Profile',    icon: UserCircle, path: '/dashboard/profile' },
-          { name: 'Settings',   icon: Settings,   path: '/dashboard/settings' },
-          { name: 'Auto-Scout', icon: Target,     path: '/dashboard/auto-scout' },
+          { name: 'Profile',    icon: UserCircle, path: '/dashboard/profile',    tooltip: 'Upload your CV and fill in your skills so the AI can tailor applications' },
+          { name: 'Settings',   icon: Settings,   path: '/dashboard/settings',   tooltip: 'Change password, notification preferences, and account options' },
+          { name: 'Auto-Scout', icon: Target,     path: '/dashboard/auto-scout', tooltip: 'Configure the nightly job scout — target roles, locations, and scoring rules' },
         ],
       },
     ],
@@ -118,7 +125,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 ? 'bg-primary-light/10 text-primary-dark font-semibold border-primary-light/20 shadow-sm'
                 : 'text-secondary-dark hover:bg-neutral hover:text-black-light',
             ].join(' ')}
-            title={isCollapsed ? item.name : undefined}
+            title={isCollapsed ? item.name : item.tooltip}
           >
             <item.icon className="w-4 h-4 shrink-0 stroke-[1.75px]" />
             <span className={`text-sm flex-1 text-left ${isCollapsed ? 'md:hidden' : ''}`}>
@@ -143,6 +150,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                   to={child.path}
                   end={child.path === '/dashboard'}
                   onClick={() => { onClose(); setOpenDropdown(null); }}
+                  title={child.tooltip}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 border border-transparent ${
                       isActive
@@ -170,6 +178,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                   to={child.path}
                   end={child.path === '/dashboard'}
                   onClick={() => setOpenDropdown(null)}
+                  title={child.tooltip}
                   className={({ isActive }) =>
                     `flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 ${
                       isActive
@@ -204,7 +213,7 @@ const Sidebar = ({ isOpen, onClose }) => {
               : 'text-secondary-dark hover:bg-neutral hover:text-black-light',
           ].join(' ')
         }
-        title={isCollapsed ? item.name : undefined}
+        title={isCollapsed ? item.name : item.tooltip}
       >
         <item.icon className="w-4 h-4 shrink-0 stroke-[1.75px]" />
         <span className={`text-sm ${isCollapsed ? 'md:hidden' : ''}`}>{item.name}</span>
