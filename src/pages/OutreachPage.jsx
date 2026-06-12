@@ -10,16 +10,19 @@ import {
 } from 'lucide-react';
 import {
   getContacts, getDraftEmails, getSentEmails,
-  generateEmail, approveEmail,
+  generateEmail, approveEmail, bulkGenerateEmails,
   markEmailReplied, runFollowups, generateJobCV, editEmail,
   queueEmail, queueAllEmails,
   deleteEmail, unqueueEmail, rescheduleEmail,
-  bulkContactSearch,
+  bulkContactSearch, getBulkSearchStatus,
 } from '../services/apiOutreach';
 import { getManualApplyJobs, getApprovedJobs } from '../services/apiJobs';
 import { getGmailAccounts } from '../services/apiGmail';
 import TailoredCVPreview from '../components/TailoredCVPreview';
 import NoInboxModal from '../components/NoInboxModal';
+
+// How many staging jobs one bulk contact search processes (backend caps at 25)
+const BULK_SEARCH_BATCH = 10;
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
@@ -38,6 +41,7 @@ const STATUS_STYLES = {
   opened:   { pill: 'bg-purple-50 text-purple-700 border-purple-200',  dot: 'bg-purple-500' },
   replied:  { pill: 'bg-green-50 text-green-700 border-green-200',   dot: 'bg-green-500' },
   bounced:  { pill: 'bg-red-50 text-red-600 border-red-200',         dot: 'bg-red-500' },
+  failed:   { pill: 'bg-red-50 text-red-600 border-red-200',         dot: 'bg-red-500' },
 };
 
 function StatusPill({ status }) {
@@ -103,8 +107,12 @@ const OutreachPage = () => {
   const { data: manualApplyJobs = [], isLoading: loadingManual }   = useQuery({ queryKey: ['manual-apply-jobs'],   queryFn: getManualApplyJobs });
   const { data: approvedJobs = [],    isLoading: loadingApproved } = useQuery({ queryKey: ['approved-jobs'],       queryFn: getApprovedJobs });
 
-  // Staging = approved jobs that don't have a contact yet
-  const contactedJobIds = new Set(contacts.map(c => c.job?.id ?? c.job));
+  // Staging = approved jobs that don't have a REAL contact yet.
+  // Placeholder contacts (confidence_score === 0, auto-created by the email
+  // generator) don't count — those jobs still need a contact search.
+  const contactedJobIds = new Set(
+    contacts.filter(c => c.confidence_score !== 0).map(c => c.job?.id ?? c.job)
+  );
   const stagingJobs = approvedJobs.filter(j => !contactedJobIds.has(j.id));
 
   const { data: connectedInboxes = [] } = useQuery({
@@ -127,24 +135,50 @@ const OutreachPage = () => {
 
   const loading = loadingContacts || loadingDrafts || loadingSent || loadingManual || loadingApproved;
 
-  // ── Bulk contact search mutation ───────────────────────────────────────────
+  // ── Bulk contact search — batched, with live progress polling ──────────────
+  // The backend processes BULK_SEARCH_BATCH staging jobs per run (keeps
+  // Hunter/Serper credit burn predictable for users with 100+ approved jobs).
+  // While a run is active we poll its progress every 3 s.
+  const { data: searchStatus } = useQuery({
+    queryKey: ['bulk-search-status'],
+    queryFn: getBulkSearchStatus,
+    refetchInterval: (query) => (query.state.data?.running ? 3000 : false),
+  });
+  const searchRunning = !!searchStatus?.running;
+
+  const prevSearchRunning = React.useRef(false);
+  React.useEffect(() => {
+    if (prevSearchRunning.current && !searchRunning && searchStatus) {
+      // Run just finished — refresh everything and show the result summary
+      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
+      queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
+      setBulkResultModal({
+        total_processed: searchStatus.processed ?? 0,
+        contacts_found:  searchStatus.found ?? 0,
+        manual_apply:    searchStatus.manual_apply ?? 0,
+        errors:          searchStatus.errors ?? 0,
+      });
+    }
+    prevSearchRunning.current = searchRunning;
+  }, [searchRunning, searchStatus, queryClient]);
+
   const bulkSearchMutation = useMutation({
-    mutationFn: bulkContactSearch,
+    mutationFn: () => bulkContactSearch(BULK_SEARCH_BATCH),
     onSuccess: (data) => {
       if (data.status === 'started') {
-        toast.success(`Searching contacts for ${data.total} jobs in the background. Check the Contacts tab in ~2 minutes.`);
-        setTimeout(() => {
-          queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
-          queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
-          queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
-          queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
-        }, 120_000);
+        toast.success(
+          data.remaining > 0
+            ? `Searching ${data.total} jobs — ${data.remaining} more waiting for the next batch.`
+            : `Searching contacts for ${data.total} job${data.total !== 1 ? 's' : ''}…`
+        );
+        queryClient.invalidateQueries({ queryKey: ['bulk-search-status'] });
+      } else if (data.status === 'already_running') {
+        toast.info('A contact search is already running — progress is shown below.');
+        queryClient.invalidateQueries({ queryKey: ['bulk-search-status'] });
       } else {
-        setBulkResultModal(data);
-        queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
-        queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
-        queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
-        queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
+        toast.info('No staging jobs need a contact search.');
       }
     },
     onError: (err) => toast.error(err.message || 'Bulk search failed. Please try again.'),
@@ -172,8 +206,11 @@ const OutreachPage = () => {
   const queueAllMutation = useMutation({
     mutationFn: queueAllEmails,
     onSuccess: (data) => {
-      if (!data.queued) return toast.info('No approved emails to schedule.');
+      if (!data.queued) return toast.info(data.message || 'No approved emails to schedule.');
       toast.success(`${data.queued} emails scheduled. Last one: ${data.estimated_completion}`, { autoClose: 8000 });
+      if (data.skipped_placeholders > 0) {
+        toast.warn(`${data.skipped_placeholders} skipped — guessed placeholder contacts. Run a contact search for those jobs first.`, { autoClose: 10000 });
+      }
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     },
     onError: (err) => {
@@ -230,27 +267,26 @@ const OutreachPage = () => {
 
   const handleGenerateConfirm = async ({ highlight, tone_override }) => {
     if (!generateModalFor) return;
-    const { jobId, bulk, pendingContacts } = generateModalFor;
+    const { jobId, bulk } = generateModalFor;
     setGenerateModalFor(null);
 
     if (bulk) {
+      // Generation runs server-side in a background thread — each draft is
+      // two OpenAI calls plus scraping, far too slow to loop from the browser.
       setGeneratingAll(true);
-      let ok = 0, fail = 0;
-      for (const c of pendingContacts) {
-        const id = c.job?.id;
-        setGeneratingFor(prev => new Set([...prev, id]));
-        try {
-          await generateEmail(id, { highlight, tone_override });
-          ok++;
-        } catch { fail++; }
-        finally {
-          setGeneratingFor(prev => { const s = new Set(prev); s.delete(id); return s; });
+      try {
+        const data = await bulkGenerateEmails({ highlight, tone_override });
+        if (data.status === 'started') {
+          toast.success(`Generating ${data.total} drafts in the background — check the Drafts tab in a few minutes.`, { autoClose: 8000 });
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+            queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+          }, 90_000);
+        } else {
+          toast.info('No pending contacts — all have drafts already.');
         }
-      }
-      toast.success(`Generated ${ok} drafts${fail ? `, ${fail} failed` : ''}`);
-      queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
-      queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
-      setGeneratingAll(false);
+      } catch (err) { toast.error('Failed: ' + err.message); }
+      finally { setGeneratingAll(false); }
     } else {
       setGeneratingFor(prev => new Set([...prev, jobId]));
       try {
@@ -451,7 +487,9 @@ const OutreachPage = () => {
                 <StagingTab
                   jobs={stagingJobs}
                   onRunBulkSearch={() => bulkSearchMutation.mutate()}
-                  isSearching={bulkSearchMutation.isPending}
+                  isSearching={bulkSearchMutation.isPending || searchRunning}
+                  progress={searchRunning ? searchStatus : null}
+                  batchSize={BULK_SEARCH_BATCH}
                 />
               )}
               {activeTab === 'contacts' && (
@@ -643,8 +681,19 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
                     </div>
                   </td>
                   <td className="p-3.5 hidden lg:table-cell">
-                    <p className="text-sm font-medium">{c.first_name} {c.last_name}</p>
-                    <p className="text-[11px] text-secondary-dark">{c.title || '—'}</p>
+                    {(c.first_name || '').trim() ? (
+                      <>
+                        <p className="text-sm font-medium">{c.first_name} {c.last_name}</p>
+                        <p className="text-[11px] text-secondary-dark">{c.title || '—'}</p>
+                      </>
+                    ) : (
+                      <span
+                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 rounded-full text-[10px] font-bold uppercase tracking-wide"
+                        title="No person's name found — the email will greet the company team instead of an individual"
+                      >
+                        Generic inbox
+                      </span>
+                    )}
                   </td>
                   <td className="p-3.5 hidden md:table-cell">
                     <a href={`mailto:${c.email}`} className="text-sm text-primary-dark hover:underline">{c.email}</a>
@@ -729,6 +778,7 @@ function QueueTab({
   const noInbox          = !connectedInboxes || connectedInboxes.length === 0;
   const approvedUnqueued = emails.filter(e => e.status === 'approved' && !e.is_queued);
   const scheduled        = emails.filter(e => e.is_queued && e.status === 'approved').sort((a, b) => new Date(a.scheduled_send_at) - new Date(b.scheduled_send_at));
+  const failed           = emails.filter(e => e.status === 'failed');
   const sent             = emails.filter(e => ['sent','opened','replied','bounced'].includes(e.status));
   const dueFollowups     = sent.filter(e => ['sent','opened'].includes(e.status) && e.next_followup_at && new Date(e.next_followup_at) <= new Date()).length;
   const nextSlot         = scheduled[0]?.scheduled_send_at;
@@ -798,7 +848,7 @@ function QueueTab({
       {/* How it works notice */}
       <div className="flex items-center gap-2 text-xs text-secondary-dark/70 bg-neutral border border-neutral-dark rounded-xl px-4 py-2.5">
         <Clock className="w-3.5 h-3.5 shrink-0" />
-        Emails go out Mon–Fri, 9 AM – 5 PM US Eastern · one every 5 minutes so they don't look like spam
+        Emails go out Mon–Fri, 9 AM – 5 PM US Eastern · spaced 4–8 minutes apart so they don't look like spam
       </div>
 
       {/* Approved but not scheduled yet */}
@@ -851,6 +901,27 @@ function QueueTab({
         </section>
       )}
 
+      {/* Failed sends */}
+      {failed.length > 0 && (
+        <section>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-red-500 mb-3 flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-red-500" /> Failed ({failed.length})
+          </h3>
+          <div className="grid gap-3">
+            {failed.map(email => (
+              <EmailCard
+                key={email.id}
+                email={email}
+                onDelete={() => onDelete(email.id)}
+                deleting={deleting === email.id}
+                onGenerateCv={onGenerateCv}
+                generatingCvFor={generatingCvFor}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* Sent history */}
       {sent.length > 0 && (
         <section>
@@ -874,7 +945,7 @@ function QueueTab({
         </section>
       )}
 
-      {approvedUnqueued.length === 0 && scheduled.length === 0 && sent.length === 0 && (
+      {approvedUnqueued.length === 0 && scheduled.length === 0 && sent.length === 0 && failed.length === 0 && (
         <EmptyState icon={Send} title="Nothing here yet" subtitle="Go to Drafts, approve an email, then come back here to schedule it." />
       )}
     </div>
@@ -918,8 +989,11 @@ function EmailCard({
     setReschVal('');
   };
 
-  // Min datetime for the picker — now + 1 minute
-  const minDT = new Date(Date.now() + 60000).toISOString().slice(0, 16);
+  // Min datetime for the picker — now + 1 minute, in LOCAL time.
+  // datetime-local inputs expect local wall-clock values; toISOString() is
+  // UTC and would shift the minimum by the timezone offset.
+  const minLocal = new Date(Date.now() + 60000 - new Date().getTimezoneOffset() * 60000);
+  const minDT = minLocal.toISOString().slice(0, 16);
 
   return (
     <>
@@ -965,6 +1039,17 @@ function EmailCard({
           )}
         </div>
       </div>
+
+      {/* Failure reason */}
+      {email.status === 'failed' && email.last_send_error && (
+        <div className="mx-5 mt-3 flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+          <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+          <p className="text-xs text-red-700">
+            <span className="font-bold">Send failed{email.send_attempts > 1 ? ` after ${email.send_attempts} attempts` : ''}:</span>{' '}
+            {email.last_send_error}
+          </p>
+        </div>
+      )}
 
       {/* Subject + body */}
       <div className="px-5 py-3">
@@ -1209,7 +1294,13 @@ function EmptyState({ icon: Icon, title, subtitle }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // STAGING TAB — approved jobs waiting for bulk contact search
 // ═════════════════════════════════════════════════════════════════════════════
-function StagingTab({ jobs, onRunBulkSearch, isSearching }) {
+function StagingTab({ jobs, onRunBulkSearch, isSearching, progress, batchSize }) {
+  const batchCount = Math.min(jobs.length, batchSize);
+  const remaining  = Math.max(jobs.length - batchSize, 0);
+  const pct = progress && progress.total
+    ? Math.round((progress.processed / progress.total) * 100)
+    : 0;
+
   return (
     <div className="space-y-5">
       {/* Action banner */}
@@ -1221,7 +1312,8 @@ function StagingTab({ jobs, onRunBulkSearch, isSearching }) {
           <div>
             <p className="font-bold text-sm text-blue-900">Batch Contact Search</p>
             <p className="text-xs text-blue-700 mt-0.5 max-w-md">
-              Uses our AI contact discovery engine to find a decision-maker at each approved company.
+              Finds a decision-maker at each approved company, {batchSize} jobs per run —
+              so contact-search credits are spent in controlled batches.
               Contacts found move to the <strong>Contacts</strong> tab. Jobs with no email move to <strong>Manual Apply</strong>.
             </p>
           </div>
@@ -1240,16 +1332,37 @@ function StagingTab({ jobs, onRunBulkSearch, isSearching }) {
           ) : (
             <>
               <Zap className="w-4 h-4" />
-              Run Bulk Contact Search ({jobs.length} Job{jobs.length !== 1 ? 's' : ''})
+              {remaining > 0
+                ? `Search Next ${batchCount} (${jobs.length} waiting)`
+                : `Run Contact Search (${jobs.length} Job${jobs.length !== 1 ? 's' : ''})`}
             </>
           )}
         </button>
       </div>
 
+      {/* Live progress bar */}
       {isSearching && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-700">
-          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-          <span>Processing jobs — this can take 30–90 seconds depending on how many companies need a domain lookup. Please wait…</span>
+        <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+          <div className="flex items-center justify-between text-sm text-blue-700">
+            <span className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              {progress
+                ? `Searching ${progress.processed} / ${progress.total} jobs`
+                : 'Starting contact search…'}
+            </span>
+            {progress && (
+              <span className="text-xs font-semibold">
+                {progress.found} found · {progress.manual_apply} manual apply
+                {progress.errors > 0 ? ` · ${progress.errors} errors` : ''}
+              </span>
+            )}
+          </div>
+          <div className="h-2 bg-blue-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-600 rounded-full transition-all duration-500"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
         </div>
       )}
 

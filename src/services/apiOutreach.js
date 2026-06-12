@@ -25,10 +25,24 @@ export async function findContacts(maxSearches = 10) {
   }
 }
 
-export async function bulkContactSearch() {
+/**
+ * Kicks off a background contact search for the next batch of staging jobs.
+ * Returns 202 immediately; poll getBulkSearchStatus() for live progress.
+ */
+export async function bulkContactSearch(maxJobs = 10) {
   try {
-    // No timeout override — this can take 30–90 s depending on job count.
-    const response = await api.post("/api/outreach/bulk-contact-search/");
+    const response = await api.post("/api/outreach/bulk-contact-search/", {
+      max_jobs: maxJobs,
+    });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+export async function getBulkSearchStatus() {
+  try {
+    const response = await api.get("/api/outreach/bulk-contact-search/status/");
     return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));
@@ -72,24 +86,17 @@ export async function getDraftEmails() {
 
 /**
  * Fetches all non-draft emails in a single parallel call.
- * Combines approved, sent, opened, and replied into one list.
+ * Combines approved, sent, opened, replied, bounced and failed into one list.
  */
 export async function getSentEmails() {
   try {
-    const [approvedRes, sentRes, openedRes, repliedRes, bouncedRes] = await Promise.all([
-      api.get("/api/outreach/emails/", { params: { status: "approved" } }),
-      api.get("/api/outreach/emails/", { params: { status: "sent" } }),
-      api.get("/api/outreach/emails/", { params: { status: "opened" } }),
-      api.get("/api/outreach/emails/", { params: { status: "replied" } }),
-      api.get("/api/outreach/emails/", { params: { status: "bounced" } }),
-    ]);
-    return [
-      ...approvedRes.data,
-      ...sentRes.data,
-      ...openedRes.data,
-      ...repliedRes.data,
-      ...bouncedRes.data,
-    ];
+    const statuses = ["approved", "sent", "opened", "replied", "bounced", "failed"];
+    const responses = await Promise.all(
+      statuses.map((status) =>
+        api.get("/api/outreach/emails/", { params: { status } })
+      )
+    );
+    return responses.flatMap((res) => res.data);
   } catch (err) {
     throw new Error(parseApiError(err));
   }
@@ -101,6 +108,19 @@ export async function generateEmail(jobId, extras = {}) {
       job_id: jobId,
       ...extras,
     });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/**
+ * Generates drafts for every contact that has no email yet.
+ * Returns 202 immediately — generation runs server-side in the background.
+ */
+export async function bulkGenerateEmails(extras = {}) {
+  try {
+    const response = await api.post("/api/outreach/emails/generate-all/", extras);
     return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));
