@@ -76,6 +76,9 @@ const Analytics = () => {
   }
 
   const { summary, pipeline, daily_activity, status_breakdown, recent_emails } = data;
+  const strategyPerf = data.strategy_performance || [];
+  const anyStrategySends = strategyPerf.some(s => s.sent > 0 || s.drafts > 0);
+  const bestReplyRate = Math.max(...strategyPerf.map(s => (s.sent >= 5 ? s.reply_rate : 0)), 0);
 
   // ── Charts ──────────────────────────────────────────────────────────────────
 
@@ -217,6 +220,62 @@ const Analytics = () => {
           <h2 className="text-base font-bold text-black-light font-montserrat mb-4">Job Pipeline</h2>
           <ReactECharts option={pipelineChart} style={{ height: '220px' }} />
         </div>
+      </div>
+
+      {/* Strategy performance — the cold-email A/B test readout */}
+      <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark overflow-hidden">
+        <div className="px-6 py-4 border-b border-neutral-dark">
+          <h2 className="text-base font-bold text-black-light font-montserrat">Strategy Performance</h2>
+          <p className="text-xs text-secondary-dark mt-0.5">
+            Each generated email is assigned a strategy in rotation — compare reply rates once a strategy passes ~30 sends, then double down on the winner.
+          </p>
+        </div>
+        {!anyStrategySends ? (
+          <div className="py-12 text-center text-sm text-secondary-dark/60">
+            <MessageSquare className="w-8 h-8 mx-auto mb-2 text-secondary-dark/30" />
+            No strategy data yet — generate and send emails and the comparison fills in here.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="bg-neutral/70 text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat border-b border-neutral-dark">
+                  <th className="px-5 py-3">Strategy</th>
+                  <th className="px-5 py-3 text-right">In pipeline</th>
+                  <th className="px-5 py-3 text-right">Sent</th>
+                  <th className="px-5 py-3 text-right">Opened</th>
+                  <th className="px-5 py-3 text-right">Replied</th>
+                  <th className="px-5 py-3 text-right">Open rate</th>
+                  <th className="px-5 py-3 text-right">Reply rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral">
+                {strategyPerf.map(s => {
+                  const isLeader = s.sent >= 5 && s.reply_rate === bestReplyRate && bestReplyRate > 0;
+                  return (
+                    <tr key={s.strategy} className={`transition-colors ${isLeader ? 'bg-emerald-50/50' : 'hover:bg-neutral/50'}`}>
+                      <td className="px-5 py-3 font-medium text-black">
+                        {s.label}
+                        {isLeader && (
+                          <span className="ml-2 px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full text-[10px] font-bold uppercase">Leading</span>
+                        )}
+                        {s.sent > 0 && s.sent < 30 && (
+                          <span className="ml-2 text-[10px] text-secondary-dark/50">({s.sent}/30 for signal)</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right text-secondary-dark">{s.drafts}</td>
+                      <td className="px-5 py-3 text-right text-secondary-dark">{s.sent}</td>
+                      <td className="px-5 py-3 text-right text-secondary-dark">{s.opened}</td>
+                      <td className="px-5 py-3 text-right text-secondary-dark">{s.replied}</td>
+                      <td className="px-5 py-3 text-right font-semibold text-purple-600">{s.open_rate}%</td>
+                      <td className="px-5 py-3 text-right font-semibold text-emerald-600">{s.reply_rate}%</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Recent sent emails table */}

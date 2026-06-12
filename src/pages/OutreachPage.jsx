@@ -6,7 +6,7 @@ import {
   Loader2, ChevronDown, ChevronUp, Sparkles, Pencil, X,
   MailOpen, MessageSquare, Download, Clock, ListOrdered,
   Trash2, CalendarClock, Ban, ExternalLink, AlertTriangle, MapPin,
-  DollarSign, Briefcase, Layers, ArrowRight, Zap,
+  DollarSign, Briefcase, Layers, ArrowRight, Zap, RefreshCw,
 } from 'lucide-react';
 import {
   getContacts, getDraftEmails, getSentEmails,
@@ -23,6 +23,47 @@ import NoInboxModal from '../components/NoInboxModal';
 
 // How many staging jobs one bulk contact search processes (backend caps at 25)
 const BULK_SEARCH_BATCH = 10;
+
+// ─── Cold-email strategies (must match OutreachEmail.STRATEGY_CHOICES) ───────
+const STRATEGY_OPTIONS = [
+  { key: 'auto',          label: 'Auto-rotate',      desc: 'Cycles all 5 strategies so Analytics learns which gets replies (recommended)' },
+  { key: 'problem_first', label: 'Problem-First',    desc: 'Opens with their challenge, then how you solve it' },
+  { key: 'proof_first',   label: 'Proof-First',      desc: 'Leads with the project that matches the role' },
+  { key: 'their_work',    label: 'Their-Work-First', desc: 'Opens with an insight about something they shipped' },
+  { key: 'direct',        label: 'Short & Direct',   desc: 'Under 70 words — "Worth 15 minutes?"' },
+  { key: 'value_upfront', label: 'Value-Upfront',    desc: 'Shares a technical idea before asking for anything' },
+];
+const STRATEGY_LABELS = Object.fromEntries(
+  STRATEGY_OPTIONS.filter(s => s.key !== 'auto').map(s => [s.key, s.label])
+);
+
+// ─── Draft quality lint ───────────────────────────────────────────────────────
+const SPAM_TRIGGERS = [
+  'free', 'guarantee', 'guaranteed', 'act now', 'limited time', 'no obligation',
+  'risk-free', 'click here', 'buy now', 'winner', 'urgent', 'exclusive offer',
+];
+
+function lintDraft(email) {
+  const body  = email.body || '';
+  const words = body.trim() ? body.trim().split(/\s+/).length : 0;
+  const issues = [];
+
+  if (words > 200) issues.push(`${words} words — aim for under 200`);
+  if (words > 0 && words < 30) issues.push(`only ${words} words — may read as empty`);
+
+  const spamHits = SPAM_TRIGGERS.filter(w =>
+    new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i').test(body)
+  );
+  if (spamHits.length) issues.push(`spam-trigger words: ${spamHits.join(', ')}`);
+
+  if (/\[[^\]]{2,40}\]|\{\{[^}]+\}\}/.test(body)) issues.push('leftover placeholder text');
+
+  if (email.contact && !(email.contact.first_name || '').trim()) {
+    issues.push('generic inbox — greets the team, not a person');
+  }
+
+  return { words, issues };
+}
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 const TABS = [
@@ -265,17 +306,19 @@ const OutreachPage = () => {
     setGenerateModalFor({ bulk: true, pendingContacts: pending });
   };
 
-  const handleGenerateConfirm = async ({ highlight, tone_override }) => {
+  const handleGenerateConfirm = async ({ highlight, tone_override, strategy }) => {
     if (!generateModalFor) return;
     const { jobId, bulk } = generateModalFor;
     setGenerateModalFor(null);
+    // 'auto' → omit so the backend round-robin assigns the next strategy
+    const strategyParam = strategy && strategy !== 'auto' ? strategy : '';
 
     if (bulk) {
       // Generation runs server-side in a background thread — each draft is
       // two OpenAI calls plus scraping, far too slow to loop from the browser.
       setGeneratingAll(true);
       try {
-        const data = await bulkGenerateEmails({ highlight, tone_override });
+        const data = await bulkGenerateEmails({ highlight, tone_override, strategy: strategyParam });
         if (data.status === 'started') {
           toast.success(`Generating ${data.total} drafts in the background — check the Drafts tab in a few minutes.`, { autoClose: 8000 });
           setTimeout(() => {
@@ -290,7 +333,7 @@ const OutreachPage = () => {
     } else {
       setGeneratingFor(prev => new Set([...prev, jobId]));
       try {
-        await generateEmail(jobId, { highlight, tone_override });
+        await generateEmail(jobId, { highlight, tone_override, strategy: strategyParam });
         toast.success('Draft generated!');
         queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
         queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
@@ -310,6 +353,30 @@ const OutreachPage = () => {
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) { toast.error('Failed: ' + err.message); }
     finally { setApprovingId(null); }
+  };
+
+  // One-click: approve the draft AND drop it into the send queue
+  const [approveQueueId, setApproveQueueId] = useState(null);
+  const handleApproveAndQueue = async (id) => {
+    if (connectedInboxes.length === 0) { setNoInboxModal(true); return; }
+    setApproveQueueId(id);
+    try {
+      await approveEmail(id);
+      const data = await queueEmail(id);
+      if (data.scheduled_send_at) {
+        toast.success(`Approved & scheduled — sends ${fmtTime(data.scheduled_send_at)}`);
+      } else {
+        toast.success('Approved & scheduled.');
+      }
+    } catch (err) {
+      if (isNoInboxError(err)) { setNoInboxModal(true); }
+      else toast.error('Failed: ' + err.message);
+    } finally {
+      // The approve may have succeeded even if queueing failed — refresh both
+      queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      setApproveQueueId(null);
+    }
   };
 
   const handleMarkReplied = async (id) => {
@@ -510,6 +577,10 @@ const OutreachPage = () => {
                   drafts={drafts}
                   onApprove={handleApprove}
                   approvingId={approvingId}
+                  onApproveQueue={handleApproveAndQueue}
+                  approveQueueingId={approveQueueId}
+                  onRegenerate={handleGenerateEmail}
+                  regeneratingFor={generatingFor}
                   onGenerateAll={handleGenerateAll}
                   generatingAll={generatingAll}
                   onEdit={setEditModal}
@@ -729,7 +800,11 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
 // ═════════════════════════════════════════════════════════════════════════════
 // TAB 2 — DRAFTS
 // ═════════════════════════════════════════════════════════════════════════════
-function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAll, onEdit, onDelete, deleting, onGenerateCv, generatingCvFor }) {
+function DraftsTab({
+  drafts, onApprove, approvingId, onApproveQueue, approveQueueingId,
+  onRegenerate, regeneratingFor, onGenerateAll, generatingAll,
+  onEdit, onDelete, deleting, onGenerateCv, generatingCvFor,
+}) {
   return (
     <div className="space-y-4">
       <div className="flex justify-end">
@@ -752,6 +827,10 @@ function DraftsTab({ drafts, onApprove, approvingId, onGenerateAll, generatingAl
               email={email}
               onApprove={() => onApprove(email.id)}
               approving={approvingId === email.id}
+              onApproveQueue={() => onApproveQueue(email.id)}
+              approveQueueing={approveQueueingId === email.id}
+              onRegenerate={() => onRegenerate(email.job_id)}
+              regenerating={regeneratingFor?.has(email.job_id)}
               onEdit={() => onEdit(email)}
               onDelete={() => onDelete(email.id)}
               deleting={deleting === email.id}
@@ -958,6 +1037,8 @@ function QueueTab({
 function EmailCard({
   email,
   onApprove, approving, onEdit,
+  onApproveQueue, approveQueueing,
+  onRegenerate, regenerating,
   onQueue, queueing, showQueue,
   onUnqueue, unqueueing,
   onReschedule, rescheduling,
@@ -975,6 +1056,15 @@ function EmailCard({
   const lines   = (email.body || '').split('\n');
   const preview = lines.slice(0, 3).join('\n');
   const hasMore = lines.length > 3;
+
+  // Quality lint + personalization sources — only meaningful pre-approval
+  const lint = showApprove ? lintDraft(email) : null;
+  const meta = showApprove ? (email.generation_meta || {}) : null;
+  const SourceChip = ({ ok, label }) => (
+    <span className={`inline-flex items-center gap-0.5 ${ok ? 'text-emerald-600' : 'text-secondary-dark/40'}`}>
+      {ok ? '✓' : '✗'} {label}
+    </span>
+  );
 
   const handleDelete = () => {
     if (!confirmDelete) { setConfirm(true); return; }
@@ -1030,6 +1120,14 @@ function EmailCard({
               Follow-up {email.followup_count}
             </span>
           )}
+          {email.strategy && STRATEGY_LABELS[email.strategy] && (
+            <span
+              className="px-2 py-0.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full text-[10px] font-bold uppercase tracking-wide"
+              title="The cold-email strategy that wrote this draft — compare results in Analytics"
+            >
+              {STRATEGY_LABELS[email.strategy]}
+            </span>
+          )}
           <StatusPill status={email.status} />
           {/* Queue time chip */}
           {email.is_queued && email.scheduled_send_at && (
@@ -1068,6 +1166,31 @@ function EmailCard({
           </button>
         )}
       </div>
+
+      {/* Quality check + personalization sources (drafts only) */}
+      {showApprove && lint && (
+        <div className="px-5 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+          {lint.issues.length === 0 ? (
+            <span className="text-[11px] font-medium text-emerald-600">
+              ✓ {lint.words} words · looks clean
+            </span>
+          ) : (
+            <span className="text-[11px] font-medium text-amber-600">
+              ⚠ {lint.words} words · {lint.issues.join(' · ')}
+            </span>
+          )}
+          {meta && Object.keys(meta).length > 0 && (
+            <span
+              className="flex items-center gap-2.5 text-[10px] font-medium"
+              title="Which personalization sources the AI had when writing paragraph 1"
+            >
+              <SourceChip ok={!!meta.research} label="Research" />
+              <SourceChip ok={!!meta.website}  label="Website" />
+              <SourceChip ok={!!meta.posts}    label="Posts" />
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Timestamps */}
       {showTimestamps && (
@@ -1134,6 +1257,17 @@ function EmailCard({
               CV
             </button>
           )}
+          {onRegenerate && (
+            <button
+              onClick={onRegenerate}
+              disabled={regenerating}
+              title="Generate a fresh draft for this job — pick a different strategy or notes"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral border border-neutral-dark text-xs font-semibold text-secondary-dark rounded-lg hover:bg-neutral-dark transition-all disabled:opacity-60"
+            >
+              {regenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              Regenerate
+            </button>
+          )}
         </div>
 
         {/* Right: actions */}
@@ -1147,11 +1281,21 @@ function EmailCard({
           {/* Approve */}
           {showApprove && (
             <button
-              onClick={onApprove} disabled={approving}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-blue-500 hover:bg-blue-600 rounded-xl transition-all disabled:opacity-60"
+              onClick={onApprove} disabled={approving || approveQueueing}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-xl transition-all disabled:opacity-60"
             >
               {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
               Approve
+            </button>
+          )}
+          {/* Approve & Queue — one click from draft to scheduled */}
+          {showApprove && onApproveQueue && (
+            <button
+              onClick={onApproveQueue} disabled={approving || approveQueueing}
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all disabled:opacity-60"
+            >
+              {approveQueueing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+              {approveQueueing ? 'Scheduling…' : 'Approve & Queue'}
             </button>
           )}
           {/* Schedule single */}
@@ -1676,6 +1820,7 @@ const HIGHLIGHT_CHIPS = [
 function GenerateModal({ contact, bulkCount, onConfirm, onClose }) {
   const [highlight, setHighlight] = useState('');
   const [tone, setTone]           = useState('professional');
+  const [strategy, setStrategy]   = useState('auto');
 
   const companyName = contact?.job?.company_name;
 
@@ -1744,6 +1889,31 @@ function GenerateModal({ contact, bulkCount, onConfirm, onClose }) {
 
           <div>
             <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark mb-1.5">
+              Strategy
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {STRATEGY_OPTIONS.map(s => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => setStrategy(s.key)}
+                  className={`text-left px-3 py-2 rounded-xl border transition-all ${
+                    strategy === s.key
+                      ? 'bg-black text-white border-black'
+                      : 'bg-white text-secondary-dark border-neutral-dark hover:bg-neutral'
+                  } ${s.key === 'auto' ? 'sm:col-span-2' : ''}`}
+                >
+                  <span className="block text-xs font-semibold">{s.label}</span>
+                  <span className={`block text-[10px] mt-0.5 leading-snug ${strategy === s.key ? 'text-white/70' : 'text-secondary-dark/60'}`}>
+                    {s.desc}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark mb-1.5">
               Tone
             </label>
             <div className="flex gap-2">
@@ -1775,7 +1945,7 @@ function GenerateModal({ contact, bulkCount, onConfirm, onClose }) {
               Cancel
             </button>
             <button
-              onClick={() => onConfirm({ highlight: highlight.trim(), tone_override: tone })}
+              onClick={() => onConfirm({ highlight: highlight.trim(), tone_override: tone, strategy })}
               className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-gradient-to-r from-primary-light to-primary-dark rounded-xl shadow-md shadow-orange-100 hover:opacity-90 transition-all active:scale-95"
             >
               <Sparkles className="w-4 h-4" />
