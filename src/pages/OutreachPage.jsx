@@ -325,6 +325,8 @@ const OutreachPage = () => {
             queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
             queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
           }, 90_000);
+        } else if (data.status === 'already_running') {
+          toast.info('A draft-generation run is already in progress — give it a minute.');
         } else {
           toast.info('No pending contacts — all have drafts already.');
         }
