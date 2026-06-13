@@ -393,7 +393,11 @@ const OutreachPage = () => {
     setRunningFollowups(true);
     try {
       const d = await runFollowups();
-      toast.success(`Follow-ups: ${d.sent} sent, ${d.errors} errors, ${d.skipped} skipped`);
+      if (d.queued > 0) {
+        toast.success(`${d.queued} follow-up${d.queued !== 1 ? 's' : ''} queued — they send spaced out during business hours.`, { autoClose: 7000 });
+      } else {
+        toast.info('No follow-ups are due right now.');
+      }
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
     } catch (err) { toast.error('Failed: ' + err.message); }
     finally { setRunningFollowups(false); }
@@ -919,7 +923,7 @@ function QueueTab({
             className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-violet-200 hover:opacity-90 transition-all active:scale-95 disabled:opacity-70"
           >
             {runningFollowups ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            Send Follow-ups
+            Queue Follow-ups
           </button>
         </div>
       </div>
@@ -927,7 +931,7 @@ function QueueTab({
       {/* How it works notice */}
       <div className="flex items-center gap-2 text-xs text-secondary-dark/70 bg-neutral border border-neutral-dark rounded-xl px-4 py-2.5">
         <Clock className="w-3.5 h-3.5 shrink-0" />
-        Emails go out Mon–Fri, 9 AM – 5 PM US Eastern · spaced 4–8 minutes apart so they don't look like spam
+        Emails go out Mon–Fri, 9 AM – 5 PM US Eastern · one inbox sends at most one email every few minutes so they never look like spam
       </div>
 
       {/* Approved but not scheduled yet */}
