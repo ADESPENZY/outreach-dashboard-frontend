@@ -40,6 +40,7 @@ const JobsPage = () => {
     const [selectedJob, setSelectedJob]           = useState(null);
     const [showModalTour, setShowModalTour]       = useState(false);
     const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
+    const [showCvNudge, setShowCvNudge] = useState(false);
     const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
     const [newJobsCount, setNewJobsCount] = useState(0);
     const [showNewJobsBanner, setShowNewJobsBanner] = useState(false);
@@ -50,7 +51,8 @@ const JobsPage = () => {
 
     // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
-    const isTourActive   = searchParams.get('tour') === '1';
+    const isTourActive       = searchParams.get('tour') === '1';
+    const isActivateRequested = searchParams.get('activate') === '1';
 
     // ── React Query — auto-scout settings (for banner logic) ─────────────────
     const { data: autoScoutSettings } = useQuery({
@@ -175,7 +177,11 @@ const JobsPage = () => {
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
         onSuccess: (_, { newStatus }) => {
-            toast.success(`Job marked as ${newStatus}`);
+            if (newStatus === 'approved') {
+                toast.success('Approved! Head to Outreach to find a contact and send your email.');
+            } else {
+                toast.success(`Job marked as ${newStatus}`);
+            }
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
         },
         onError: (err) => toast.error(err.message || 'Failed to update status. Please try again.'),
@@ -263,8 +269,18 @@ const JobsPage = () => {
         onSuccess: (data) => {
             setIsScrapeModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-            if (autoScoutSettings?.is_active === false && localStorage.getItem('applydirAutoScoutPrompted') !== 'true') {
-                setShowAutoScoutBanner(true);
+            // CV-aware nudge ordering. Auto-Scout (and all AI scoring) is useless
+            // without a CV — the nightly cron now skips CV-less users — so push
+            // CV upload FIRST. Only nudge Auto-Scout once the user is activated.
+            // Both nudges are snooze-based so they can re-prompt, not fire once.
+            if (!isActivated) {
+                const cvSnooze = Number(localStorage.getItem('applydirCvNudgeSnoozeUntil') || 0);
+                if (Date.now() > cvSnooze) setShowCvNudge(true);
+            } else {
+                const snoozeUntil = Number(localStorage.getItem('applydirAutoScoutSnoozeUntil') || 0);
+                if (autoScoutSettings?.is_active === false && Date.now() > snoozeUntil) {
+                    setShowAutoScoutBanner(true);
+                }
             }
         },
         // onSettled is the finally-equivalent: always runs after success or error.
@@ -378,6 +394,14 @@ const JobsPage = () => {
         }
     }, [isTourActive]);
 
+    // Open the CV-upload drawer when arriving via the setup card's "Upload CV" step
+    // (?activate=1). Skip if already activated — nothing left to do.
+    useEffect(() => {
+        if (isActivateRequested && !isActivated) {
+            setIsActivationDrawerOpen(true);
+        }
+    }, [isActivateRequested, isActivated]);
+
     const completeTour = () => {
         localStorage.setItem('applydirTourDone', 'true');
         setShowModalTour(false);
@@ -409,15 +433,61 @@ const JobsPage = () => {
                 </div>
             </div>
 
-            {approvedCount > 0 && (
-                <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 px-5 py-3.5 rounded-2xl">
-                    <CheckCircle className="w-4 h-4 mt-0.5 shrink-0 text-emerald-500" />
-                    <div>
-                        <p className="text-sm font-semibold text-emerald-800">{approvedCount} approved jobs ready</p>
-                        <p className="text-xs text-emerald-600 mt-0.5">Go to <button onClick={() => navigate('/dashboard/outreach')} className="underline font-semibold">Outreach</button> to find contacts and generate emails.</p>
+            {/* ── Adaptive "Next step" strip — always tells the user the single
+                 most important next action for where they are in the pipeline.
+                 Scrape → (upload CV) → review & approve → go to Outreach.      ── */}
+            {totalCount > 0 && (() => {
+                let step;
+                if (!isActivated) {
+                    step = {
+                        accent: 'amber',
+                        Icon: Lock,
+                        title: 'Next: unlock AI scoring',
+                        body: `Upload your CV so AI can score and rank these ${totalCount} jobs.`,
+                        cta: 'Upload CV',
+                        onClick: () => setIsActivationDrawerOpen(true),
+                    };
+                } else if (approvedCount > 0) {
+                    step = {
+                        accent: 'emerald',
+                        Icon: CheckCircle,
+                        title: `${approvedCount} approved job${approvedCount !== 1 ? 's' : ''} ready`,
+                        body: 'Head to Outreach to find contacts and generate emails.',
+                        cta: 'Go to Outreach',
+                        onClick: () => navigate('/dashboard/outreach'),
+                    };
+                } else {
+                    step = {
+                        accent: 'blue',
+                        Icon: Search,
+                        title: 'Next: review your scored jobs',
+                        body: 'Open the Approved tab and confirm the roles you want to pursue.',
+                        cta: 'View Approved',
+                        onClick: () => { setFilterTab('Approved'); setCurrentPage(1); },
+                    };
+                }
+                const tones = {
+                    amber:   { box: 'bg-amber-50 border-amber-200',     chip: 'text-amber-500',   title: 'text-amber-900',   btn: 'bg-amber-500 hover:bg-amber-600' },
+                    emerald: { box: 'bg-emerald-50 border-emerald-200', chip: 'text-emerald-500', title: 'text-emerald-800', btn: 'bg-emerald-500 hover:bg-emerald-600' },
+                    blue:    { box: 'bg-blue-50 border-blue-200',       chip: 'text-blue-500',    title: 'text-blue-900',    btn: 'bg-blue-500 hover:bg-blue-600' },
+                }[step.accent];
+                const StepIcon = step.Icon;
+                return (
+                    <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl border ${tones.box}`}>
+                        <StepIcon className={`w-5 h-5 shrink-0 ${tones.chip}`} />
+                        <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-semibold ${tones.title}`}>{step.title}</p>
+                            <p className="text-xs text-secondary-dark mt-0.5">{step.body}</p>
+                        </div>
+                        <button
+                            onClick={step.onClick}
+                            className={`shrink-0 px-4 py-2 text-white text-xs font-bold rounded-xl transition-all active:scale-95 ${tones.btn}`}
+                        >
+                            {step.cta}
+                        </button>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Filters & Search */}
             <div className="bg-white p-4 rounded-2xl shadow-sm border border-neutral-dark flex flex-col md:flex-row justify-between items-center gap-4">
@@ -608,8 +678,29 @@ const JobsPage = () => {
                 ) : filteredJobs.length === 0 ? (
                     <div className="p-12 text-center bg-white rounded-xl border border-neutral-dark">
                         <Briefcase className="w-12 h-12 mx-auto text-secondary-dark/40 mb-3" />
-                        <p className="text-base font-medium text-secondary-dark">No jobs found</p>
-                        <p className="text-sm mt-1 text-secondary-dark">Try adjusting your filters or scrape new ones.</p>
+                        {totalCount === 0 && filterTab === 'All' && !searchQuery ? (
+                            <>
+                                <p className="text-base font-semibold text-black">Let's find you some jobs</p>
+                                <p className="text-sm mt-1 text-secondary-dark max-w-md mx-auto">
+                                    Run your first scrape — we'll pull matching roles from LinkedIn, remote boards, and startup job boards, then AI-score each one against your CV.
+                                </p>
+                                <button
+                                    onClick={() => setIsScrapeModalOpen(true)}
+                                    className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-orange-200 transition-all active:scale-95"
+                                >
+                                    <Plus className="w-4 h-4" /> Scrape New Jobs
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-base font-medium text-secondary-dark">No jobs in this view</p>
+                                <p className="text-sm mt-1 text-secondary-dark">
+                                    {searchQuery
+                                        ? 'No matches for your search — try a different term.'
+                                        : `Nothing under "${filterTab}" yet. Switch tabs or scrape new jobs.`}
+                                </p>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <AnimatePresence mode="popLayout" initial={false}>
@@ -1364,6 +1455,56 @@ const JobsPage = () => {
                 onClose={() => setIsActivationDrawerOpen(false)}
             />
 
+            {/* CV-First Nudge — shown after a scrape when the user has no CV yet,
+                because nothing can be AI-scored or tailored until it's uploaded. */}
+            <AnimatePresence>
+                {showCvNudge && (
+                    <motion.div
+                        initial={{ x: '110%', opacity: 0 }}
+                        animate={{ x: 0, opacity: 1 }}
+                        exit={{ x: '110%', opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
+                        className="fixed right-0 bottom-8 z-50 w-80 bg-white rounded-l-2xl shadow-2xl border border-neutral-dark border-r-0 overflow-hidden"
+                    >
+                        <div className="h-1 bg-gradient-to-r from-primary-light to-primary-dark" />
+                        <div className="p-5 space-y-3">
+                            <button
+                                onClick={() => {
+                                    // Snooze ~2 days; re-prompts after the next scrape if still no CV.
+                                    localStorage.setItem('applydirCvNudgeSnoozeUntil', String(Date.now() + 2 * 24 * 60 * 60 * 1000));
+                                    setShowCvNudge(false);
+                                }}
+                                className="absolute top-3 right-3 text-secondary-dark hover:text-black transition-colors"
+                                aria-label="Dismiss"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                            <div className="flex items-center gap-2">
+                                <div className="w-8 h-8 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
+                                    <Lock className="w-4 h-4 text-primary-light" />
+                                </div>
+                                <p className="text-sm font-bold text-black font-montserrat leading-tight pr-6">
+                                    Unlock AI scoring 🔓
+                                </p>
+                            </div>
+                            <p className="text-xs text-secondary-dark leading-relaxed">
+                                Upload your CV once so the AI can <span className="font-semibold text-black">score these jobs and tailor a resume</span> for each one. It's also required before Auto-Scout can run.
+                            </p>
+                            <button
+                                onClick={() => {
+                                    localStorage.setItem('applydirCvNudgeSnoozeUntil', String(Date.now() + 2 * 24 * 60 * 60 * 1000));
+                                    setShowCvNudge(false);
+                                    setIsActivationDrawerOpen(true);
+                                }}
+                                className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold py-2.5 rounded-xl shadow-md shadow-orange-200 hover:opacity-90 transition-opacity active:scale-95"
+                            >
+                                Upload CV
+                            </button>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
             {/* Auto-Scout Contextual Banner */}
             <AnimatePresence>
                 {showAutoScoutBanner && (
@@ -1378,7 +1519,8 @@ const JobsPage = () => {
                         <div className="p-5 space-y-3">
                             <button
                                 onClick={() => {
-                                    localStorage.setItem('applydirAutoScoutPrompted', 'true');
+                                    // Snooze ~3 days; it reappears after the next scrape if still inactive.
+                                    localStorage.setItem('applydirAutoScoutSnoozeUntil', String(Date.now() + 3 * 24 * 60 * 60 * 1000));
                                     setShowAutoScoutBanner(false);
                                 }}
                                 className="absolute top-3 right-3 text-secondary-dark hover:text-black transition-colors"
@@ -1399,7 +1541,9 @@ const JobsPage = () => {
                             </p>
                             <button
                                 onClick={() => {
-                                    localStorage.setItem('applydirAutoScoutPrompted', 'true');
+                                    // They're acting on it — snooze longer; if they activate, the
+                                    // banner stops on its own (it only shows when is_active is false).
+                                    localStorage.setItem('applydirAutoScoutSnoozeUntil', String(Date.now() + 7 * 24 * 60 * 60 * 1000));
                                     setShowAutoScoutBanner(false);
                                     navigate('/dashboard/auto-scout');
                                 }}

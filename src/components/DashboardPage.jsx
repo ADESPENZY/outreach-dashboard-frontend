@@ -7,6 +7,8 @@ import { useAuth } from '../context/AuthContext';
 import { getScrapedJobs } from '../services/apiJobs';
 import InboxOverview from './InboxOverview';
 import AnalyticsDashboardOverview from './AnalyticsDashboardOverview';
+import SetupChecklist from './SetupChecklist';
+import PipelineStepper from './PipelineStepper';
 
 const BULLETS = [
   { Icon: Target, text: 'AI scores every role against your CV in real time' },
@@ -47,6 +49,14 @@ const DashboardPage = () => {
 
   return (
     <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-8 animate-fade-in font-roboto">
+
+      {/* Whole-journey map — where the user is across the 5 stages */}
+      <PipelineStepper />
+
+      {/* Compact setup card — sits top-right, shrinks as steps complete, vanishes when done */}
+      <div className="flex justify-end -mb-4">
+        <SetupChecklist />
+      </div>
 
       <InboxOverview />
       <AnalyticsDashboardOverview />

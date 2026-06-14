@@ -336,7 +336,7 @@ const OutreachPage = () => {
       setGeneratingFor(prev => new Set([...prev, jobId]));
       try {
         await generateEmail(jobId, { highlight, tone_override, strategy: strategyParam });
-        toast.success('Draft generated!');
+        toast.success('Draft ready — review it in Drafts, then approve to schedule.');
         queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
         queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
       } catch (err) { toast.error('Failed: ' + err.message); }
@@ -443,6 +443,54 @@ const OutreachPage = () => {
     manual:   manualApplyJobs.length,
   };
 
+  // ── Adaptive "Next step" through the outreach funnel ───────────────────────
+  // Find contacts → generate → review/approve → connect inbox → schedule.
+  const approvedUnqueued = sentEmails.filter(e => e.status === 'approved' && !e.is_queued).length;
+  const pendingGenerate  = contacts.filter(c => !getEmailForJob(c.job?.id)).length;
+  const nextStep = (() => {
+    if (stats.staging > 0) return {
+      Icon: Search, title: `Find contacts for ${stats.staging} approved job${stats.staging !== 1 ? 's' : ''}`,
+      body: 'Run the bulk contact search to find a decision-maker at each company.',
+      cta: 'Go to Staging', onClick: () => setActiveTab('staging'),
+    };
+    if (pendingGenerate > 0) return {
+      Icon: Sparkles, title: `Generate emails for ${pendingGenerate} contact${pendingGenerate !== 1 ? 's' : ''}`,
+      body: 'Write personalized cold emails for the contacts you found.',
+      cta: 'Go to Contacts', onClick: () => setActiveTab('contacts'),
+    };
+    if (drafts.length > 0) return {
+      Icon: FileText, title: `Review ${drafts.length} draft${drafts.length !== 1 ? 's' : ''}`,
+      body: 'Approve the ones you like, then schedule them to send.',
+      cta: 'Go to Drafts', onClick: () => setActiveTab('drafts'),
+    };
+    if (approvedUnqueued > 0 && connectedInboxes.length === 0) return {
+      Icon: Mail, title: 'Connect your inbox to start sending',
+      body: `You have ${approvedUnqueued} approved email${approvedUnqueued !== 1 ? 's' : ''} ready, but no inbox connected yet.`,
+      cta: 'Connect Gmail', onClick: () => setNoInboxModal(true),
+    };
+    if (approvedUnqueued > 0) return {
+      Icon: Clock, title: `Schedule ${approvedUnqueued} approved email${approvedUnqueued !== 1 ? 's' : ''}`,
+      body: 'Queue them to go out spaced through business hours.',
+      cta: 'Go to Sending', onClick: () => setActiveTab('queue'),
+    };
+    return null;
+  })();
+
+  // ── Milestone celebrations (one-time, localStorage-gated) ──────────────────
+  React.useEffect(() => {
+    if (contacts.length > 0 && localStorage.getItem('applydirFirstContact') !== 'true') {
+      localStorage.setItem('applydirFirstContact', 'true');
+      toast.success('🎉 First contact found! Generate an email for them next.', { autoClose: 6000 });
+    }
+  }, [contacts.length]);
+
+  React.useEffect(() => {
+    if (stats.sent > 0 && localStorage.getItem('applydirFirstSend') !== 'true') {
+      localStorage.setItem('applydirFirstSend', 'true');
+      toast.success('🚀 Your first outreach email is on its way!', { autoClose: 6000 });
+    }
+  }, [stats.sent]);
+
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
     <div className="w-full max-w-[1600px] mx-auto p-4 md:p-8 space-y-6 md:space-y-8 animate-fade-in font-roboto">
@@ -486,6 +534,23 @@ const OutreachPage = () => {
         </h1>
         <p className="text-sm text-secondary-dark mt-1">Find contacts → generate emails → queue to send during business hours</p>
       </div>
+
+      {/* Adaptive "Next step" strip — the single next action through the funnel */}
+      {!loading && nextStep && (
+        <div className="flex items-center gap-3 px-5 py-3 rounded-2xl border border-primary-light/30 bg-primary-light/5">
+          <nextStep.Icon className="w-5 h-5 shrink-0 text-primary-light" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-black">{nextStep.title}</p>
+            <p className="text-xs text-secondary-dark mt-0.5">{nextStep.body}</p>
+          </div>
+          <button
+            onClick={nextStep.onClick}
+            className="shrink-0 inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-bold rounded-xl hover:opacity-90 transition-all active:scale-95"
+          >
+            {nextStep.cta} <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Stats bar */}
       {!loading && (
@@ -587,6 +652,7 @@ const OutreachPage = () => {
                   approveQueueingId={approveQueueId}
                   onRegenerate={handleGenerateEmail}
                   regeneratingFor={generatingFor}
+                  onSwitchTab={setActiveTab}
                   onGenerateAll={handleGenerateAll}
                   generatingAll={generatingAll}
                   onEdit={setEditModal}
@@ -730,7 +796,12 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
       </div>
 
       {contacts.length === 0 ? (
-        <EmptyState icon={Users} title="No contacts yet" subtitle="Approve jobs on the Jobs page, then run the contact search." />
+        <EmptyState
+          icon={Users}
+          title="No contacts yet"
+          subtitle="Contacts appear here once you run a search on your approved jobs. Head to Staging and run the bulk contact search."
+          action={{ label: 'Go to Staging', onClick: () => onSwitchTab('staging') }}
+        />
       ) : (
         <div className="w-full overflow-x-auto overflow-y-hidden border border-neutral-dark sm:rounded-xl">
           <table className="w-full min-w-[800px] text-left border-collapse">
@@ -809,7 +880,7 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
 function DraftsTab({
   drafts, onApprove, approvingId, onApproveQueue, approveQueueingId,
   onRegenerate, regeneratingFor, onGenerateAll, generatingAll,
-  onEdit, onDelete, deleting, onGenerateCv, generatingCvFor,
+  onEdit, onDelete, deleting, onGenerateCv, generatingCvFor, onSwitchTab,
 }) {
   return (
     <div className="space-y-4">
@@ -824,7 +895,12 @@ function DraftsTab({
       </div>
 
       {drafts.length === 0 ? (
-        <EmptyState icon={FileText} title="No drafts yet" subtitle="Visit the Contacts tab and click Generate for a contact." />
+        <EmptyState
+          icon={FileText}
+          title="No drafts yet"
+          subtitle="Drafts are the cold emails the AI writes for your contacts. Open Contacts and click Write Email on any one."
+          action={{ label: 'Go to Contacts', onClick: () => onSwitchTab?.('contacts') }}
+        />
       ) : (
         <div className="grid gap-3">
           {drafts.map(email => (
@@ -1429,14 +1505,22 @@ function EditEmailModal({ email, onClose, onSaved }) {
 // ═════════════════════════════════════════════════════════════════════════════
 // EMPTY STATE
 // ═════════════════════════════════════════════════════════════════════════════
-function EmptyState({ icon: Icon, title, subtitle }) {
+function EmptyState({ icon: Icon, title, subtitle, action }) {
   return (
     <div className="py-16 text-center">
       <div className="mx-auto w-16 h-16 rounded-2xl bg-neutral border border-neutral-dark flex items-center justify-center mb-4">
         <Icon className="w-7 h-7 text-secondary-dark/30" />
       </div>
       <p className="text-base font-semibold text-secondary-dark">{title}</p>
-      <p className="text-sm text-secondary-dark/60 mt-1 max-w-xs mx-auto">{subtitle}</p>
+      <p className="text-sm text-secondary-dark/60 mt-1 max-w-sm mx-auto">{subtitle}</p>
+      {action && (
+        <button
+          onClick={action.onClick}
+          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 bg-black hover:bg-black/80 text-white text-sm font-semibold rounded-xl transition-all active:scale-95"
+        >
+          {action.label} <ArrowRight className="w-3.5 h-3.5" />
+        </button>
+      )}
     </div>
   );
 }
