@@ -156,10 +156,14 @@ const OutreachPage = () => {
   );
   const stagingJobs = approvedJobs.filter(j => !contactedJobIds.has(j.id));
 
-  const { data: connectedInboxes = [] } = useQuery({
-    queryKey: ['gmail-accounts'],
+  // NOTE: /api/integrations/gmail/accounts/ is PAGINATED → {count, results:[...]}.
+  // Normalize to an array so length checks work. Key matches the rest of the app
+  // ('gmailAccounts') so connecting an inbox elsewhere refreshes this too.
+  const { data: inboxData } = useQuery({
+    queryKey: ['gmailAccounts'],
     queryFn: getGmailAccounts,
   });
+  const connectedInboxes = Array.isArray(inboxData) ? inboxData : (inboxData?.results ?? []);
 
   // Auto-show add-inbox modal when user lands on Sending tab with no inbox
   // Also re-fires when connectedInboxes updates (handles stale React Query cache)

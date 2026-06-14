@@ -38,10 +38,14 @@ export default function SetupChecklist() {
     queryFn: getProfile,
     staleTime: 5 * 60 * 1000,
   });
-  const { data: inboxes = [], isLoading: loadingInboxes } = useQuery({
-    queryKey: ['gmail-accounts'],
+  // /api/integrations/gmail/accounts/ is PAGINATED → {count, results:[...]}.
+  // Normalize to an array. Key matches the rest of the app so this refreshes
+  // when an inbox is connected on the Inboxes page.
+  const { data: inboxData, isLoading: loadingInboxes } = useQuery({
+    queryKey: ['gmailAccounts'],
     queryFn: getGmailAccounts,
   });
+  const inboxes = Array.isArray(inboxData) ? inboxData : (inboxData?.results ?? []);
   const { data: scoutSettings, isLoading: loadingScout } = useQuery({
     queryKey: ['auto-scout-settings'],
     queryFn: getAutoScoutSettings,
