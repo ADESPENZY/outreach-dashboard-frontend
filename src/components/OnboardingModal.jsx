@@ -71,7 +71,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
         >
           <X className="w-5 h-5" />
         </button>
-
+        
         {/* Step progress bar */}
         <div className="px-8 pt-8 pb-0">
           <div className="flex gap-1.5 mb-6">

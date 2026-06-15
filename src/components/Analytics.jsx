@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router';
 import {
   ArrowUp, ArrowDown, Send, Mail, MailOpen, MessageSquare,
   AlertCircle, FileText, Users, Briefcase, Loader2, RefreshCw
@@ -343,8 +344,14 @@ const Analytics = () => {
 
       {/* Recent sent emails table */}
       <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark overflow-hidden">
-        <div className="px-6 py-4 border-b border-neutral-dark">
-          <h2 className="text-base font-bold text-black-light font-montserrat">Recent Sent Emails</h2>
+        <div className="px-6 py-4 border-b border-neutral-dark flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-base font-bold text-black-light font-montserrat">Recent Sent Emails</h2>
+            <p className="text-xs text-secondary-dark mt-0.5">Your 20 most recent · full history lives on the Outreach page</p>
+          </div>
+          <Link to="/dashboard/outreach" className="shrink-0 text-xs font-semibold text-primary-dark hover:text-primary-light whitespace-nowrap">
+            View all →
+          </Link>
         </div>
         {recent_emails.length === 0 ? (
           <div className="py-16 text-center text-sm text-secondary-dark/60">
@@ -352,10 +359,10 @@ const Analytics = () => {
             No emails sent yet. Approve and send emails from the Outreach page.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-96">
             <table className="w-full text-left text-sm border-collapse">
-              <thead>
-                <tr className="bg-neutral/70 text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat border-b border-neutral-dark">
+              <thead className="sticky top-0 z-10">
+                <tr className="bg-neutral text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat border-b border-neutral-dark">
                   <th className="px-5 py-3">Company</th>
                   <th className="px-5 py-3 hidden md:table-cell">Role</th>
                   <th className="px-5 py-3 hidden lg:table-cell">Recipient</th>
