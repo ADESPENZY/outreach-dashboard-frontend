@@ -349,7 +349,7 @@ const Sidebar = ({ isOpen, onClose }) => {
           </ul>
 
           <Link
-            to="/dashboard/connectedAccounts"
+            to="/dashboard/inboxes"
             onClick={onClose}
             className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
           >
@@ -362,7 +362,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className={`pt-4 border-t border-neutral-dark mt-3 flex-col items-center gap-3 ${isCollapsed ? 'hidden md:flex' : 'hidden'}`}>
           <div className="w-2 h-2 rounded-full bg-primary-light animate-pulse shadow-[0_0_8px_rgba(255,91,46,0.6)]" />
           <Link
-            to="/dashboard/connectedAccounts"
+            to="/dashboard/inboxes"
             onClick={onClose}
             title="Add Gmail"
             className="flex items-center justify-center w-9 h-9 rounded-xl border-2 border-dashed border-neutral-dark text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"

@@ -416,7 +416,7 @@ function OutreachTab() {
         </FieldRow>
         {accounts.length === 0 && (
           <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-            No Gmail accounts connected yet. <a href="/dashboard/connectedAccounts" className="font-semibold underline">Add one →</a>
+            No Gmail accounts connected yet. <a href="/dashboard/inboxes" className="font-semibold underline">Add one →</a>
           </p>
         )}
       </SectionCard>

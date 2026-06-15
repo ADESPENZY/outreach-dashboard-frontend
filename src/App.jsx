@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from 'react-router';
+import { BrowserRouter, Route, Routes, Navigate } from 'react-router';
 import Dashboard from './pages/Dashboard';
 import Analytics from './components/Analytics';
 import Inboxes from './components/Inboxes';
@@ -11,7 +11,6 @@ import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import JobsPage from './pages/JobsPage';
 import OutreachPage from './pages/OutreachPage';
-import ConnectedAccounts from './components/ConnectedAccounts';
 import Onboarding from './pages/Onboarding';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
@@ -46,7 +45,8 @@ function App() {
               <Route path="warmup"            element={<WarmUp />} />
               <Route path="settings"          element={<Settings />} />
               <Route path="auto-scout"        element={<AutoScoutSettings />} />
-              <Route path="connectedAccounts" element={<ConnectedAccounts />} />
+              {/* Consolidated into Inboxes — keep the old path working */}
+              <Route path="connectedAccounts" element={<Navigate to="/dashboard/inboxes" replace />} />
               <Route path="profile"           element={<ProfilePage />} />
             </Route>
           </Route>

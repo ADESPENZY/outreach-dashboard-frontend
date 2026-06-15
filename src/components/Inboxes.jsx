@@ -1,11 +1,13 @@
 import React, { Fragment, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
 import {
   Mail, Send, MailOpen, MessageSquare, ChevronDown, ChevronUp,
-  Search, Pause, Play, RefreshCw, Loader2, AlertCircle, Users,
+  Search, Pause, Play, RefreshCw, Loader2, AlertCircle, Users, Plus, Trash2,
 } from 'lucide-react';
 import { getInboxStats } from '../services/apiInboxes';
-import { toggleGmailAccount } from '../services/apiGmail';
+import { toggleGmailAccount, createGmailAccount, deleteGmailAccount } from '../services/apiGmail';
+import OnboardingModal from './OnboardingModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -58,20 +60,43 @@ const Inboxes = () => {
   const [statusFilter, setStatus]   = useState('All');
   const [filterOpen, setFilterOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState([]);
+  const [showConnect, setShowConnect]     = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);
 
   const { data, isLoading: loading, isFetching, refetch: fetchData } = useQuery({
     queryKey: ['inboxes'],
     queryFn: () => getInboxStats(),
   });
 
+  // Account changes affect both this page (['inboxes']) and everywhere else that
+  // reads the raw account list (['gmailAccounts'] — sidebar, setup checklist,
+  // outreach inbox gating), so refresh both.
+  const refreshAccountCaches = () => {
+    queryClient.invalidateQueries({ queryKey: ['inboxes'] });
+    queryClient.invalidateQueries({ queryKey: ['gmailAccounts'] });
+  };
+
   const toggleMutation = useMutation({
     mutationFn: (id) => toggleGmailAccount(id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['inboxes'] }),
+    onSuccess: refreshAccountCaches,
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id) => deleteGmailAccount(id),
+    onSuccess: () => { toast.success('Inbox removed.'); refreshAccountCaches(); },
+    onError: (err) => toast.error(err.message || 'Could not remove inbox.'),
   });
 
   const handleToggle = (e, id) => {
     e.stopPropagation();
     toggleMutation.mutate(id);
+  };
+
+  const handleConnect = async (formData) => {
+    await createGmailAccount(formData);
+    refreshAccountCaches();
+    setShowConnect(false);
+    toast.success('Inbox connected! Your outreach engine is ready.');
   };
 
   const toggleRow = (id) => {
@@ -110,14 +135,23 @@ const Inboxes = () => {
             Connected Gmail accounts and their sending health
           </p>
         </div>
-        <button
-          onClick={() => fetchData()}
-          disabled={isFetching}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm hover:bg-neutral transition-all disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => fetchData()}
+            disabled={isFetching}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm hover:bg-neutral transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+            Refresh
+          </button>
+          <button
+            onClick={() => setShowConnect(true)}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold hover:opacity-90 transition-all shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            Connect Gmail
+          </button>
+        </div>
       </div>
 
       {/* Summary cards */}
@@ -169,9 +203,17 @@ const Inboxes = () => {
         {filtered.length === 0 ? (
           <div className="py-16 text-center text-sm text-secondary-dark/60">
             <AlertCircle className="w-8 h-8 mx-auto mb-2 text-secondary-dark/30" />
-            {accounts.length === 0
-              ? 'No Gmail accounts connected yet. Add one from Connected Accounts.'
-              : 'No accounts match your filter.'}
+            {accounts.length === 0 ? (
+              <div className="flex flex-col items-center gap-3">
+                <p>No Gmail inboxes connected yet.</p>
+                <button
+                  onClick={() => setShowConnect(true)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm"
+                >
+                  <Plus className="w-4 h-4" /> Connect your first Gmail
+                </button>
+              </div>
+            ) : 'No accounts match your filter.'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -245,6 +287,13 @@ const Inboxes = () => {
                                 : account.is_active
                                   ? <Pause className="w-4 h-4" />
                                   : <Play className="w-4 h-4" />}
+                            </button>
+                            <button
+                              onClick={e => { e.stopPropagation(); setConfirmDelete(account); }}
+                              title="Remove inbox"
+                              className="w-8 h-8 flex items-center justify-center rounded-full text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                             <button
                               onClick={e => { e.stopPropagation(); toggleRow(account.id); }}
@@ -362,6 +411,41 @@ const Inboxes = () => {
           </div>
         )}
       </div>
+
+      {/* Connect Gmail modal */}
+      {showConnect && (
+        <OnboardingModal
+          onClose={() => setShowConnect(false)}
+          onComplete={handleConnect}
+        />
+      )}
+
+      {/* Confirm remove dialog */}
+      {confirmDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
+            <h4 className="text-lg font-bold mb-3 text-black">Remove inbox?</h4>
+            <p className="text-sm text-secondary-dark mb-6">
+              This disconnects <strong>{confirmDelete.email}</strong>. Scheduled emails from this
+              inbox will stop sending. You can reconnect it anytime.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmDelete(null)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-neutral hover:bg-neutral-dark transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { deleteMutation.mutate(confirmDelete.id); setConfirmDelete(null); }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 };
