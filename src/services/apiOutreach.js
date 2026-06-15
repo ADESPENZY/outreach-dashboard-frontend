@@ -14,6 +14,17 @@ export async function getContacts() {
   }
 }
 
+/** Cheap counts for the stats bar / tab badges / next-step strip, so each tab
+ *  can lazy-load only its own list. */
+export async function getOutreachCounts() {
+  try {
+    const response = await api.get("/api/outreach/counts/");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function findContacts(maxSearches = 10) {
   try {
     const response = await api.post("/api/outreach/find-contacts/all/", {

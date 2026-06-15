@@ -9,7 +9,7 @@ import {
   DollarSign, Briefcase, Layers, ArrowRight, Zap, RefreshCw,
 } from 'lucide-react';
 import {
-  getContacts, getDraftEmails, getSentEmails,
+  getContacts, getDraftEmails, getSentEmails, getOutreachCounts,
   generateEmail, approveEmail, bulkGenerateEmails,
   markEmailReplied, runFollowups, generateJobCV, editEmail,
   queueEmail, queueAllEmails,
@@ -142,11 +142,19 @@ const OutreachPage = () => {
   const [cvPreviewModal, setCvPreviewModal]   = useState(null);
 
   // ── Queries ────────────────────────────────────────────────────────────────
-  const { data: contacts = [],        isLoading: loadingContacts } = useQuery({ queryKey: ['outreach-contacts'],   queryFn: getContacts });
-  const { data: drafts = [],          isLoading: loadingDrafts }   = useQuery({ queryKey: ['outreach-drafts'],     queryFn: getDraftEmails });
-  const { data: sentEmails = [],      isLoading: loadingSent }     = useQuery({ queryKey: ['outreach-sent'],       queryFn: getSentEmails });
-  const { data: manualApplyJobs = [], isLoading: loadingManual }   = useQuery({ queryKey: ['manual-apply-jobs'],   queryFn: getManualApplyJobs });
-  const { data: approvedJobs = [],    isLoading: loadingApproved } = useQuery({ queryKey: ['approved-jobs'],       queryFn: getApprovedJobs });
+  // Cheap counts power the stats bar / badges / next-step strip on every tab.
+  const { data: counts = {} } = useQuery({ queryKey: ['outreach-counts'], queryFn: getOutreachCounts });
+
+  // Heavy per-tab lists lazy-load — only the tabs that actually render or
+  // cross-reference them fetch on demand, instead of all on page open.
+  const needContacts = ['staging', 'contacts'].includes(activeTab);
+  const needDrafts   = ['contacts', 'drafts'].includes(activeTab);
+  const needSent     = ['contacts', 'queue'].includes(activeTab);
+  const { data: contacts = [],        isLoading: loadingContacts } = useQuery({ queryKey: ['outreach-contacts'], queryFn: getContacts,        enabled: needContacts });
+  const { data: drafts = [],          isLoading: loadingDrafts }   = useQuery({ queryKey: ['outreach-drafts'],   queryFn: getDraftEmails,     enabled: needDrafts });
+  const { data: sentEmails = [],      isLoading: loadingSent }     = useQuery({ queryKey: ['outreach-sent'],     queryFn: getSentEmails,      enabled: needSent });
+  const { data: manualApplyJobs = [], isLoading: loadingManual }   = useQuery({ queryKey: ['manual-apply-jobs'], queryFn: getManualApplyJobs, enabled: activeTab === 'manual' });
+  const { data: approvedJobs = [],    isLoading: loadingApproved } = useQuery({ queryKey: ['approved-jobs'],     queryFn: getApprovedJobs,    enabled: activeTab === 'staging' });
 
   // Staging = approved jobs that don't have a REAL contact yet.
   // Placeholder contacts (confidence_score === 0, auto-created by the email
@@ -196,6 +204,7 @@ const OutreachPage = () => {
     if (prevSearchRunning.current && !searchRunning && searchStatus) {
       // Run just finished — refresh everything and show the result summary
       queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
       queryClient.invalidateQueries({ queryKey: ['approved-jobs'] });
       queryClient.invalidateQueries({ queryKey: ['manual-apply-jobs'] });
       queryClient.invalidateQueries({ queryKey: ['hunter-quota'] });
@@ -241,6 +250,7 @@ const OutreachPage = () => {
       const t = fmtTime(data.scheduled_send_at);
       toast.success(`Scheduled! Sends ${t}`);
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
     },
     onError: (err) => {
       if (isNoInboxError(err)) { setNoInboxModal(true); return; }
@@ -257,6 +267,7 @@ const OutreachPage = () => {
         toast.warn(`${data.skipped_placeholders} skipped — guessed placeholder contacts. Run a contact search for those jobs first.`, { autoClose: 10000 });
       }
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
     },
     onError: (err) => {
       if (isNoInboxError(err)) { setNoInboxModal(true); return; }
@@ -279,6 +290,7 @@ const OutreachPage = () => {
     onSuccess: () => {
       toast.success('Removed from queue.');
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
     },
     onError: (err) => toast.error('Unqueue failed: ' + err.message),
   });
@@ -288,6 +300,7 @@ const OutreachPage = () => {
     onSuccess: (data) => {
       toast.success(`Rescheduled → ${fmtTime(data.scheduled_send_at)}`);
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
     },
     onError: (err) => toast.error('Reschedule failed: ' + err.message),
   });
@@ -299,15 +312,14 @@ const OutreachPage = () => {
   };
 
   const handleGenerateAll = () => {
-    const pending = contacts.filter(c =>
-      !drafts.some(d => d.job_id === c.job?.id) &&
-      !sentEmails.some(s => s.job_id === c.job?.id)
-    );
-    if (pending.length === 0) {
+    // Uses the server-computed count so it works on any tab without loading
+    // the contacts/drafts/sent lists; the actual generation is server-side.
+    const pendingCount = counts.pending_generate ?? 0;
+    if (pendingCount === 0) {
       toast.info('No pending contacts — all have drafts already.');
       return;
     }
-    setGenerateModalFor({ bulk: true, pendingContacts: pending });
+    setGenerateModalFor({ bulk: true, pendingCount });
   };
 
   const handleGenerateConfirm = async ({ highlight, tone_override, strategy }) => {
@@ -328,6 +340,7 @@ const OutreachPage = () => {
           setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
             queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
           }, 90_000);
         } else if (data.status === 'already_running') {
           toast.info('A draft-generation run is already in progress — give it a minute.');
@@ -343,6 +356,7 @@ const OutreachPage = () => {
         toast.success('Draft ready — review it in Drafts, then approve to schedule.');
         queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
         queryClient.invalidateQueries({ queryKey: ['outreach-contacts'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
       } catch (err) { toast.error('Failed: ' + err.message); }
       finally {
         setGeneratingFor(prev => { const s = new Set(prev); s.delete(jobId); return s; });
@@ -357,6 +371,7 @@ const OutreachPage = () => {
       toast.success('Approved → go to the Sending tab to schedule it.');
       queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
     } catch (err) { toast.error('Failed: ' + err.message); }
     finally { setApprovingId(null); }
   };
@@ -381,6 +396,7 @@ const OutreachPage = () => {
       // The approve may have succeeded even if queueing failed — refresh both
       queryClient.invalidateQueries({ queryKey: ['outreach-drafts'] });
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
       setApproveQueueId(null);
     }
   };
@@ -391,6 +407,7 @@ const OutreachPage = () => {
       await markEmailReplied(id);
       toast.success('Marked as replied!');
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
     } catch (err) { toast.error('Failed: ' + err.message); }
     finally { setReplyingId(null); }
   };
@@ -405,6 +422,7 @@ const OutreachPage = () => {
         toast.info('No follow-ups are due right now.');
       }
       queryClient.invalidateQueries({ queryKey: ['outreach-sent'] });
+      queryClient.invalidateQueries({ queryKey: ['outreach-counts'] });
     } catch (err) { toast.error('Failed: ' + err.message); }
     finally { setRunningFollowups(false); }
   };
@@ -435,22 +453,23 @@ const OutreachPage = () => {
   const getEmailForJob = (jobId) =>
     drafts.find(d => d.job_id === jobId) || sentEmails.find(s => s.job_id === jobId) || null;
 
-  // Stats
+  // Stats — sourced from the cheap counts endpoint so the bar/badges/strip are
+  // correct on every tab without loading every list.
   const stats = {
-    staging:  stagingJobs.length,
-    contacts: contacts.length,
-    drafts:   drafts.length,
-    queued:   sentEmails.filter(e => e.is_queued && e.status === 'approved').length,
-    sent:     sentEmails.filter(e => e.status === 'sent').length,
-    opened:   sentEmails.filter(e => e.status === 'opened').length,
-    replied:  sentEmails.filter(e => e.status === 'replied').length,
-    manual:   manualApplyJobs.length,
+    staging:  counts.staging  ?? 0,
+    contacts: counts.contacts ?? 0,
+    drafts:   counts.drafts   ?? 0,
+    queued:   counts.queued   ?? 0,
+    sent:     counts.sent     ?? 0,
+    opened:   counts.opened   ?? 0,
+    replied:  counts.replied  ?? 0,
+    manual:   counts.manual   ?? 0,
   };
 
   // ── Adaptive "Next step" through the outreach funnel ───────────────────────
   // Find contacts → generate → review/approve → connect inbox → schedule.
-  const approvedUnqueued = sentEmails.filter(e => e.status === 'approved' && !e.is_queued).length;
-  const pendingGenerate  = contacts.filter(c => !getEmailForJob(c.job?.id)).length;
+  const approvedUnqueued = counts.approved_unqueued ?? 0;
+  const pendingGenerate  = counts.pending_generate ?? 0;
   const nextStep = (() => {
     if (stats.staging > 0) return {
       Icon: Search, title: `Find contacts for ${stats.staging} approved job${stats.staging !== 1 ? 's' : ''}`,
@@ -462,8 +481,8 @@ const OutreachPage = () => {
       body: 'Write personalized cold emails for the contacts you found.',
       cta: 'Go to Contacts', onClick: () => setActiveTab('contacts'),
     };
-    if (drafts.length > 0) return {
-      Icon: FileText, title: `Review ${drafts.length} draft${drafts.length !== 1 ? 's' : ''}`,
+    if (stats.drafts > 0) return {
+      Icon: FileText, title: `Review ${stats.drafts} draft${stats.drafts !== 1 ? 's' : ''}`,
       body: 'Approve the ones you like, then schedule them to send.',
       cta: 'Go to Drafts', onClick: () => setActiveTab('drafts'),
     };
@@ -482,11 +501,11 @@ const OutreachPage = () => {
 
   // ── Milestone celebrations (one-time, localStorage-gated) ──────────────────
   React.useEffect(() => {
-    if (contacts.length > 0 && localStorage.getItem('applydirFirstContact') !== 'true') {
+    if ((counts.contacts ?? 0) > 0 && localStorage.getItem('applydirFirstContact') !== 'true') {
       localStorage.setItem('applydirFirstContact', 'true');
       toast.success('🎉 First contact found! Generate an email for them next.', { autoClose: 6000 });
     }
-  }, [contacts.length]);
+  }, [counts.contacts]);
 
   React.useEffect(() => {
     if (stats.sent > 0 && localStorage.getItem('applydirFirstSend') !== 'true') {
@@ -506,7 +525,7 @@ const OutreachPage = () => {
       {generateModalFor && (
         <GenerateModal
           contact={generateModalFor.contact}
-          bulkCount={generateModalFor.bulk ? generateModalFor.pendingContacts?.length : null}
+          bulkCount={generateModalFor.bulk ? generateModalFor.pendingCount : null}
           onConfirm={handleGenerateConfirm}
           onClose={() => setGenerateModalFor(null)}
         />
@@ -583,11 +602,11 @@ const OutreachPage = () => {
           {TABS.map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.key;
-            const count = tab.key === 'staging'  ? stagingJobs.length
-                        : tab.key === 'contacts' ? contacts.length
-                        : tab.key === 'drafts'   ? drafts.length
-                        : tab.key === 'manual'   ? manualApplyJobs.length
-                        : sentEmails.length;
+            const count = tab.key === 'staging'  ? stats.staging
+                        : tab.key === 'contacts' ? stats.contacts
+                        : tab.key === 'drafts'   ? stats.drafts
+                        : tab.key === 'manual'   ? stats.manual
+                        : (counts.sending_total ?? 0);
             return (
               <button
                 key={tab.key}
@@ -599,9 +618,9 @@ const OutreachPage = () => {
                       : tab.key === 'manual'
                         ? 'text-orange-700 border-orange-500 bg-orange-50/50'
                         : 'text-primary-dark border-primary-light bg-primary-light/5'
-                    : tab.key === 'staging' && stagingJobs.length > 0
+                    : tab.key === 'staging' && stats.staging > 0
                       ? 'text-blue-600 border-transparent hover:bg-blue-50/30'
-                      : tab.key === 'manual' && manualApplyJobs.length > 0
+                      : tab.key === 'manual' && stats.manual > 0
                         ? 'text-orange-600 border-transparent hover:bg-orange-50/30'
                         : 'text-secondary-dark border-transparent hover:bg-neutral'
                 }`}
