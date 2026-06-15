@@ -1,18 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Send, MailOpen, MessageSquare, Users, Loader2 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
-import api from '../api';
+import { getAnalytics } from '../services/apiAnalytics';
 
 const AnalyticsDashboardOverview = () => {
-  const [data, setData]       = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    api.get('/api/outreach/analytics/', { params: { days: 14 } })
-      .then(res => setData(res.data))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
+  const { data, isLoading: loading } = useQuery({
+    queryKey: ['analytics', 14],
+    queryFn: () => getAnalytics(14),
+    staleTime: 5 * 60 * 1000,
+  });
 
   if (loading) {
     return (
@@ -45,11 +42,12 @@ const AnalyticsDashboardOverview = () => {
     ],
   };
 
+  // Reply rate leads (the real signal); open rate flagged as approximate.
   const stats = [
-    { label: 'Emails Sent',    value: summary.total_sent,       icon: Send,           color: 'bg-blue-50 text-blue-500' },
-    { label: 'Open Rate',      value: `${summary.open_rate}%`,  icon: MailOpen,       color: 'bg-purple-50 text-purple-500' },
-    { label: 'Reply Rate',     value: `${summary.reply_rate}%`, icon: MessageSquare,  color: 'bg-emerald-50 text-emerald-500' },
-    { label: 'Contacts Found', value: pipeline.total_contacts,  icon: Users,          color: 'bg-amber-50 text-amber-500' },
+    { label: 'Reply Rate',       value: `${summary.reply_rate}%`, icon: MessageSquare,  color: 'bg-emerald-50 text-emerald-500' },
+    { label: 'Emails Sent (14d)', value: summary.total_sent,      icon: Send,           color: 'bg-blue-50 text-blue-500' },
+    { label: 'Open Rate*',       value: `${summary.open_rate}%`,  icon: MailOpen,       color: 'bg-purple-50 text-purple-500' },
+    { label: 'Contacts Found',   value: pipeline.total_contacts,  icon: Users,          color: 'bg-amber-50 text-amber-500' },
   ];
 
   return (
@@ -73,6 +71,7 @@ const AnalyticsDashboardOverview = () => {
           );
         })}
       </div>
+      <p className="text-[10px] text-gray-400 -mt-2">* Open rate is approximate — email image proxies can inflate it.</p>
 
       {/* Daily activity chart */}
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">

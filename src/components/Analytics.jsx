@@ -76,6 +76,8 @@ const Analytics = () => {
   }
 
   const { summary, pipeline, daily_activity, status_breakdown, recent_emails } = data;
+  const funnel = data.funnel || [];
+  const inboxPerf = data.inbox_performance || [];
   const strategyPerf = data.strategy_performance || [];
   const anyStrategySends = strategyPerf.some(s => s.sent > 0 || s.drafts > 0);
   const bestReplyRate = Math.max(...strategyPerf.map(s => (s.sent >= 5 ? s.reply_rate : 0)), 0);
@@ -178,20 +180,81 @@ const Analytics = () => {
         </div>
       </div>
 
-      {/* Summary stat cards */}
+      {/* Primary metrics — selected window. Reply rate leads; open rate is flagged. */}
       <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <StatCard label="Emails Sent"     value={summary.total_sent}      icon={Send}          color="bg-blue-50 text-blue-500" />
-        <StatCard label="Open Rate"       value={`${summary.open_rate}%`}  icon={MailOpen}      color="bg-purple-50 text-purple-500" />
-        <StatCard label="Reply Rate"      value={`${summary.reply_rate}%`} icon={MessageSquare} color="bg-emerald-50 text-emerald-500" />
-        <StatCard label="Contacts Found"  value={pipeline.total_contacts}  icon={Users}         color="bg-amber-50 text-amber-500" />
+        <StatCard label="Reply Rate"   value={`${summary.reply_rate}%`} sub="the metric that matters" icon={MessageSquare} color="bg-emerald-50 text-emerald-600" />
+        <StatCard label="Emails Sent"  value={summary.total_sent}      sub={`last ${days} days`}     icon={Send}          color="bg-blue-50 text-blue-500" />
+        <StatCard label="Replies"      value={summary.total_replied}   sub={`last ${days} days`}     icon={MessageSquare} color="bg-green-50 text-green-600" />
+        <StatCard label="Open Rate"    value={`${summary.open_rate}%`}  sub="approx · incl. prefetch" icon={MailOpen}      color="bg-purple-50 text-purple-500" />
       </div>
 
-      {/* Secondary stat cards */}
+      {/* Pipeline state — current, not time-bound */}
       <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <StatCard label="Drafts"          value={summary.total_drafts}   icon={FileText}      color="bg-neutral-dark text-secondary-dark" />
-        <StatCard label="Awaiting Send"   value={summary.total_approved} icon={Mail}          color="bg-amber-50 text-amber-500" />
-        <StatCard label="Opened"          value={summary.total_opened}   icon={MailOpen}      color="bg-violet-50 text-violet-500" />
-        <StatCard label="Replied"         value={summary.total_replied}  icon={MessageSquare} color="bg-green-50 text-green-600" />
+        <StatCard label="Contacts Found" value={pipeline.total_contacts} sub="all time"        icon={Users}    color="bg-amber-50 text-amber-500" />
+        <StatCard label="Drafts"         value={summary.total_drafts}    sub="ready to review"  icon={FileText} color="bg-neutral-dark text-secondary-dark" />
+        <StatCard label="Awaiting Send"  value={summary.total_approved}  sub="approved/queued"  icon={Mail}     color="bg-amber-50 text-amber-500" />
+        <StatCard label="Opened"         value={summary.total_opened}    sub={`last ${days} days`} icon={MailOpen} color="bg-violet-50 text-violet-500" />
+      </div>
+
+      {/* Conversion Funnel — where opportunities drop off (all time) */}
+      <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
+        <h2 className="text-base font-bold text-black-light font-montserrat">Conversion Funnel</h2>
+        <p className="text-xs text-secondary-dark mt-0.5 mb-4">Scrape → reply, all time. The % is how many carry through to the next stage.</p>
+        <div className="flex items-stretch gap-1.5 overflow-x-auto pb-1">
+          {funnel.map((f, i) => (
+            <React.Fragment key={f.stage}>
+              {i > 0 && (
+                <div className="flex items-center shrink-0">
+                  <span className={`text-[11px] font-bold px-1 ${f.rate_from_prev >= 50 ? 'text-emerald-600' : f.rate_from_prev >= 25 ? 'text-amber-600' : 'text-red-500'}`}>
+                    {f.rate_from_prev}%›
+                  </span>
+                </div>
+              )}
+              <div className="flex-1 min-w-[100px] text-center bg-neutral rounded-xl p-3 border border-neutral-dark">
+                <p className="text-2xl font-bold text-black font-montserrat">{f.count}</p>
+                <p className="text-[11px] text-secondary-dark mt-0.5">{f.stage}</p>
+              </div>
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Per-inbox performance — selected window */}
+      <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark overflow-hidden">
+        <div className="px-6 py-4 border-b border-neutral-dark">
+          <h2 className="text-base font-bold text-black-light font-montserrat">Per-Inbox Performance</h2>
+          <p className="text-xs text-secondary-dark mt-0.5">Which inbox is getting replies (last {days} days).</p>
+        </div>
+        {inboxPerf.length === 0 ? (
+          <div className="py-10 text-center text-sm text-secondary-dark/60">
+            No per-inbox data for this window yet — it starts accruing from your next send.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm border-collapse">
+              <thead>
+                <tr className="bg-neutral/70 text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat border-b border-neutral-dark">
+                  <th className="px-5 py-3">Inbox</th>
+                  <th className="px-5 py-3 text-right">Sent</th>
+                  <th className="px-5 py-3 text-right">Opened</th>
+                  <th className="px-5 py-3 text-right">Replied</th>
+                  <th className="px-5 py-3 text-right">Reply Rate</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-neutral">
+                {inboxPerf.map(r => (
+                  <tr key={r.email} className="hover:bg-neutral/50 transition-colors">
+                    <td className="px-5 py-3 font-medium text-black">{r.email}</td>
+                    <td className="px-5 py-3 text-right text-secondary-dark">{r.sent}</td>
+                    <td className="px-5 py-3 text-right text-secondary-dark">{r.opened}</td>
+                    <td className="px-5 py-3 text-right text-secondary-dark">{r.replied}</td>
+                    <td className="px-5 py-3 text-right font-semibold text-emerald-600">{r.reply_rate}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* Daily Activity Chart */}
