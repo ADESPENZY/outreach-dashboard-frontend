@@ -85,18 +85,15 @@ export async function getDraftEmails() {
 }
 
 /**
- * Fetches all non-draft emails in a single parallel call.
- * Combines approved, sent, opened, replied, bounced and failed into one list.
+ * Fetches all non-draft emails in ONE request (the endpoint takes a
+ * comma-separated status list). Was six parallel calls + six CORS preflights.
  */
 export async function getSentEmails() {
   try {
-    const statuses = ["approved", "sent", "opened", "replied", "bounced", "failed"];
-    const responses = await Promise.all(
-      statuses.map((status) =>
-        api.get("/api/outreach/emails/", { params: { status } })
-      )
-    );
-    return responses.flatMap((res) => res.data);
+    const response = await api.get("/api/outreach/emails/", {
+      params: { status: "approved,sent,opened,replied,bounced,failed" },
+    });
+    return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));
   }
