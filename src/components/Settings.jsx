@@ -1,161 +1,56 @@
-import React, { useState, useEffect } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import {
-  User, Send, Flame, Zap, AlertTriangle, LogOut, Save,
-  CheckCircle, XCircle, Loader2, Mail, Shield, Clock,
-  ChevronRight, ExternalLink, ToggleLeft, ToggleRight,
-  Key, RefreshCw, Briefcase, Target
-} from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getMe } from '@/services/apiAuth';
-import { getProfile, updateProfile } from '@/services/apiProfile';
-import { getGmailAccounts } from '@/services/apiGmail';
-import { getHunterQuota } from '@/services/apiOutreach';
+import {
+  User, Shield, AlertTriangle, LogOut, Save, Loader2, Lock,
+  ChevronRight, ArrowRight, Trash2, KeyRound, FileText,
+} from 'lucide-react';
+import { getMe, changePassword, deleteAccount, forgotPassword } from '@/services/apiAuth';
 import { useAuth } from '@/context/AuthContext';
 
-// ─── Tab config ───────────────────────────────────────────────────────────────
+// ─── Tabs ───────────────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'account',      label: 'Account',      icon: User,          desc: 'Profile & identity' },
-  { key: 'outreach',     label: 'Outreach',      icon: Send,          desc: 'Email & follow-ups' },
-  { key: 'warmup',       label: 'Warmup',        icon: Flame,         desc: 'Sending defaults' },
-  { key: 'integrations', label: 'Integrations',  icon: Zap,           desc: 'API connections' },
-  { key: 'danger',       label: 'Danger Zone',   icon: AlertTriangle, desc: 'Risk actions' },
+  { key: 'account', label: 'Account',     icon: User,          desc: 'Login & password' },
+  { key: 'legal',   label: 'Legal',       icon: Shield,        desc: 'Privacy & terms' },
+  { key: 'danger',  label: 'Danger Zone', icon: AlertTriangle, desc: 'Delete account' },
 ];
 
-// ─── Shared sub-components ────────────────────────────────────────────────────
-function SectionCard({ title, description, children, onSave, saving, noPad }) {
+// ─── Shared bits ─────────────────────────────────────────────────────────────
+function Card({ title, description, children, danger }) {
   return (
-    <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm overflow-hidden">
-      <div className="px-6 py-5 border-b border-neutral-dark">
-        <h3 className="text-base font-bold text-black font-montserrat">{title}</h3>
-        {description && <p className="text-sm text-secondary-dark mt-0.5">{description}</p>}
+    <div className={`bg-white rounded-2xl border shadow-sm overflow-hidden ${danger ? 'border-red-200' : 'border-neutral-dark'}`}>
+      <div className={`px-6 py-5 border-b ${danger ? 'border-red-100 bg-red-50/40' : 'border-neutral-dark'}`}>
+        <h3 className={`text-base font-bold font-montserrat ${danger ? 'text-red-700' : 'text-black'}`}>{title}</h3>
+        {description && <p className={`text-sm mt-0.5 ${danger ? 'text-red-600/70' : 'text-secondary-dark'}`}>{description}</p>}
       </div>
-      <div className={noPad ? '' : 'px-6 py-5 space-y-4'}>
-        {children}
-      </div>
-      {onSave && (
-        <div className="px-6 py-4 border-t border-neutral-dark bg-neutral/40 flex justify-end">
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
-          >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            {saving ? 'Saving...' : 'Save Changes'}
-          </button>
-        </div>
-      )}
+      <div className="px-6 py-5 space-y-4">{children}</div>
     </div>
   );
 }
 
-function FieldRow({ label, hint, children }) {
-  return (
-    <div className="flex flex-col md:flex-row md:items-start gap-2 md:gap-6">
-      <div className="md:w-44 shrink-0 pt-0.5">
-        <p className="text-sm font-semibold text-black-light">{label}</p>
-        {hint && <p className="text-xs text-secondary-dark mt-0.5">{hint}</p>}
-      </div>
-      <div className="flex-1">{children}</div>
-    </div>
-  );
-}
-
-function InputField({ value, onChange, placeholder, type = 'text', readOnly }) {
+function Input(props) {
   return (
     <input
-      type={type}
-      value={value}
-      onChange={onChange}
-      placeholder={placeholder}
-      readOnly={readOnly}
-      className={`w-full px-3 py-2 rounded-xl border text-sm outline-none transition-all ${
-        readOnly
-          ? 'bg-neutral border-neutral-dark text-secondary-dark cursor-not-allowed'
-          : 'bg-white border-neutral-dark focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 text-black'
-      }`}
+      {...props}
+      className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all"
     />
   );
 }
 
-function Toggle({ checked, onChange, label }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-        checked ? 'bg-primary-light' : 'bg-secondary-dark/30'
-      }`}
-    >
-      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-md transition-transform duration-200 ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
-    </button>
-  );
-}
-
-function SelectField({ value, onChange, options, placeholder }) {
-  return (
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all"
-    >
-      {placeholder && <option value="">{placeholder}</option>}
-      {options.map(o => (
-        <option key={o.value} value={o.value}>{o.label}</option>
-      ))}
-    </select>
-  );
-}
-
-function NumberStepper({ value, onChange, min = 1, max = 100 }) {
-  return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => onChange(Math.max(min, value - 1))}
-        className="w-8 h-8 rounded-lg border border-neutral-dark bg-white text-secondary-dark hover:bg-neutral hover:border-primary-light/40 transition-all font-bold text-lg leading-none flex items-center justify-center"
-      >−</button>
-      <span className="w-12 text-center text-sm font-bold text-black">{value}</span>
-      <button
-        onClick={() => onChange(Math.min(max, value + 1))}
-        className="w-8 h-8 rounded-lg border border-neutral-dark bg-white text-secondary-dark hover:bg-neutral hover:border-primary-light/40 transition-all font-bold text-lg leading-none flex items-center justify-center"
-      >+</button>
-    </div>
-  );
-}
-
-function StatusPill({ ok, label }) {
-  return (
-    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border ${
-      ok
-        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-        : 'bg-red-50 text-red-600 border-red-200'
-    }`}>
-      {ok ? <CheckCircle className="w-3 h-3" /> : <XCircle className="w-3 h-3" />}
-      {label}
-    </span>
-  );
-}
-
 // ═════════════════════════════════════════════════════════════════════════════
-// MAIN SETTINGS COMPONENT
-// ═════════════════════════════════════════════════════════════════════════════
-
 const Settings = () => {
   const [activeTab, setActiveTab] = useState('account');
   const navigate = useNavigate();
 
   return (
     <div className="pb-10 animate-fade-in font-roboto">
-      {/* Page Header */}
       <div className="mb-6">
-        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">
-          Settings
-        </h1>
-        <p className="text-sm text-secondary-dark mt-1">Manage your account, preferences, and integrations</p>
+        <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">Settings</h1>
+        <p className="text-sm text-secondary-dark mt-1">Your login, legal policies, and account controls.</p>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
-        {/* ── Left Tab Nav ─────────────────────────────────────── */}
         <aside className="w-full md:w-56 shrink-0">
           <nav className="bg-white rounded-2xl border border-neutral-dark shadow-sm overflow-hidden">
             {TABS.map((tab, i) => {
@@ -166,21 +61,15 @@ const Settings = () => {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all ${
-                    i < TABS.length - 1 ? 'border-b border-neutral-dark' : ''
-                  } ${
+                  className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all ${i < TABS.length - 1 ? 'border-b border-neutral-dark' : ''} ${
                     isActive
-                      ? isDanger
-                        ? 'bg-red-50 border-l-2 border-l-red-400 text-red-600'
-                        : 'bg-primary-light/8 border-l-2 border-l-primary-light text-primary-dark'
-                      : isDanger
-                        ? 'text-red-500 hover:bg-red-50/50'
-                        : 'text-secondary-dark hover:bg-neutral hover:text-black-light'
+                      ? isDanger ? 'bg-red-50 border-l-2 border-l-red-400 text-red-600' : 'bg-primary-light/8 border-l-2 border-l-primary-light text-primary-dark'
+                      : isDanger ? 'text-red-500 hover:bg-red-50/50' : 'text-secondary-dark hover:bg-neutral hover:text-black-light'
                   }`}
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive && !isDanger ? 'text-primary-light' : ''}`} />
                   <div>
-                    <p className={`text-sm font-semibold`}>{tab.label}</p>
+                    <p className="text-sm font-semibold">{tab.label}</p>
                     <p className={`text-[10px] ${isActive ? '' : 'text-secondary-dark/60'}`}>{tab.desc}</p>
                   </div>
                   {isActive && <ChevronRight className="w-3.5 h-3.5 ml-auto" />}
@@ -190,13 +79,10 @@ const Settings = () => {
           </nav>
         </aside>
 
-        {/* ── Right Content ─────────────────────────────────────── */}
         <div className="flex-1 min-w-0 space-y-5">
-          {activeTab === 'account'      && <AccountTab />}
-          {activeTab === 'outreach'     && <OutreachTab />}
-          {activeTab === 'warmup'       && <WarmupTab />}
-          {activeTab === 'integrations' && <IntegrationsTab />}
-          {activeTab === 'danger'       && <DangerTab navigate={navigate} />}
+          {activeTab === 'account' && <AccountTab navigate={navigate} />}
+          {activeTab === 'legal'   && <LegalTab />}
+          {activeTab === 'danger'  && <DangerTab navigate={navigate} />}
         </div>
       </div>
     </div>
@@ -204,578 +90,241 @@ const Settings = () => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// TAB — ACCOUNT
+// ACCOUNT — login info + change password
 // ═════════════════════════════════════════════════════════════════════════════
+function AccountTab({ navigate }) {
+  const { data: me, isLoading } = useQuery({ queryKey: ['me'], queryFn: getMe });
 
-function AccountTab() {
-  const queryClient = useQueryClient();
+  const [current, setCurrent] = useState('');
+  const [next, setNext]       = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [saving, setSaving]   = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
 
-  const [fullName,      setFullName]      = useState('');
-  const [contactEmail,  setContactEmail]  = useState('');
-  const [phone,         setPhone]         = useState('');
-  const [location,      setLocation]      = useState('');
-  const [linkedinUrl,   setLinkedinUrl]   = useState('');
-  const [githubUrl,     setGithubUrl]     = useState('');
-  const [portfolioUrl,  setPortfolioUrl]  = useState('');
+  const submitPassword = async () => {
+    if (next.length < 8) return toast.error('New password must be at least 8 characters.');
+    if (next !== confirm) return toast.error('New passwords do not match.');
+    setSaving(true);
+    try {
+      await changePassword({ current_password: current, new_password: next });
+      toast.success('Password updated.');
+      setCurrent(''); setNext(''); setConfirm('');
+    } catch (err) { toast.error(err.message); }
+    finally { setSaving(false); }
+  };
 
-  const { data: accountData, isLoading: loading } = useQuery({
-    queryKey: ['account-settings'],
-    queryFn: () => Promise.all([getMe(), getProfile()]).then(([me, profile]) => ({ me, profile })),
-  });
+  const sendReset = async () => {
+    if (!me?.email) return;
+    setSendingReset(true);
+    try {
+      await forgotPassword(me.email);
+      toast.success(`Reset link sent to ${me.email}.`);
+    } catch (err) { toast.error(err.message); }
+    finally { setSendingReset(false); }
+  };
 
-  useEffect(() => {
-    if (!accountData) return;
-    const { profile } = accountData;
-    setFullName(profile?.full_name || '');
-    setContactEmail(profile?.contact_email || '');
-    setPhone(profile?.phone || '');
-    setLocation(profile?.location || '');
-    setLinkedinUrl(profile?.linkedin_url || '');
-    setGithubUrl(profile?.github_url || '');
-    setPortfolioUrl(profile?.portfolio_url || '');
-  }, [accountData]);
+  if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-7 h-7 animate-spin text-primary-light" /></div>;
 
-  const saveMutation = useMutation({
-    mutationFn: (profileData) => updateProfile(profileData),
-    onSuccess: () => {
-      toast.success('Profile updated');
-      queryClient.invalidateQueries({ queryKey: ['account-settings'] });
-    },
-    onError: (err) => toast.error(err.message || 'Failed to save profile'),
-  });
-
-  const handleSave = () => saveMutation.mutate({
-    full_name: fullName, contact_email: contactEmail,
-    phone, location,
-    linkedin_url: linkedinUrl, github_url: githubUrl, portfolio_url: portfolioUrl,
-  });
-
-  const me = accountData?.me;
-
-  if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-7 h-7 animate-spin text-primary-light" />
-    </div>
-  );
-
-  const initials = (fullName || me?.username || 'U').split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
-  const displayEmail = contactEmail || me?.email || '';
+  const initials = (me?.first_name || me?.username || 'U').slice(0, 2).toUpperCase();
 
   return (
     <div className="space-y-5">
-      {/* Avatar card */}
+      {/* Identity */}
       <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm px-6 py-5 flex items-center gap-5">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-primary-light/30 shrink-0">
-          {initials}
-        </div>
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center text-white text-xl font-bold shadow-lg shadow-primary-light/30 shrink-0">{initials}</div>
         <div>
-          <p className="text-lg font-bold text-black font-montserrat">{fullName || me?.username}</p>
-          <p className="text-sm text-secondary-dark">{displayEmail}</p>
+          <p className="text-lg font-bold text-black font-montserrat">{me?.first_name || me?.username}</p>
+          <p className="text-sm text-secondary-dark">{me?.email}</p>
           <p className="text-xs text-secondary-dark/60 mt-0.5">@{me?.username}</p>
         </div>
       </div>
 
-      {/* Auth info — read only */}
-      <SectionCard title="Login Details" description="Your system username — contact admin to change.">
-        <FieldRow label="Username">
-          <InputField value={me?.username || ''} readOnly />
-        </FieldRow>
-      </SectionCard>
-
-      {/* Contact info — used in CVs and outreach */}
-      <SectionCard
-        title="Contact Info"
-        description="Shown on your generated CVs and used in outreach signatures."
-        onSave={handleSave}
-        saving={saveMutation.isPending}
+      {/* Profile pointer — no duplicate editing here */}
+      <button
+        onClick={() => navigate('/dashboard/profile')}
+        className="w-full bg-white rounded-2xl border border-neutral-dark shadow-sm px-6 py-4 flex items-center justify-between hover:border-primary-light/40 transition-all text-left"
       >
-        <FieldRow label="Full Name" hint="Used in CV header and signatures">
-          <InputField
-            value={fullName}
-            onChange={e => setFullName(e.target.value)}
-            placeholder="e.g. Joshua Atoyebi"
-          />
-        </FieldRow>
-        <FieldRow label="Contact Email" hint="Shown on your CV (can differ from login email)">
-          <InputField
-            type="email"
-            value={contactEmail}
-            onChange={e => setContactEmail(e.target.value)}
-            placeholder="e.g. atoyebijoshua095@gmail.com"
-          />
-        </FieldRow>
-        <FieldRow label="Phone" hint="Shown on CV sidebar">
-          <InputField
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-            placeholder="e.g. +234 912 872 1745"
-          />
-        </FieldRow>
-        <FieldRow label="Location" hint="City, Country">
-          <InputField
-            value={location}
-            onChange={e => setLocation(e.target.value)}
-            placeholder="e.g. Lagos, Nigeria"
-          />
-        </FieldRow>
-      </SectionCard>
-
-      {/* Links */}
-      <SectionCard
-        title="Links"
-        description="Shown on your CV sidebar."
-        onSave={handleSave}
-        saving={saveMutation.isPending}
-      >
-        <FieldRow label="LinkedIn" hint="Full URL">
-          <InputField
-            value={linkedinUrl}
-            onChange={e => setLinkedinUrl(e.target.value)}
-            placeholder="https://linkedin.com/in/joshuaatoyebi"
-          />
-        </FieldRow>
-        <FieldRow label="GitHub" hint="Full URL">
-          <InputField
-            value={githubUrl}
-            onChange={e => setGithubUrl(e.target.value)}
-            placeholder="https://github.com/ADESPENZY"
-          />
-        </FieldRow>
-        <FieldRow label="Portfolio" hint="Full URL">
-          <InputField
-            value={portfolioUrl}
-            onChange={e => setPortfolioUrl(e.target.value)}
-            placeholder="https://www.gojatotech.com"
-          />
-        </FieldRow>
-      </SectionCard>
-    </div>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// TAB — OUTREACH
-// ═════════════════════════════════════════════════════════════════════════════
-
-const OUTREACH_DEFAULTS = {
-  defaultAccountId: '',
-  followup1Days: 3,
-  followup2Days: 7,
-  maxFollowups: 2,
-  dryRun: true,
-};
-
-function OutreachTab() {
-  const [prefs, setPrefs] = useState(() => {
-    const saved = localStorage.getItem('outreach_prefs');
-    return saved ? { ...OUTREACH_DEFAULTS, ...JSON.parse(saved) } : OUTREACH_DEFAULTS;
-  });
-
-  const { data: outreachSettingsData, isLoading: loading } = useQuery({
-    queryKey: ['outreach-tab-settings'],
-    queryFn: async () => {
-      const [accsData, quota] = await Promise.all([
-        getGmailAccounts(),
-        getHunterQuota().catch(() => null),
-      ]);
-      return { accounts: accsData?.results ?? [], quota };
-    },
-  });
-
-  const accounts = outreachSettingsData?.accounts ?? [];
-  const quota    = outreachSettingsData?.quota ?? null;
-
-  const set = (key, val) => setPrefs(p => ({ ...p, [key]: val }));
-
-  const handleSave = () => {
-    localStorage.setItem('outreach_prefs', JSON.stringify(prefs));
-    toast.success('Outreach preferences saved');
-  };
-
-  if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-7 h-7 animate-spin text-primary-light" />
-    </div>
-  );
-
-  return (
-    <div className="space-y-5">
-      {/* From email */}
-      <SectionCard
-        title="Sending Account"
-        description="Default Gmail account used for cold email campaigns."
-        onSave={handleSave}
-      >
-        <FieldRow label="Default From" hint="Which inbox to send from">
-          <SelectField
-            value={prefs.defaultAccountId}
-            onChange={v => set('defaultAccountId', v)}
-            placeholder="Select an inbox..."
-            options={accounts.map(a => ({ value: String(a.id), label: a.email }))}
-          />
-        </FieldRow>
-        {accounts.length === 0 && (
-          <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-            No Gmail accounts connected yet. <a href="/dashboard/inboxes" className="font-semibold underline">Add one →</a>
-          </p>
-        )}
-      </SectionCard>
-
-      {/* Follow-up schedule */}
-      <SectionCard
-        title="Follow-up Schedule"
-        description="When to send automatic follow-up emails after the initial send."
-        onSave={handleSave}
-      >
-        <FieldRow label="Follow-up 1" hint="Days after initial send">
-          <NumberStepper value={prefs.followup1Days} onChange={v => set('followup1Days', v)} min={1} max={30} />
-        </FieldRow>
-        <FieldRow label="Follow-up 2" hint="Days after follow-up 1">
-          <NumberStepper value={prefs.followup2Days} onChange={v => set('followup2Days', v)} min={1} max={30} />
-        </FieldRow>
-        <FieldRow label="Max Follow-ups" hint="How many follow-ups to send">
-          <SelectField
-            value={String(prefs.maxFollowups)}
-            onChange={v => set('maxFollowups', Number(v))}
-            options={[
-              { value: '1', label: '1 follow-up' },
-              { value: '2', label: '2 follow-ups' },
-            ]}
-          />
-        </FieldRow>
-      </SectionCard>
-
-      {/* AI Search Credits quota */}
-      <SectionCard title="AI Search Credits" description="Live usage from your contact discovery plan.">
-        {quota ? (
-          <div className="flex flex-wrap gap-6">
-            <div>
-              <p className="text-xs text-secondary-dark/60 uppercase tracking-wider font-semibold mb-1">Plan</p>
-              <p className="text-sm font-bold text-black capitalize">{quota.plan}</p>
-            </div>
-            <div>
-              <p className="text-xs text-secondary-dark/60 uppercase tracking-wider font-semibold mb-1">Remaining</p>
-              <p className="text-sm font-bold text-black">{quota.searches_remaining} / {quota.searches_limit}</p>
-            </div>
-            <div>
-              <p className="text-xs text-secondary-dark/60 uppercase tracking-wider font-semibold mb-1">Mode</p>
-              <StatusPill ok={!quota.dry_run} label={quota.dry_run ? 'Dry Run' : 'Live'} />
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-secondary-dark/60">Could not fetch search credit quota.</p>
-        )}
-
-        <div className="mt-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-primary-light/10 flex items-center justify-center"><FileText className="w-4 h-4 text-primary-dark" /></div>
           <div>
-            <p className="text-sm font-semibold text-black-light">Dry Run Mode</p>
-            <p className="text-xs text-secondary-dark">When on, contacts are found but emails are not sent. Toggle off in your backend <code className="bg-neutral-dark px-1 rounded text-xs">.env</code> file.</p>
+            <p className="text-sm font-semibold text-black">Your outreach identity & CV</p>
+            <p className="text-xs text-secondary-dark">Name, projects, Calendly, skills and CV live in your Profile.</p>
+          </div>
+        </div>
+        <ArrowRight className="w-4 h-4 text-secondary-dark/50" />
+      </button>
+
+      {/* Change password */}
+      <Card title="Change Password" description="Use at least 8 characters.">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider">Current</label>
+            <Input type="password" value={current} onChange={e => setCurrent(e.target.value)} placeholder="Current password" autoComplete="current-password" />
           </div>
           <div>
-            <StatusPill ok={quota?.dry_run === false} label={quota?.dry_run ? 'Active (no real sends)' : 'Off — sending live'} />
+            <label className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider">New</label>
+            <Input type="password" value={next} onChange={e => setNext(e.target.value)} placeholder="New password" autoComplete="new-password" />
+          </div>
+          <div>
+            <label className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider">Confirm</label>
+            <Input type="password" value={confirm} onChange={e => setConfirm(e.target.value)} placeholder="Repeat new password" autoComplete="new-password" />
           </div>
         </div>
-      </SectionCard>
+        <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
+          <button onClick={sendReset} disabled={sendingReset} className="text-xs font-semibold text-primary-dark hover:text-primary-light disabled:opacity-60">
+            {sendingReset ? 'Sending…' : 'Forgot your current password? Email me a reset link'}
+          </button>
+          <button
+            onClick={submitPassword}
+            disabled={saving || !current || !next || !confirm}
+            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
+          >
+            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />} Update Password
+          </button>
+        </div>
+      </Card>
     </div>
   );
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// TAB — WARMUP
+// LEGAL — real, ApplyDir-specific policies
 // ═════════════════════════════════════════════════════════════════════════════
-
-const WARMUP_DEFAULTS = {
-  strategy: 'balanced',
-  initialLimit: 5,
-  maxLimit: 50,
-  dailyIncrease: 3,
-  autoIncrease: true,
-};
-
-function WarmupTab() {
-  const [prefs, setPrefs] = useState(WARMUP_DEFAULTS);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('warmup_defaults');
-    if (saved) setPrefs({ ...WARMUP_DEFAULTS, ...JSON.parse(saved) });
-  }, []);
-
-  const set = (key, val) => setPrefs(p => ({ ...p, [key]: val }));
-
-  const handleSave = () => {
-    localStorage.setItem('warmup_defaults', JSON.stringify(prefs));
-    toast.success('Warmup defaults saved');
-  };
-
-  const strategyDescriptions = {
-    conservative: 'Start slow, increase by 2/day. Best for brand new accounts.',
-    balanced:     'Moderate ramp. Good for most accounts.',
-    aggressive:   'Fast ramp. For established accounts with history.',
-  };
-
+function LegalTab() {
   return (
     <div className="space-y-5">
-      <SectionCard
-        title="Default Strategy"
-        description="These values pre-fill when you add a new warmup session."
-        onSave={handleSave}
-      >
-        {/* Strategy pills */}
-        <FieldRow label="Ramp Strategy" hint="How fast to increase volume">
-          <div className="flex gap-2 flex-wrap">
-            {['conservative', 'balanced', 'aggressive'].map(s => (
-              <button
-                key={s}
-                onClick={() => set('strategy', s)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold border transition-all capitalize ${
-                  prefs.strategy === s
-                    ? 'bg-primary-light text-white border-primary-light shadow-md shadow-primary-light/20'
-                    : 'bg-white border-neutral-dark text-secondary-dark hover:border-primary-light/40 hover:text-primary-dark'
-                }`}
-              >
-                {s}
-              </button>
-            ))}
-          </div>
-          {prefs.strategy && (
-            <p className="text-xs text-secondary-dark mt-2">{strategyDescriptions[prefs.strategy]}</p>
-          )}
-        </FieldRow>
+      <Card title="Privacy Policy" description={`Last updated ${new Date().getFullYear()}. Plain-language summary of how ApplyDir handles your data.`}>
+        <Policy heading="What we collect">
+          <li><b>Account</b> — your email, username, and (for password sign-ups) a securely hashed password.</li>
+          <li><b>Profile</b> — your CV text, contact details, links, Calendly, and AI-extracted skills/projects.</li>
+          <li><b>Connected inboxes</b> — the Gmail address and an app password, stored <b>encrypted</b> (Fernet), used only to send your outreach.</li>
+          <li><b>Generated content & activity</b> — the jobs, contacts, emails, and CVs the system creates for you, plus open/reply events.</li>
+        </Policy>
+        <Policy heading="How we use it">
+          <li>To find roles, score them against your CV, find contacts, and write & send <b>your</b> cold emails and tailored CVs.</li>
+          <li>To send you product emails (welcome, daily scout digest, re-engagement). We never use your connected inbox for our own marketing.</li>
+        </Policy>
+        <Policy heading="Who we share it with (processors only — we never sell your data)">
+          <li><b>OpenAI</b> — CV scoring, email & CV generation.</li>
+          <li><b>Apify, Hunter, Apollo, Serper</b> — job scraping & contact discovery.</li>
+          <li><b>Google / Gmail</b> — sending your emails via SMTP from your own inbox.</li>
+          <li><b>Resend</b> — our transactional emails to you.</li>
+          <li><b>Supabase, Render, Vercel</b> — database & hosting.</li>
+        </Policy>
+        <Policy heading="Your Gmail data">
+          <li>We store your app password encrypted and use it <b>solely to send</b> email on your behalf. We do not read your inbox. You can disconnect an inbox at any time from <b>Inboxes</b>.</li>
+        </Policy>
+        <Policy heading="Your rights">
+          <li>View & edit everything in <b>Profile</b>. Export your CV as PDF. <b>Delete your account</b> any time (Settings → Danger Zone) — this permanently erases your data. We retain your data only until you delete your account.</li>
+        </Policy>
+      </Card>
 
-        <FieldRow label="Initial Daily Limit" hint="Emails sent on day 1">
-          <NumberStepper value={prefs.initialLimit} onChange={v => set('initialLimit', v)} min={1} max={50} />
-        </FieldRow>
+      <Card title="Terms of Service" description="The deal between you and ApplyDir.">
+        <Policy heading="Your responsibilities">
+          <li>You own (or are authorized to use) every inbox you connect.</li>
+          <li>You are responsible for the emails you send and for complying with anti-spam and privacy law in your and your recipients' jurisdictions (e.g. CAN-SPAM, GDPR, CASL) and with Google's terms.</li>
+          <li>No purchased lists, spam, harassment, deception, or illegal content. Outreach must be genuine and relevant.</li>
+        </Policy>
+        <Policy heading="Positioning & representations">
+          <li>Tools that help you present as a fractional/contract engineer are aids only. You are responsible for the accuracy of your CV, your claims, and any agreement you enter with a company.</li>
+        </Policy>
+        <Policy heading="No guarantees">
+          <li>ApplyDir is a tool, not an employment agency. We don't guarantee interviews, offers, or any outcome. Deliverability depends on your sending behaviour and inbox reputation.</li>
+        </Policy>
+        <Policy heading="Acceptable use & suspension">
+          <li>We may pause or remove accounts that abuse the system, spam, or threaten the deliverability of the shared sending pool.</li>
+        </Policy>
+        <Policy heading="Service & liability">
+          <li>The service is provided "as is" and relies on third-party APIs that may change or fail. To the extent permitted by law, our liability is limited to the fees you paid in the prior month.</li>
+        </Policy>
+      </Card>
 
-        <FieldRow label="Max Daily Limit" hint="Target ceiling to ramp up to">
-          <NumberStepper value={prefs.maxLimit} onChange={v => set('maxLimit', v)} min={10} max={200} />
-        </FieldRow>
-
-        <FieldRow label="Daily Increase" hint="Emails added per day">
-          <NumberStepper value={prefs.dailyIncrease} onChange={v => set('dailyIncrease', v)} min={1} max={20} />
-        </FieldRow>
-
-        <FieldRow label="Auto-Increase" hint="Automatically raise limit each day">
-          <div className="flex items-center gap-3">
-            <Toggle checked={prefs.autoIncrease} onChange={v => set('autoIncrease', v)} />
-            <span className="text-sm text-secondary-dark">{prefs.autoIncrease ? 'Enabled' : 'Disabled'}</span>
-          </div>
-        </FieldRow>
-      </SectionCard>
-
-      {/* Preview card */}
-      <div className="bg-gradient-to-br from-primary-light/5 to-primary-dark/5 rounded-2xl border border-primary-light/20 p-6">
-        <h3 className="text-sm font-bold text-primary-dark font-montserrat mb-3">Ramp Preview</h3>
-        <div className="flex gap-1 items-end h-16">
-          {Array.from({ length: 10 }).map((_, i) => {
-            const h = Math.min(prefs.maxLimit, prefs.initialLimit + prefs.dailyIncrease * i);
-            const pct = Math.round((h / prefs.maxLimit) * 100);
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                <div
-                  className="w-full rounded-t-sm bg-gradient-to-t from-primary-dark to-primary-light transition-all"
-                  style={{ height: `${pct}%`, minHeight: '4px' }}
-                />
-                <span className="text-[9px] text-secondary-dark/60">D{i + 1}</span>
-              </div>
-            );
-          })}
-        </div>
-        <p className="text-xs text-secondary-dark mt-2">
-          Reaches max ({prefs.maxLimit}/day) in ~{Math.ceil((prefs.maxLimit - prefs.initialLimit) / prefs.dailyIncrease)} days
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// TAB — INTEGRATIONS
-// ═════════════════════════════════════════════════════════════════════════════
-
-const INTEGRATIONS = [
-  {
-    name: 'AI Search Credits',
-    description: 'Contact enrichment — finds emails from job listings.',
-    icon: '🔍',
-    status: 'configured',
-    detail: 'API key set in environment.',
-    action: null,
-  },
-  {
-    name: 'OpenAI',
-    description: 'Powers cold email generation and job fit scoring via GPT-4o-mini.',
-    icon: '🤖',
-    status: 'configured',
-    detail: 'API key set in environment.',
-    action: null,
-  },
-  {
-    name: 'Resend',
-    description: 'Transactional email delivery with open & bounce tracking.',
-    icon: '📨',
-    status: 'partial',
-    detail: 'API key set. Webhook secret not configured — open/bounce tracking inactive.',
-    action: { label: 'How to set up webhook', href: null, info: 'Go to resend.com → Webhooks → Add Webhook → copy signing secret → paste into .env as RESEND_WEBHOOK_SECRET' },
-  },
-  {
-    name: 'Apify',
-    description: 'LinkedIn job scraper for sourcing job listings at scale.',
-    icon: '🕷️',
-    status: 'configured',
-    detail: 'API key set in environment.',
-    action: null,
-  },
-  {
-    name: 'LinkedIn',
-    description: 'li_at session cookie for scraping LinkedIn job posts.',
-    icon: '💼',
-    status: 'not_connected',
-    detail: 'Placeholder value set. Add your li_at cookie from a secondary LinkedIn account.',
-    action: null,
-  },
-  {
-    name: 'Adzuna',
-    description: 'Job board API for scraping public listings by keyword.',
-    icon: '📋',
-    status: 'configured',
-    detail: 'App ID and API key set in environment.',
-    action: null,
-  },
-];
-
-function IntegrationsTab() {
-  const [expandedInfo, setExpandedInfo] = useState(null);
-
-  const statusConfig = {
-    configured:    { label: 'Connected',       pill: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500' },
-    partial:       { label: 'Partial',         pill: 'bg-amber-50 text-amber-700 border-amber-200',       dot: 'bg-amber-400' },
-    not_connected: { label: 'Not Connected',   pill: 'bg-red-50 text-red-600 border-red-200',             dot: 'bg-red-400' },
-  };
-
-  return (
-    <div className="space-y-5">
-      <SectionCard title="API Integrations" description="Services connected to your backend via environment variables." noPad>
-        <div className="divide-y divide-neutral-dark">
-          {INTEGRATIONS.map((intg) => {
-            const cfg = statusConfig[intg.status];
-            const isExpanded = expandedInfo === intg.name;
-            return (
-              <div key={intg.name} className="px-6 py-4">
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-3 min-w-0">
-                    <div className="w-10 h-10 rounded-xl bg-neutral border border-neutral-dark flex items-center justify-center text-lg shrink-0">
-                      {intg.icon}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-bold text-black">{intg.name}</p>
-                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border uppercase tracking-wider ${cfg.pill}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-                          {cfg.label}
-                        </span>
-                      </div>
-                      <p className="text-xs text-secondary-dark mt-0.5">{intg.description}</p>
-                      <p className="text-xs text-secondary-dark/60 mt-1">{intg.detail}</p>
-                    </div>
-                  </div>
-                  {intg.action && (
-                    <button
-                      onClick={() => setExpandedInfo(isExpanded ? null : intg.name)}
-                      className="shrink-0 px-3 py-1.5 text-xs font-semibold text-primary-dark border border-primary-light/30 bg-primary-light/5 hover:bg-primary-light/10 rounded-xl transition-all"
-                    >
-                      {isExpanded ? 'Hide' : 'How to fix'}
-                    </button>
-                  )}
-                </div>
-                {intg.action && isExpanded && (
-                  <div className="mt-3 ml-13 p-3 rounded-xl bg-amber-50 border border-amber-200 text-xs text-amber-800">
-                    {intg.action.info}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </SectionCard>
-
-      <div className="bg-neutral/60 rounded-2xl border border-neutral-dark px-6 py-4 flex items-start gap-3">
-        <Key className="w-4 h-4 text-secondary-dark/60 mt-0.5 shrink-0" />
+      <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-neutral border border-neutral-dark">
+        <Shield className="w-4 h-4 text-secondary-dark/60 mt-0.5 shrink-0" />
         <p className="text-xs text-secondary-dark">
-          API keys are stored in your backend <code className="bg-neutral-dark px-1 py-0.5 rounded">Backend/.env</code> file. To change any key, update the file and redeploy your backend on Render.
+          This is a plain-language summary written for clarity, not legal advice. Have it reviewed by counsel before public launch. Questions: <a href="mailto:support@gojatotech.com" className="font-semibold text-primary-dark hover:underline">support@gojatotech.com</a>.
         </p>
       </div>
     </div>
   );
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// TAB — DANGER ZONE
-// ═════════════════════════════════════════════════════════════════════════════
+function Policy({ heading, children }) {
+  return (
+    <div>
+      <p className="text-sm font-bold text-black-light mb-1.5">{heading}</p>
+      <ul className="list-disc pl-5 space-y-1 text-sm text-secondary-dark leading-relaxed">{children}</ul>
+    </div>
+  );
+}
 
+// ═════════════════════════════════════════════════════════════════════════════
+// DANGER ZONE — sign out + real account deletion
+// ═════════════════════════════════════════════════════════════════════════════
 function DangerTab({ navigate }) {
   const { logout } = useAuth();
+  const [confirmText, setConfirmText] = useState('');
+  const [password, setPassword]       = useState('');
+  const [deleting, setDeleting]       = useState(false);
 
   const handleLogout = async () => {
     await logout();
-    toast.success('Signed out successfully');
-    setTimeout(() => navigate('/', { replace: true }), 500);
+    toast.success('Signed out.');
+    setTimeout(() => navigate('/', { replace: true }), 400);
+  };
+
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccount({ password, confirm: confirmText });
+      toast.success('Your account and all data have been deleted.');
+      // Best-effort local cleanup, then bounce to login.
+      try { await logout(); } catch { /* token may already be gone */ }
+      localStorage.clear();
+      setTimeout(() => navigate('/', { replace: true }), 600);
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
     <div className="space-y-5">
       {/* Sign out */}
-      <div className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-red-100 bg-red-50/40">
-          <h3 className="text-base font-bold text-red-700 font-montserrat">Sign Out</h3>
-          <p className="text-sm text-red-600/70 mt-0.5">End your current session on this device.</p>
-        </div>
-        <div className="px-6 py-5 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-black-light font-medium">Sign out of your account</p>
-            <p className="text-xs text-secondary-dark mt-0.5">You will need to sign back in to access the dashboard.</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white text-sm font-semibold rounded-xl shadow-sm shadow-red-200 transition-all"
-          >
-            <LogOut className="w-4 h-4" />
-            Sign Out
+      <Card title="Sign Out" description="End your session on this device." danger>
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-secondary-dark">You'll need to sign back in to access the dashboard.</p>
+          <button onClick={handleLogout} className="flex items-center gap-2 px-5 py-2.5 bg-neutral hover:bg-neutral-dark text-black-light text-sm font-semibold rounded-xl transition-all shrink-0">
+            <LogOut className="w-4 h-4" /> Sign Out
           </button>
         </div>
-      </div>
+      </Card>
 
-      {/* Clear prefs */}
-      <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
-        <div className="px-6 py-5 border-b border-amber-100 bg-amber-50/40">
-          <h3 className="text-base font-bold text-amber-700 font-montserrat">Reset Preferences</h3>
-          <p className="text-sm text-amber-600/70 mt-0.5">Clear all locally saved settings to defaults.</p>
+      {/* Delete account */}
+      <Card title="Delete Account" description="Permanent. This erases your profile, jobs, contacts, emails, inboxes, and warmup — everything." danger>
+        <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          This cannot be undone. Connected inboxes will stop sending immediately.
         </div>
-        <div className="px-6 py-5 flex items-center justify-between">
-          <div>
-            <p className="text-sm text-black-light font-medium">Reset outreach & warmup defaults</p>
-            <p className="text-xs text-secondary-dark mt-0.5">Clears saved preferences from your browser. Does not affect your account or data.</p>
-          </div>
+        <div>
+          <label className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider">Type <span className="text-red-600">DELETE</span> to confirm</label>
+          <Input value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="DELETE" />
+        </div>
+        <div>
+          <label className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider">Your password</label>
+          <Input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password (leave blank if you use Google sign-in)" autoComplete="current-password" />
+        </div>
+        <div className="flex justify-end">
           <button
-            onClick={() => {
-              localStorage.removeItem('outreach_prefs');
-              localStorage.removeItem('warmup_defaults');
-              toast.success('Preferences reset to defaults');
-            }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-amber-500 hover:bg-amber-600 text-white text-sm font-semibold rounded-xl shadow-sm shadow-amber-200 transition-all"
+            onClick={handleDelete}
+            disabled={deleting || confirmText.trim().toUpperCase() !== 'DELETE'}
+            className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-red-200 transition-all disabled:opacity-50"
           >
-            <RefreshCw className="w-4 h-4" />
-            Reset
+            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Permanently delete my account
           </button>
         </div>
-      </div>
-
-      {/* Info note */}
-      <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-neutral border border-neutral-dark">
-        <Shield className="w-4 h-4 text-secondary-dark/60 mt-0.5 shrink-0" />
-        <p className="text-xs text-secondary-dark">
-          Permanent data (jobs, contacts, emails, warmup logs) is stored on your backend database. To delete account data, contact your system admin or clear the database directly via the Django admin panel at <code className="bg-neutral-dark px-1 rounded">/admin/</code>.
-        </p>
-      </div>
+      </Card>
     </div>
   );
 }

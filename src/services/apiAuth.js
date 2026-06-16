@@ -64,3 +64,32 @@ export async function setUsername(username) {
     throw new Error(detail);
   }
 }
+
+export async function changePassword({ current_password, new_password }) {
+  try {
+    const response = await api.post("/api/accounts/auth/change-password/", {
+      current_password, new_password,
+    });
+    return response.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || parseApiError(err));
+  }
+}
+
+export async function deleteAccount({ password, confirm }) {
+  try {
+    const response = await api.post("/api/accounts/auth/delete-account/", { password, confirm });
+    return response.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || parseApiError(err));
+  }
+}
+
+export async function forgotPassword(email) {
+  try {
+    const response = await api.post("/api/accounts/auth/forgot-password/", { email });
+    return response.data;
+  } catch (err) {
+    throw new Error(err.response?.data?.detail || parseApiError(err));
+  }
+}
