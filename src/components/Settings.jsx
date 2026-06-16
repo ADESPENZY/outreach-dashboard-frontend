@@ -4,16 +4,18 @@ import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Shield, AlertTriangle, LogOut, Save, Loader2, Lock,
-  ChevronRight, ArrowRight, Trash2, KeyRound, FileText, AtSign,
+  ChevronRight, ArrowRight, Trash2, KeyRound, FileText, AtSign, Bell, Clock,
 } from 'lucide-react';
 import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
+import { getProfile, updateProfile } from '@/services/apiProfile';
 import { useAuth } from '@/context/AuthContext';
 
 // ─── Tabs ───────────────────────────────────────────────────────────────────
 const TABS = [
-  { key: 'account', label: 'Account',     icon: User,          desc: 'Login & password' },
-  { key: 'legal',   label: 'Legal',       icon: Shield,        desc: 'Privacy & terms' },
-  { key: 'danger',  label: 'Danger Zone', icon: AlertTriangle, desc: 'Delete account' },
+  { key: 'account', label: 'Account',       icon: User,          desc: 'Login & password' },
+  { key: 'prefs',   label: 'Notifications', icon: Bell,          desc: 'Emails & timezone' },
+  { key: 'legal',   label: 'Legal',         icon: Shield,        desc: 'Privacy & terms' },
+  { key: 'danger',  label: 'Danger Zone',   icon: AlertTriangle, desc: 'Delete account' },
 ];
 
 // ─── Shared bits ─────────────────────────────────────────────────────────────
@@ -81,6 +83,7 @@ const Settings = () => {
 
         <div className="flex-1 min-w-0 space-y-5">
           {activeTab === 'account' && <AccountTab navigate={navigate} />}
+          {activeTab === 'prefs'   && <NotificationsTab />}
           {activeTab === 'legal'   && <LegalTab />}
           {activeTab === 'danger'  && <DangerTab navigate={navigate} />}
         </div>
@@ -231,6 +234,143 @@ function AccountTab({ navigate }) {
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />} Update Password
           </button>
         </div>
+      </Card>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// NOTIFICATIONS — optional email streams + timezone
+// ═════════════════════════════════════════════════════════════════════════════
+function Toggle({ checked, onChange, disabled }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${checked ? 'bg-primary-light' : 'bg-neutral-dark'}`}
+    >
+      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'}`} />
+    </button>
+  );
+}
+
+function PrefRow({ icon: Icon, title, desc, checked, onChange, saving }) {
+  return (
+    <div className="flex items-center justify-between gap-4 py-1">
+      <div className="flex items-start gap-3">
+        <div className="w-9 h-9 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0"><Icon className="w-4 h-4 text-primary-dark" /></div>
+        <div>
+          <p className="text-sm font-semibold text-black">{title}</p>
+          <p className="text-xs text-secondary-dark">{desc}</p>
+        </div>
+      </div>
+      <Toggle checked={checked} onChange={onChange} disabled={saving} />
+    </div>
+  );
+}
+
+// IANA timezone list — browsers expose the full set; fall back to a short list.
+function tzOptions() {
+  try {
+    if (typeof Intl.supportedValuesOf === 'function') return Intl.supportedValuesOf('timeZone');
+  } catch { /* older browser */ }
+  return ['UTC', 'Africa/Lagos', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Kolkata', 'Asia/Dubai'];
+}
+
+function NotificationsTab() {
+  const queryClient = useQueryClient();
+  const { data: profile, isLoading } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+
+  const [scout, setScout]   = useState(true);
+  const [nudge, setNudge]   = useState(true);
+  const [tz, setTz]         = useState('UTC');
+  const [savingPref, setSavingPref] = useState(false);
+  const [savingTz, setSavingTz]     = useState(false);
+
+  useEffect(() => {
+    if (!profile) return;
+    setScout(profile.notify_scout_digest ?? true);
+    setNudge(profile.notify_pipeline_nudges ?? true);
+    setTz(profile.timezone || 'UTC');
+  }, [profile]);
+
+  const savePref = async (patch, setLocal, prev) => {
+    setSavingPref(true);
+    try {
+      await updateProfile(patch);
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    } catch (err) {
+      setLocal(prev);          // revert optimistic toggle
+      toast.error(err.message);
+    } finally { setSavingPref(false); }
+  };
+
+  const saveTz = async (value) => {
+    setTz(value);
+    setSavingTz(true);
+    try {
+      await updateProfile({ timezone: value });
+      toast.success('Timezone saved.');
+      queryClient.invalidateQueries({ queryKey: ['profile'] });
+    } catch (err) { toast.error(err.message); }
+    finally { setSavingTz(false); }
+  };
+
+  if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-7 h-7 animate-spin text-primary-light" /></div>;
+
+  if (!profile) {
+    return (
+      <Card title="Notifications" description="Finish setting up your profile first.">
+        <p className="text-sm text-secondary-dark">Upload your CV on the Profile page to unlock notification preferences.</p>
+      </Card>
+    );
+  }
+
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+
+  return (
+    <div className="space-y-5">
+      <Card title="Email notifications" description="Choose which optional emails we send you. Essential account emails (password reset, security) are always sent.">
+        <PrefRow
+          icon={Bell}
+          title="Daily scout digest"
+          desc="A morning summary of the new roles Auto-Scout matched to your CV."
+          checked={scout}
+          saving={savingPref}
+          onChange={(v) => { setScout(v); savePref({ notify_scout_digest: v }, setScout, !v); }}
+        />
+        <div className="h-px bg-neutral-dark/60" />
+        <PrefRow
+          icon={ArrowRight}
+          title="Re-engagement nudges"
+          desc="An occasional reminder when you have jobs or contacts waiting on a next step."
+          checked={nudge}
+          saving={savingPref}
+          onChange={(v) => { setNudge(v); savePref({ notify_pipeline_nudges: v }, setNudge, !v); }}
+        />
+      </Card>
+
+      <Card title="Timezone" description="Used to schedule sends and time your digest for your local morning.">
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="w-9 h-9 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0"><Clock className="w-4 h-4 text-primary-dark" /></div>
+          <select
+            value={tz}
+            onChange={(e) => saveTz(e.target.value)}
+            disabled={savingTz}
+            className="flex-1 min-w-[220px] px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all disabled:opacity-60"
+          >
+            {tzOptions().map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>)}
+          </select>
+          {savingTz && <Loader2 className="w-4 h-4 animate-spin text-primary-light" />}
+        </div>
+        {browserTz && tz !== browserTz && (
+          <button onClick={() => saveTz(browserTz)} className="text-xs font-semibold text-primary-dark hover:underline mt-1">
+            Use my device timezone ({browserTz.replace(/_/g, ' ')})
+          </button>
+        )}
       </Card>
     </div>
   );
