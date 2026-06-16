@@ -53,28 +53,33 @@ const Settings = () => {
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
-        {/* Nav — horizontal scrollable strip on mobile, vertical sidebar on desktop.
-            Mobile keeps the strip compact (icon + label, no descriptions) so the
-            selected tab's content sits right under it instead of far below. */}
+        {/* Nav — 2×2 grid on mobile (all four tabs visible, nothing clipped),
+            vertical sidebar on desktop. Mobile hides the descriptions so each
+            tab is a compact icon + label and the content sits right beneath. */}
         <aside className="w-full md:w-56 shrink-0 md:sticky md:top-4">
-          <nav className="bg-white rounded-2xl border border-neutral-dark shadow-sm flex md:flex-col overflow-x-auto md:overflow-hidden">
+          <nav className="bg-white rounded-2xl border border-neutral-dark shadow-sm grid grid-cols-2 md:flex md:flex-col overflow-hidden">
             {TABS.map((tab, i) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
               const isDanger = tab.key === 'danger';
+              // Mobile (2-col grid) dividers: right border on left column, bottom
+              // border on the top row. Desktop overrides to a single bottom border.
+              const isLeftCol = i % 2 === 0;
+              const isTopRow  = i < 2;
+              const gridBorders = `${isLeftCol ? 'border-r' : ''} ${isTopRow ? 'border-b' : ''} md:border-r-0 ${i < TABS.length - 1 ? 'md:border-b' : 'md:border-b-0'}`;
               return (
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`flex items-center gap-2 md:gap-3 px-4 py-3 md:py-3.5 text-left whitespace-nowrap shrink-0 md:w-full transition-all ${i < TABS.length - 1 ? 'md:border-b border-neutral-dark' : ''} ${
+                  className={`flex items-center gap-2 md:gap-3 px-4 py-3 md:py-3.5 text-left transition-all border-neutral-dark ${gridBorders} ${
                     isActive
                       ? isDanger ? 'bg-red-50 md:border-l-2 md:border-l-red-400 text-red-600' : 'bg-primary-light/8 md:border-l-2 md:border-l-primary-light text-primary-dark'
                       : isDanger ? 'text-red-500 hover:bg-red-50/50' : 'text-secondary-dark hover:bg-neutral hover:text-black-light'
                   }`}
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive && !isDanger ? 'text-primary-light' : ''}`} />
-                  <div>
-                    <p className="text-sm font-semibold">{tab.label}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate">{tab.label}</p>
                     <p className={`hidden md:block text-[10px] ${isActive ? '' : 'text-secondary-dark/60'}`}>{tab.desc}</p>
                   </div>
                   {isActive && <ChevronRight className="hidden md:block w-3.5 h-3.5 ml-auto" />}
