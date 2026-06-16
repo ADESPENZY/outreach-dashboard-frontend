@@ -46,8 +46,8 @@ const Settings = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="pb-10 animate-fade-in font-roboto">
-      <div className="mb-6">
+    <div className="px-4 md:px-0 pt-4 md:pt-6 pb-10 animate-fade-in font-roboto">
+      <div className="mb-6 md:mb-8">
         <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">Settings</h1>
         <p className="text-sm text-secondary-dark mt-1">Your login, legal policies, and account controls.</p>
       </div>
