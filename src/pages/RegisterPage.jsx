@@ -668,7 +668,7 @@ const RegisterPage = () => {
 
         {/* Footer */}
         <p className="text-[rgba(255,255,255,0.20)] text-xs font-roboto text-center">
-          © 2025 Jatotech. Enterprise Automation Platform.
+          © 2026 ApplyDir. Cold outreach, automated.
         </p>
       </div>
 

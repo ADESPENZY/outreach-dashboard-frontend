@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import React, { useState, useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import {
   User, Shield, AlertTriangle, LogOut, Save, Loader2, Lock,
-  ChevronRight, ArrowRight, Trash2, KeyRound, FileText,
+  ChevronRight, ArrowRight, Trash2, KeyRound, FileText, AtSign,
 } from 'lucide-react';
-import { getMe, changePassword, deleteAccount, forgotPassword } from '@/services/apiAuth';
+import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
 import { useAuth } from '@/context/AuthContext';
 
 // ─── Tabs ───────────────────────────────────────────────────────────────────
@@ -93,6 +93,7 @@ const Settings = () => {
 // ACCOUNT — login info + change password
 // ═════════════════════════════════════════════════════════════════════════════
 function AccountTab({ navigate }) {
+  const queryClient = useQueryClient();
   const { data: me, isLoading } = useQuery({ queryKey: ['me'], queryFn: getMe });
 
   const [current, setCurrent] = useState('');
@@ -100,6 +101,25 @@ function AccountTab({ navigate }) {
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving]   = useState(false);
   const [sendingReset, setSendingReset] = useState(false);
+
+  // Username — editable, reuses the set-username endpoint (format + uniqueness checked server-side)
+  const [username, setUname]  = useState('');
+  const [savingUname, setSavingUname] = useState(false);
+  useEffect(() => { if (me?.username) setUname(me.username); }, [me?.username]);
+
+  const usernameChanged = username.trim() !== (me?.username || '');
+  const usernameValid   = /^[a-zA-Z0-9_]{3,20}$/.test(username.trim());
+
+  const submitUsername = async () => {
+    if (!usernameValid) return toast.error('3–20 characters. Letters, numbers, and underscores only.');
+    setSavingUname(true);
+    try {
+      await setUsername(username.trim());
+      toast.success('Username updated. Use it next time you sign in.');
+      queryClient.invalidateQueries({ queryKey: ['me'] });
+    } catch (err) { toast.error(err.message); }
+    finally { setSavingUname(false); }
+  };
 
   const submitPassword = async () => {
     if (next.length < 8) return toast.error('New password must be at least 8 characters.');
@@ -138,6 +158,35 @@ function AccountTab({ navigate }) {
           <p className="text-xs text-secondary-dark/60 mt-0.5">@{me?.username}</p>
         </div>
       </div>
+
+      {/* Username — the name you sign in with */}
+      <Card title="Username" description="This is the name you log in with. Changing it takes effect on your next sign-in.">
+        <div className="flex items-end gap-3 flex-wrap">
+          <div className="flex-1 min-w-[200px]">
+            <label className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider">Username</label>
+            <div className="relative">
+              <AtSign className="w-4 h-4 text-secondary-dark/40 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                value={username}
+                onChange={e => setUname(e.target.value)}
+                placeholder="your_username"
+                autoComplete="username"
+                className="w-full pl-9 pr-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all"
+              />
+            </div>
+            {username && !usernameValid && (
+              <p className="text-[11px] text-red-500 mt-1">3–20 characters · letters, numbers, underscores only.</p>
+            )}
+          </div>
+          <button
+            onClick={submitUsername}
+            disabled={savingUname || !usernameChanged || !usernameValid}
+            className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
+          >
+            {savingUname ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+          </button>
+        </div>
+      </Card>
 
       {/* Profile pointer — no duplicate editing here */}
       <button
@@ -242,7 +291,7 @@ function LegalTab() {
       <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-neutral border border-neutral-dark">
         <Shield className="w-4 h-4 text-secondary-dark/60 mt-0.5 shrink-0" />
         <p className="text-xs text-secondary-dark">
-          This is a plain-language summary written for clarity, not legal advice. Have it reviewed by counsel before public launch. Questions: <a href="mailto:support@gojatotech.com" className="font-semibold text-primary-dark hover:underline">support@gojatotech.com</a>.
+          This is a plain-language summary written for clarity, not legal advice. Have it reviewed by counsel before public launch. Questions: <a href="mailto:support@applydir.com" className="font-semibold text-primary-dark hover:underline">support@applydir.com</a>.
         </p>
       </div>
     </div>
