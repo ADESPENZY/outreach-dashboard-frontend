@@ -53,8 +53,11 @@ const Settings = () => {
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
-        <aside className="w-full md:w-56 shrink-0">
-          <nav className="bg-white rounded-2xl border border-neutral-dark shadow-sm overflow-hidden">
+        {/* Nav — horizontal scrollable strip on mobile, vertical sidebar on desktop.
+            Mobile keeps the strip compact (icon + label, no descriptions) so the
+            selected tab's content sits right under it instead of far below. */}
+        <aside className="w-full md:w-56 shrink-0 md:sticky md:top-4">
+          <nav className="bg-white rounded-2xl border border-neutral-dark shadow-sm flex md:flex-col overflow-x-auto md:overflow-hidden">
             {TABS.map((tab, i) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.key;
@@ -63,18 +66,18 @@ const Settings = () => {
                 <button
                   key={tab.key}
                   onClick={() => setActiveTab(tab.key)}
-                  className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all ${i < TABS.length - 1 ? 'border-b border-neutral-dark' : ''} ${
+                  className={`flex items-center gap-2 md:gap-3 px-4 py-3 md:py-3.5 text-left whitespace-nowrap shrink-0 md:w-full transition-all ${i < TABS.length - 1 ? 'md:border-b border-neutral-dark' : ''} ${
                     isActive
-                      ? isDanger ? 'bg-red-50 border-l-2 border-l-red-400 text-red-600' : 'bg-primary-light/8 border-l-2 border-l-primary-light text-primary-dark'
+                      ? isDanger ? 'bg-red-50 md:border-l-2 md:border-l-red-400 text-red-600' : 'bg-primary-light/8 md:border-l-2 md:border-l-primary-light text-primary-dark'
                       : isDanger ? 'text-red-500 hover:bg-red-50/50' : 'text-secondary-dark hover:bg-neutral hover:text-black-light'
                   }`}
                 >
                   <Icon className={`w-4 h-4 shrink-0 ${isActive && !isDanger ? 'text-primary-light' : ''}`} />
                   <div>
                     <p className="text-sm font-semibold">{tab.label}</p>
-                    <p className={`text-[10px] ${isActive ? '' : 'text-secondary-dark/60'}`}>{tab.desc}</p>
+                    <p className={`hidden md:block text-[10px] ${isActive ? '' : 'text-secondary-dark/60'}`}>{tab.desc}</p>
                   </div>
-                  {isActive && <ChevronRight className="w-3.5 h-3.5 ml-auto" />}
+                  {isActive && <ChevronRight className="hidden md:block w-3.5 h-3.5 ml-auto" />}
                 </button>
               );
             })}

@@ -17,7 +17,7 @@ const Dashboard = () => {
             <Rocket className="text-white w-4 h-4" />
           </div>
           <h2 className="text-lg font-bold tracking-tight font-montserrat text-black">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Auto</span>Apply
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Apply</span>DIR
           </h2>
         </div>
         <button
