@@ -11,7 +11,6 @@ import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import JobsPage from './pages/JobsPage';
 import OutreachPage from './pages/OutreachPage';
-import Onboarding from './pages/Onboarding';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
 import AutoScoutSettings from './pages/AutoScoutSettings';
@@ -28,9 +27,10 @@ function App() {
           <Route index element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* Onboarding — JWT protected but outside dashboard layout */}
+          {/* Onboarding wizard removed — setup is progressive (Profile page,
+              CV drawer, Auto-Scout, Inboxes). Old links redirect to Profile. */}
           <Route element={<ProtectedRoute requireOnboarding={false} />}>
-            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/onboarding" element={<Navigate to="/dashboard/profile" replace />} />
           </Route>
 
           {/* Dashboard — JWT only; onboarding is now optional (progressive disclosure) */}

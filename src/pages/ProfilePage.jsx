@@ -4,9 +4,9 @@ import { toast } from 'react-toastify';
 import {
   User, MapPin, Phone, Mail, Linkedin, Github, Globe, Calendar,
   FileText, Pencil, Loader2, ChevronDown, ChevronUp, Download,
-  Plus, X, Save, Sparkles,
+  Plus, X, Save, Sparkles, Upload,
 } from 'lucide-react';
-import { getProfile, updateProfile } from '../services/apiProfile';
+import { getProfile, updateProfile, uploadCV } from '../services/apiProfile';
 import api from '../api';
 
 const TONES = ['professional', 'warm', 'direct'];
@@ -20,10 +20,38 @@ export default function ProfilePage() {
   const [saving, setSaving]         = useState(false);
   const [cvExpanded, setCvExpanded] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [cvBusy, setCvBusy] = useState(false);
 
   useEffect(() => {
     getProfile().then(p => setProfile(p)).finally(() => setLoading(false));
   }, []);
+
+  // Upload (or replace) the CV PDF → extract skills/projects → refresh profile.
+  // This is the home for CV upload now that the onboarding wizard is gone.
+  const handleCvUpload = async (file) => {
+    if (!file) return;
+    if (file.type !== 'application/pdf') return toast.error('Please upload a PDF.');
+    setCvBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append('cv', file);
+      await uploadCV(fd);
+      // The backend extracts skills + projects in a background thread; give it a
+      // moment, then poll the profile until the fresh extraction lands.
+      toast.info('CV uploaded — extracting your skills & projects… (~10s)');
+      let fresh = null;
+      for (let i = 0; i < 6; i++) {
+        await new Promise(r => setTimeout(r, 2500));
+        fresh = await getProfile();
+        setProfile(fresh);
+      }
+      toast.success('CV processed — skills & project highlights updated.');
+    } catch (err) {
+      toast.error('CV upload failed: ' + err.message);
+    } finally {
+      setCvBusy(false);
+    }
+  };
 
   const startEdit = () => {
     setForm({
@@ -90,7 +118,7 @@ export default function ProfilePage() {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <p className="text-secondary-dark text-sm">No profile found.</p>
-        <button onClick={() => navigate('/onboarding')} className="px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl">Complete Setup</button>
+        <button onClick={() => navigate('/dashboard')} className="px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl">Go to Dashboard</button>
       </div>
     );
   }
@@ -258,21 +286,36 @@ export default function ProfilePage() {
         </Section>
       )}
 
-      {/* ── CV text (read-only) ── */}
-      {profile.cv_raw_text && (
-        <Section title="CV / Resume">
-          <div className="flex items-center gap-2 mb-3">
-            <FileText className="w-4 h-4 text-secondary-dark/60" />
-            <span className="text-xs text-secondary-dark">{profile.cv_raw_text.length.toLocaleString()} characters</span>
-            <button onClick={() => setCvExpanded(v => !v)} className="ml-auto flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors">
-              {cvExpanded ? <><ChevronUp className="w-3.5 h-3.5" /> Collapse</> : <><ChevronDown className="w-3.5 h-3.5" /> Expand</>}
-            </button>
-          </div>
-          <div className={`bg-neutral rounded-xl p-4 text-xs text-secondary-dark leading-relaxed whitespace-pre-wrap font-mono overflow-auto transition-all ${cvExpanded ? 'max-h-none' : 'max-h-40'}`}>
-            {profile.cv_raw_text}
-          </div>
-        </Section>
-      )}
+      {/* ── CV / Resume — upload, replace, view (the home for CV upload now) ── */}
+      <Section title="CV / Resume">
+        <input type="file" accept="application/pdf" id="cv-upload" className="hidden"
+          onChange={e => { handleCvUpload(e.target.files?.[0]); e.target.value = ''; }} />
+        {profile.cv_raw_text ? (
+          <>
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <FileText className="w-4 h-4 text-secondary-dark/60" />
+              <span className="text-xs text-secondary-dark">{profile.cv_raw_text.length.toLocaleString()} characters</span>
+              <label htmlFor="cv-upload" className={`ml-auto flex items-center gap-1.5 text-xs font-semibold ${cvBusy ? 'text-secondary-dark/50 cursor-default' : 'text-primary-dark hover:text-primary-light cursor-pointer'}`}>
+                {cvBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {cvBusy ? 'Processing…' : 'Replace CV'}
+              </label>
+              <button onClick={() => setCvExpanded(v => !v)} className="flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors">
+                {cvExpanded ? <><ChevronUp className="w-3.5 h-3.5" /> Collapse</> : <><ChevronDown className="w-3.5 h-3.5" /> Expand</>}
+              </button>
+            </div>
+            <div className={`bg-neutral rounded-xl p-4 text-xs text-secondary-dark leading-relaxed whitespace-pre-wrap font-mono overflow-auto transition-all ${cvExpanded ? 'max-h-none' : 'max-h-40'}`}>
+              {profile.cv_raw_text}
+            </div>
+          </>
+        ) : (
+          <label htmlFor="cv-upload" className={`block ${cvBusy ? 'cursor-default' : 'cursor-pointer'}`}>
+            <div className="border-2 border-dashed border-neutral-dark rounded-xl py-10 text-center hover:border-primary-light/50 transition-all">
+              {cvBusy ? <Loader2 className="w-6 h-6 mx-auto animate-spin text-primary-light" /> : <Upload className="w-6 h-6 mx-auto text-secondary-dark/40" />}
+              <p className="text-sm font-semibold text-black mt-2">{cvBusy ? 'Processing your CV…' : 'Upload your CV (PDF)'}</p>
+              <p className="text-xs text-secondary-dark mt-0.5">We extract your skills & project highlights automatically.</p>
+            </div>
+          </label>
+        )}
+      </Section>
     </div>
   );
 }
