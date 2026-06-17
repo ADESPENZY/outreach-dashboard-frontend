@@ -107,7 +107,7 @@ export function LegalDisclaimer() {
     <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-neutral border border-neutral-dark">
       <Shield className="w-4 h-4 text-secondary-dark/60 mt-0.5 shrink-0" />
       <p className="text-xs text-secondary-dark">
-        This is a plain-language summary written for clarity, not legal advice. Have it reviewed by counsel before public launch. Questions: <a href="mailto:support@applydir.com" className="font-semibold text-primary-dark hover:underline">support@applydir.com</a>.
+        This is a plain-language summary written for clarity. Questions: <a href="mailto:support@applydir.com" className="font-semibold text-primary-dark hover:underline">support@applydir.com</a>.
       </p>
     </div>
   );

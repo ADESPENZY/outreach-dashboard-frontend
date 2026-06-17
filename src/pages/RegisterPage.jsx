@@ -697,9 +697,16 @@ const RegisterPage = () => {
         </motion.div>
 
         {/* Footer */}
-        <p className="text-[rgba(255,255,255,0.20)] text-xs font-roboto text-center">
-          © 2026 ApplyDir. Cold outreach, automated.
-        </p>
+        <div className="text-center space-y-1.5">
+          <p className="text-[rgba(255,255,255,0.30)] text-xs font-roboto">
+            <Link to="/privacy" className="hover:text-[rgba(255,255,255,0.60)] transition-colors">Privacy</Link>
+            <span className="mx-2 text-[rgba(255,255,255,0.15)]">·</span>
+            <Link to="/terms" className="hover:text-[rgba(255,255,255,0.60)] transition-colors">Terms</Link>
+          </p>
+          <p className="text-[rgba(255,255,255,0.20)] text-xs font-roboto">
+            © 2026 ApplyDir. Cold outreach, automated.
+          </p>
+        </div>
       </div>
 
       {/* ── RIGHT: Visualization Panel (identical to Login) ── */}
