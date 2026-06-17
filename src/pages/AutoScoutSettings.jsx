@@ -1,12 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   Target, Brain, Sparkles, Crown, X, Loader2, Save,
-  Briefcase, Zap,
+  Briefcase, Zap, FileWarning, ArrowRight, History, CheckCircle2,
 } from 'lucide-react';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '../services/apiSettings';
+import { getProfile } from '../services/apiProfile';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function timeAgo(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m} min${m > 1 ? 's' : ''} ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h} hour${h > 1 ? 's' : ''} ago`;
+  const dd = Math.floor(h / 24);
+  if (dd < 7) return `${dd} day${dd > 1 ? 's' : ''} ago`;
+  return d.toLocaleDateString();
+}
 
 // ── Tag Input ──────────────────────────────────────────────────────────────────
 
@@ -60,14 +78,15 @@ function TagInput({ value = [], onChange, placeholder, pillClass }) {
 
 // ── Master Toggle ──────────────────────────────────────────────────────────────
 
-function MasterToggle({ checked, onChange }) {
+function MasterToggle({ checked, onChange, disabled }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-8 w-16 shrink-0 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-light ${
+      className={`relative inline-flex h-8 w-16 shrink-0 items-center rounded-full transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-light disabled:opacity-60 disabled:cursor-not-allowed ${
         checked
           ? 'bg-gradient-to-r from-primary-light to-primary-dark shadow-lg shadow-primary-light/30'
           : 'bg-secondary-dark/25'
@@ -96,15 +115,40 @@ function Kbd({ children }) {
 
 export default function AutoScoutSettings() {
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   const { data, isLoading } = useQuery({
     queryKey: ['auto-scout-settings'],
     queryFn: getAutoScoutSettings,
   });
 
-  const { register, handleSubmit, control, reset, watch } = useForm({
+  // The scout silently skips users without a CV — we surface that here.
+  const { data: profile } = useQuery({
+    queryKey: ['profile'],
+    queryFn: getProfile,
+  });
+  const hasCV = !!profile?.cv_raw_text;
+
+  // ── Master switch: saves INSTANTLY (a master on/off shouldn't need a Save) ──
+  const [active, setActive] = useState(false);
+  useEffect(() => { if (data) setActive(!!data.is_active); }, [data]);
+
+  const toggleMutation = useMutation({
+    mutationFn: (val) => updateAutoScoutSettings({ is_active: val }),
+    onMutate: (val) => setActive(val),               // optimistic
+    onError: (err, val) => {
+      setActive(!val);                                // revert
+      toast.error(err.message || 'Could not update Auto-Scout');
+    },
+    onSuccess: (_d, val) => {
+      toast.success(val ? 'Auto-Scout activated' : 'Auto-Scout paused');
+      queryClient.invalidateQueries({ queryKey: ['auto-scout-settings'] });
+    },
+  });
+
+  // ── Detailed preferences: saved via the Save button ──
+  const { register, handleSubmit, control, reset, watch, formState: { isDirty } } = useForm({
     defaultValues: {
-      is_active: false,
       target_job_titles: [],
       target_locations: [],
       daily_scrape_limit: 20,
@@ -115,7 +159,6 @@ export default function AutoScoutSettings() {
   useEffect(() => {
     if (data) {
       reset({
-        is_active: data.is_active ?? false,
         target_job_titles: data.target_job_titles ?? [],
         target_locations: data.target_locations ?? [],
         daily_scrape_limit: data.daily_scrape_limit ?? 20,
@@ -133,11 +176,17 @@ export default function AutoScoutSettings() {
     onError: (err) => toast.error(err.message || 'Failed to save preferences'),
   });
 
-  const onSubmit = (values) =>
-    mutation.mutate({ ...values, daily_scrape_limit: Number(values.daily_scrape_limit) });
+  const onSubmit = (values) => {
+    const payload = { ...values, daily_scrape_limit: Number(values.daily_scrape_limit) };
+    // reset() with the saved values so the Save button returns to its "clean" state.
+    mutation.mutate(payload, { onSuccess: () => reset(values) });
+  };
 
-  const isActive = watch('is_active');
   const dailyLimit = watch('daily_scrape_limit');
+
+  const lastRun = timeAgo(data?.last_run_at);
+  const lastSummary = data?.last_run_summary;
+  const wasSkipped = typeof lastSummary === 'string' && lastSummary.toLowerCase().startsWith('skipped');
 
   if (isLoading) {
     return (
@@ -150,7 +199,7 @@ export default function AutoScoutSettings() {
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="max-w-4xl mx-auto space-y-6 pt-8 pb-10 animate-fade-in font-roboto"
+      className="max-w-4xl mx-auto space-y-6 px-4 md:px-0 pt-8 pb-10 animate-fade-in font-roboto"
     >
       {/* ── Page Header ──────────────────────────────────────────────────────── */}
       <div className="flex items-start gap-4">
@@ -172,70 +221,96 @@ export default function AutoScoutSettings() {
         </div>
       </div>
 
-      {/* ── Master Toggle Card ────────────────────────────────────────────────── */}
-      <Controller
-        name="is_active"
-        control={control}
-        render={({ field }) => (
-          <div
-            className={`rounded-2xl border shadow-sm overflow-hidden transition-all duration-500 ${
-              field.value
-                ? 'bg-gradient-to-br from-primary-light/5 via-white to-primary-dark/5 border-primary-light/30 shadow-primary-light/10'
-                : 'bg-white border-neutral-dark'
-            }`}
-          >
-            <div className="px-6 py-6 flex items-center justify-between gap-4">
-              <div className="flex items-start gap-4 min-w-0">
-                <div
-                  className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 shrink-0 ${
-                    field.value
-                      ? 'bg-gradient-to-br from-primary-light to-primary-dark shadow-lg shadow-primary-light/30'
-                      : 'bg-neutral border border-neutral-dark'
+      {/* ── CV-required warning — the scout can't run without one ─────────────── */}
+      {!hasCV && (
+        <div className="flex items-start gap-3 px-5 py-4 rounded-2xl bg-amber-50 border border-amber-200">
+          <FileWarning className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-amber-900">Upload your CV to activate Auto-Scout</p>
+            <p className="text-xs text-amber-800 mt-0.5">
+              Without a CV the scout can't AI-score jobs, so daily runs are skipped — even while it's switched on.
+            </p>
+            <button
+              type="button"
+              onClick={() => navigate('/dashboard/profile')}
+              className="inline-flex items-center gap-1.5 mt-2.5 text-xs font-bold text-amber-900 hover:text-amber-700 transition-colors"
+            >
+              Go to Profile & upload CV <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Master Toggle Card (saves instantly) ─────────────────────────────── */}
+      <div
+        className={`rounded-2xl border shadow-sm overflow-hidden transition-all duration-500 ${
+          active
+            ? 'bg-gradient-to-br from-primary-light/5 via-white to-primary-dark/5 border-primary-light/30 shadow-primary-light/10'
+            : 'bg-white border-neutral-dark'
+        }`}
+      >
+        <div className="px-6 py-6 flex items-center justify-between gap-4">
+          <div className="flex items-start gap-4 min-w-0">
+            <div
+              className={`w-12 h-12 rounded-xl flex items-center justify-center transition-all duration-300 shrink-0 ${
+                active
+                  ? 'bg-gradient-to-br from-primary-light to-primary-dark shadow-lg shadow-primary-light/30'
+                  : 'bg-neutral border border-neutral-dark'
+              }`}
+            >
+              <Zap className={`w-5 h-5 transition-colors ${active ? 'text-white' : 'text-secondary-dark/50'}`} />
+            </div>
+            <div className="min-w-0">
+              <p className="text-base font-bold text-black font-montserrat">
+                Enable Daily Auto-Scout
+              </p>
+              <p className="text-sm text-secondary-dark mt-0.5">
+                Automatically scrapes matching jobs daily based on your preferences below.
+              </p>
+              <div className="mt-2.5">
+                <span
+                  className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border transition-all duration-300 ${
+                    active
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : 'bg-neutral text-secondary-dark border-neutral-dark'
                   }`}
                 >
-                  <Zap
-                    className={`w-5 h-5 transition-colors ${
-                      field.value ? 'text-white' : 'text-secondary-dark/50'
-                    }`}
-                  />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-base font-bold text-black font-montserrat">
-                      Enable Daily Auto-Scout
-                    </p>
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-bold uppercase tracking-wider">
-                      <Crown className="w-2.5 h-2.5" /> Premium
-                    </span>
-                  </div>
-                  <p className="text-sm text-secondary-dark mt-0.5">
-                    Automatically scrapes matching jobs daily based on your preferences below.
-                  </p>
-                  <div className="mt-2.5">
-                    <span
-                      className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full border transition-all duration-300 ${
-                        field.value
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : 'bg-neutral text-secondary-dark border-neutral-dark'
-                      }`}
-                    >
-                      <span
-                        className={`w-1.5 h-1.5 rounded-full ${
-                          field.value
-                            ? 'bg-emerald-500 animate-pulse'
-                            : 'bg-secondary-dark/40'
-                        }`}
-                      />
-                      {field.value ? 'Scout is Active' : 'Scout is Paused'}
-                    </span>
-                  </div>
-                </div>
+                  {toggleMutation.isPending ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-500 animate-pulse' : 'bg-secondary-dark/40'}`} />
+                  )}
+                  {active ? 'Scout is Active' : 'Scout is Paused'}
+                </span>
               </div>
-              <MasterToggle checked={field.value} onChange={field.onChange} />
+            </div>
+          </div>
+          <MasterToggle
+            checked={active}
+            disabled={toggleMutation.isPending}
+            onChange={(val) => toggleMutation.mutate(val)}
+          />
+        </div>
+
+        {/* Last-run status — proof the scout actually ran, and what it found */}
+        {(lastRun || lastSummary) && (
+          <div className={`px-6 py-3.5 border-t flex items-start gap-2.5 text-xs ${
+            wasSkipped ? 'border-amber-200 bg-amber-50/60' : 'border-neutral-dark bg-neutral/40'
+          }`}>
+            {wasSkipped
+              ? <FileWarning className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              : <History className="w-4 h-4 text-secondary-dark shrink-0 mt-0.5" />}
+            <div className="min-w-0">
+              <p className={`font-semibold ${wasSkipped ? 'text-amber-900' : 'text-black-light'}`}>
+                Last run {lastRun ? `· ${lastRun}` : ''}
+              </p>
+              {lastSummary && (
+                <p className={wasSkipped ? 'text-amber-800' : 'text-secondary-dark'}>{lastSummary}</p>
+              )}
             </div>
           </div>
         )}
-      />
+      </div>
 
       {/* ── Preferences Section ───────────────────────────────────────────────── */}
       <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm overflow-hidden">
@@ -270,7 +345,7 @@ export default function AutoScoutSettings() {
               )}
             />
             <p className="text-xs text-secondary-dark/70 mt-1.5">
-              Press <Kbd>Enter</Kbd> or <Kbd>,</Kbd> to add each title.
+              Press <Kbd>Enter</Kbd> or <Kbd>,</Kbd> to add each title. Leave empty and we'll scout common software roles.
             </p>
           </div>
 
@@ -292,7 +367,7 @@ export default function AutoScoutSettings() {
               )}
             />
             <p className="text-xs text-secondary-dark/70 mt-1.5">
-              Press <Kbd>Enter</Kbd> or <Kbd>,</Kbd> to add each location.
+              Press <Kbd>Enter</Kbd> or <Kbd>,</Kbd> to add each location. Empty defaults to Remote.
             </p>
           </div>
 
@@ -361,14 +436,19 @@ export default function AutoScoutSettings() {
       </div>
 
       {/* ── Save Button ───────────────────────────────────────────────────────── */}
-      <div className="flex justify-end pt-1">
+      <div className="flex items-center justify-end gap-3 pt-1">
+        {isDirty && !mutation.isPending && (
+          <span className="text-xs text-secondary-dark">Unsaved changes</span>
+        )}
         <button
           type="submit"
-          disabled={mutation.isPending}
-          className="flex items-center gap-2.5 px-7 py-3 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-bold rounded-xl shadow-lg shadow-primary-light/25 hover:opacity-90 hover:shadow-primary-light/40 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          disabled={mutation.isPending || !isDirty}
+          className="flex items-center gap-2.5 px-7 py-3 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-bold rounded-xl shadow-lg shadow-primary-light/25 hover:opacity-90 hover:shadow-primary-light/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
         >
           {mutation.isPending ? (
             <Loader2 className="w-4 h-4 animate-spin" />
+          ) : mutation.isSuccess && !isDirty ? (
+            <CheckCircle2 className="w-4 h-4" />
           ) : (
             <Save className="w-4 h-4" />
           )}
