@@ -9,6 +9,7 @@ import {
 import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
 import { getProfile, updateProfile } from '@/services/apiProfile';
 import { useAuth } from '@/context/AuthContext';
+import { LegalSections } from '@/components/legal/PolicyContent';
 
 // ─── Tabs ───────────────────────────────────────────────────────────────────
 const TABS = [
@@ -385,74 +386,11 @@ function NotificationsTab() {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// LEGAL — real, ApplyDir-specific policies
+// LEGAL — real, ApplyDir-specific policies (shared with the public /privacy,
+// /terms pages via components/legal/PolicyContent.jsx so they never drift).
 // ═════════════════════════════════════════════════════════════════════════════
 function LegalTab() {
-  return (
-    <div className="space-y-5">
-      <Card title="Privacy Policy" description={`Last updated ${new Date().getFullYear()}. Plain-language summary of how ApplyDir handles your data.`}>
-        <Policy heading="What we collect">
-          <li><b>Account</b> — your email, username, and (for password sign-ups) a securely hashed password.</li>
-          <li><b>Profile</b> — your CV text, contact details, links, Calendly, and AI-extracted skills/projects.</li>
-          <li><b>Connected inboxes</b> — the Gmail address and an app password, stored <b>encrypted</b> (Fernet), used only to send your outreach.</li>
-          <li><b>Generated content & activity</b> — the jobs, contacts, emails, and CVs the system creates for you, plus open/reply events.</li>
-        </Policy>
-        <Policy heading="How we use it">
-          <li>To find roles, score them against your CV, find contacts, and write & send <b>your</b> cold emails and tailored CVs.</li>
-          <li>To send you product emails (welcome, daily scout digest, re-engagement). We never use your connected inbox for our own marketing.</li>
-        </Policy>
-        <Policy heading="Who we share it with (processors only — we never sell your data)">
-          <li><b>OpenAI</b> — CV scoring, email & CV generation.</li>
-          <li><b>Apify, Hunter, Apollo, Serper</b> — job scraping & contact discovery.</li>
-          <li><b>Google / Gmail</b> — sending your emails via SMTP from your own inbox.</li>
-          <li><b>Resend</b> — our transactional emails to you.</li>
-          <li><b>Supabase, Render, Vercel</b> — database & hosting.</li>
-        </Policy>
-        <Policy heading="Your Gmail data">
-          <li>We store your app password encrypted and use it <b>solely to send</b> email on your behalf. We do not read your inbox. You can disconnect an inbox at any time from <b>Inboxes</b>.</li>
-        </Policy>
-        <Policy heading="Your rights">
-          <li>View & edit everything in <b>Profile</b>. Export your CV as PDF. <b>Delete your account</b> any time (Settings → Danger Zone) — this permanently erases your data. We retain your data only until you delete your account.</li>
-        </Policy>
-      </Card>
-
-      <Card title="Terms of Service" description="The deal between you and ApplyDir.">
-        <Policy heading="Your responsibilities">
-          <li>You own (or are authorized to use) every inbox you connect.</li>
-          <li>You are responsible for the emails you send and for complying with anti-spam and privacy law in your and your recipients' jurisdictions (e.g. CAN-SPAM, GDPR, CASL) and with Google's terms.</li>
-          <li>No purchased lists, spam, harassment, deception, or illegal content. Outreach must be genuine and relevant.</li>
-        </Policy>
-        <Policy heading="Positioning & representations">
-          <li>Tools that help you present as a fractional/contract engineer are aids only. You are responsible for the accuracy of your CV, your claims, and any agreement you enter with a company.</li>
-        </Policy>
-        <Policy heading="No guarantees">
-          <li>ApplyDir is a tool, not an employment agency. We don't guarantee interviews, offers, or any outcome. Deliverability depends on your sending behaviour and inbox reputation.</li>
-        </Policy>
-        <Policy heading="Acceptable use & suspension">
-          <li>We may pause or remove accounts that abuse the system, spam, or threaten the deliverability of the shared sending pool.</li>
-        </Policy>
-        <Policy heading="Service & liability">
-          <li>The service is provided "as is" and relies on third-party APIs that may change or fail. To the extent permitted by law, our liability is limited to the fees you paid in the prior month.</li>
-        </Policy>
-      </Card>
-
-      <div className="flex items-start gap-3 px-4 py-3 rounded-2xl bg-neutral border border-neutral-dark">
-        <Shield className="w-4 h-4 text-secondary-dark/60 mt-0.5 shrink-0" />
-        <p className="text-xs text-secondary-dark">
-          This is a plain-language summary written for clarity, not legal advice. Have it reviewed by counsel before public launch. Questions: <a href="mailto:support@applydir.com" className="font-semibold text-primary-dark hover:underline">support@applydir.com</a>.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function Policy({ heading, children }) {
-  return (
-    <div>
-      <p className="text-sm font-bold text-black-light mb-1.5">{heading}</p>
-      <ul className="list-disc pl-5 space-y-1 text-sm text-secondary-dark leading-relaxed">{children}</ul>
-    </div>
-  );
+  return <LegalSections />;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

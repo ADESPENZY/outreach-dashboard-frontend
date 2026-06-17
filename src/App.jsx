@@ -13,6 +13,7 @@ import JobsPage from './pages/JobsPage';
 import OutreachPage from './pages/OutreachPage';
 import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
+import LegalPage from './pages/LegalPage';
 import AutoScoutSettings from './pages/AutoScoutSettings';
 import { AuthProvider } from './context/AuthContext';
 import AppBootLoader from './components/AppBootLoader';
@@ -26,6 +27,8 @@ function App() {
           {/* Public */}
           <Route index element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/privacy" element={<LegalPage doc="privacy" />} />
+          <Route path="/terms" element={<LegalPage doc="terms" />} />
 
           {/* Onboarding wizard removed — setup is progressive (Profile page,
               CV drawer, Auto-Scout, Inboxes). Old links redirect to Profile. */}

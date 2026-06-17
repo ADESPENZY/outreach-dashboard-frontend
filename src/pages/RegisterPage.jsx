@@ -467,6 +467,7 @@ const RegisterPage = () => {
   const [showUsernamePicker, setShowUsernamePicker] = useState(false);
 
   const password = watch('password');
+  const agreed   = watch('agreed');
 
   const googleBtnRef = useRef(null);
   const [googleWidth, setGoogleWidth] = useState(400);
@@ -475,6 +476,10 @@ const RegisterPage = () => {
   }, []);
 
   const handleGoogleSuccess = async (credentialResponse) => {
+    if (!agreed) {
+      toast.error('Please accept the Terms & Privacy Policy to continue.');
+      return;
+    }
     try {
       const { isNew } = await loginWithGoogle(credentialResponse.credential);
       if (isNew) {
@@ -575,7 +580,7 @@ const RegisterPage = () => {
               <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
             </div>
 
-            <form onSubmit={handleSubmit((d) => mutation.mutate(d))} className="flex flex-col gap-4">
+            <form onSubmit={handleSubmit(({ agreed, confirmPassword, ...d }) => mutation.mutate(d))} className="flex flex-col gap-4">
 
               <FloatingInput
                 id="full_name"
@@ -639,6 +644,31 @@ const RegisterPage = () => {
                     </button>
                   }
                 />
+              </div>
+
+              {/* Consent — required; binds the account to Terms + Privacy */}
+              <div>
+                <label htmlFor="agree" className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    id="agree"
+                    type="checkbox"
+                    {...register('agreed', { required: 'You must accept the Terms & Privacy Policy' })}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/20 bg-black accent-[#FF5B2E] cursor-pointer"
+                  />
+                  <span className="text-[rgba(255,255,255,0.55)] text-xs font-roboto leading-relaxed">
+                    I agree to ApplyDir's{' '}
+                    <Link to="/terms" target="_blank" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold transition-colors">
+                      Terms of Service
+                    </Link>{' '}
+                    and{' '}
+                    <Link to="/privacy" target="_blank" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold transition-colors">
+                      Privacy Policy
+                    </Link>.
+                  </span>
+                </label>
+                {errors?.agreed?.message && (
+                  <p className="text-red-400 text-xs mt-1 font-roboto">{errors.agreed.message}</p>
+                )}
               </div>
 
               <motion.button
