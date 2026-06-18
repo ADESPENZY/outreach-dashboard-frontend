@@ -17,6 +17,7 @@ import LegalPage from './pages/LegalPage';
 import AutoScoutSettings from './pages/AutoScoutSettings';
 import { AuthProvider } from './context/AuthContext';
 import AppBootLoader from './components/AppBootLoader';
+import VersionCheck from './components/VersionCheck';
 
 function App() {
   return (
@@ -67,6 +68,9 @@ function App() {
           pauseOnHover
           theme="light"
         />
+
+        {/* Graceful "new version available" prompt (Vercel free-tier safe) */}
+        <VersionCheck />
       </BrowserRouter>
     </AuthProvider>
   );
