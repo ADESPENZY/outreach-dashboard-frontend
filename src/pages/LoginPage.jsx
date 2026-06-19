@@ -486,7 +486,12 @@ const LoginPage = () => {
     if (googleBtnRef.current) setGoogleWidth(googleBtnRef.current.offsetWidth);
   }, []);
 
+  const googleInFlight = useRef(false);
   const handleGoogleSuccess = async (credentialResponse) => {
+    // Re-entrancy guard: ignore a second tap while the first request is running,
+    // so "Sign in with Google" can't fire twice.
+    if (googleInFlight.current) return;
+    googleInFlight.current = true;
     try {
       const { isNew } = await loginWithGoogle(credentialResponse.credential);
       if (isNew) {
@@ -498,6 +503,8 @@ const LoginPage = () => {
       navigate(from, { replace: true });
     } catch (err) {
       toast.error(err.message || 'Google sign-in failed. Please try again.');
+    } finally {
+      googleInFlight.current = false;
     }
   };
 
