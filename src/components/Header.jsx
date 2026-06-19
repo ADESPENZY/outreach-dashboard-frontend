@@ -1,5 +1,5 @@
-import { Bell, ChevronDown, HelpCircle, LogOut, Menu, MessageSquare, Send, User, UserCog } from 'lucide-react';
-import React, { useState } from 'react'
+import { Bell, ChevronDown, HelpCircle, LogOut, Menu, MessageSquare, Send, Settings as SettingsIcon, User, UserCog } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getMe } from '@/services/apiAuth';
@@ -16,6 +16,8 @@ function greetingFor(date = new Date()) {
 
 const Header = ({ onMenuClick }) => {
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const menuRef = useRef(null);
   const navigate = useNavigate();
 
   const { data: me, isLoading } = useQuery({
@@ -41,7 +43,20 @@ const Header = ({ onMenuClick }) => {
 
   const { logout } = useAuth();
 
+  const closeMenus = () => { setShowProfileDropdown(false); setShowNotifications(false); };
+
+  // Close either dropdown when clicking outside the header controls.
+  useEffect(() => {
+    if (!showProfileDropdown && !showNotifications) return;
+    const onClick = (e) => {
+      if (menuRef.current && !menuRef.current.contains(e.target)) closeMenus();
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [showProfileDropdown, showNotifications]);
+
   const handleLogout = async () => {
+    closeMenus();
     await logout();
     navigate('/', { replace: true });
   };
@@ -77,17 +92,37 @@ const Header = ({ onMenuClick }) => {
         </div>
 
         {/* Right: notifications + account */}
-        <div className="flex items-center gap-3 md:gap-6 shrink-0">
-            <div className="relative group cursor-pointer">
-                <div className="p-2 rounded-full hover:bg-neutral-dark transition-colors duration-200">
+        <div className="flex items-center gap-2 md:gap-4 shrink-0" ref={menuRef}>
+            {/* Notifications */}
+            <div className="relative">
+                <button
+                    onClick={() => { setShowNotifications(v => !v); setShowProfileDropdown(false); }}
+                    aria-label="Notifications"
+                    className="group p-2 rounded-full hover:bg-neutral transition-colors duration-200"
+                >
                     <Bell className="w-5 h-5 text-secondary-dark group-hover:text-primary-light transition-colors" />
-                    <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-primary-light border-2 border-white"></span>
-                </div>
+                </button>
+
+                {showNotifications && (
+                    <div className="absolute right-0 mt-3 w-72 bg-white/95 backdrop-blur-xl border border-neutral-dark shadow-[0_10px_40px_-10px_rgba(0,0,0,0.1)] rounded-xl overflow-hidden z-20 origin-top-right animate-in fade-in zoom-in-95 duration-200">
+                        <div className="px-4 py-3 border-b border-neutral-dark bg-neutral/50">
+                            <p className="text-sm font-semibold text-black">Notifications</p>
+                        </div>
+                        <div className="px-4 py-8 flex flex-col items-center text-center">
+                            <div className="w-10 h-10 rounded-full bg-neutral flex items-center justify-center mb-2">
+                                <Bell className="w-4 h-4 text-secondary-dark/50" />
+                            </div>
+                            <p className="text-sm font-medium text-black-light">You're all caught up</p>
+                            <p className="text-xs text-secondary-dark mt-0.5">No new notifications right now.</p>
+                        </div>
+                    </div>
+                )}
             </div>
 
+            {/* Account */}
             <div className="relative">
             <button
-                onClick={() => setShowProfileDropdown(!showProfileDropdown)}
+                onClick={() => { setShowProfileDropdown(v => !v); setShowNotifications(false); }}
                 className="flex items-center space-x-3 p-1.5 rounded-full border border-transparent hover:border-neutral-dark hover:bg-neutral transition-all duration-300"
             >
                 <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-primary-dark to-primary-light flex items-center justify-center text-white shadow-md">
@@ -106,19 +141,29 @@ const Header = ({ onMenuClick }) => {
                     <p className="text-xs text-secondary-dark truncate">{me?.email || "No email linked"}</p>
                 </div>
                 <NavLink
-                    to="/dashboard/profile-settings"
+                    to="/dashboard/profile"
+                    onClick={closeMenus}
                     className="flex items-center px-4 py-3 text-sm text-secondary-dark hover:text-primary-dark hover:bg-primary-light/5 transition-colors"
                 >
                     <UserCog className="w-4 h-4 mr-3" />
-                    Profile Settings
+                    Profile
                 </NavLink>
                 <NavLink
-                    to="/dashboard/help"
+                    to="/dashboard/settings"
+                    onClick={closeMenus}
+                    className="flex items-center px-4 py-3 text-sm text-secondary-dark hover:text-primary-dark hover:bg-primary-light/5 transition-colors"
+                >
+                    <SettingsIcon className="w-4 h-4 mr-3" />
+                    Settings
+                </NavLink>
+                <a
+                    href="mailto:support@applydir.com"
+                    onClick={closeMenus}
                     className="flex items-center px-4 py-3 text-sm text-secondary-dark hover:text-primary-dark hover:bg-primary-light/5 transition-colors"
                 >
                     <HelpCircle className="w-4 h-4 mr-3" />
                     Help & Support
-                </NavLink>
+                </a>
                 <button
                     onClick={handleLogout}
                     className="w-full flex items-center px-4 py-3 text-sm text-red-500 border-t border-neutral-dark hover:bg-red-50 transition-colors"
