@@ -11,9 +11,9 @@ import SetupChecklist from './SetupChecklist';
 import PipelineStepper from './PipelineStepper';
 
 const BULLETS = [
-  { Icon: Target, text: 'AI scores every role against your CV in real time' },
-  { Icon: Zap,    text: 'Multi-channel: LinkedIn · Remote · ATS · Custom URL' },
-  { Icon: Lock,   text: 'Outreach runs from your own inbox for max deliverability' },
+  { Icon: Target, text: 'Every role is AI-scored against your CV' },
+  { Icon: Zap,    text: 'Scrape one source at a time — LinkedIn, a remote board, an ATS, or any URL' },
+  { Icon: Lock,   text: 'Outreach sends from your own inbox for the best deliverability' },
 ];
 
 const DashboardPage = () => {
@@ -129,8 +129,9 @@ const DashboardPage = () => {
                     Ready to land your<br />next role, {firstName}?
                   </h2>
                   <p className="text-[rgba(255,255,255,0.42)] text-sm font-roboto leading-relaxed">
-                    Your job board is empty. Let Auto-Scout hunt across LinkedIn, Remote
-                    boards, ATS listings, and custom URLs — every role AI-scored against your CV.
+                    Your job board is empty. Pick a source — LinkedIn, a remote board, an ATS,
+                    or a custom URL — and ApplyDir pulls in the latest roles, then scores each
+                    one against your CV.
                   </p>
                 </div>
 

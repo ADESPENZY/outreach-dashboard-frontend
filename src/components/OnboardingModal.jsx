@@ -14,8 +14,8 @@ const VALUE_PROPS = [
   },
   {
     icon: Globe,
-    title: 'Hyper-Scouting',
-    body: 'Track premium hidden openings across LinkedIn and global tech boards simultaneously.',
+    title: 'Source From Anywhere',
+    body: 'Find roles from LinkedIn, remote boards, ATS listings, or any URL — one source per scrape, each scored against your CV.',
   },
   {
     icon: Inbox,
