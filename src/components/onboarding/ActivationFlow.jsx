@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   Upload, FileText, X, ArrowRight, ArrowLeft,
-  Sparkles, Check,
+  Sparkles, Check, Plus,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../ui/ApplyDirLoader';
 import {
@@ -46,11 +46,54 @@ const ARRANGEMENTS = [
   { id: 'open',   label: 'Open to anything', hint: 'Show me the best roles, wherever they are.' },
 ];
 
+// Single-select seniority chips. `years` is the representative number we persist
+// to skills_extracted.years_experience so the backend keeps a numeric value.
+const EXPERIENCE_LEVELS = [
+  { id: 'junior', label: 'Junior',          range: '0–2 yrs', years: 1 },
+  { id: 'mid',    label: 'Mid-Level',       range: '3–5 yrs', years: 4 },
+  { id: 'senior', label: 'Senior',          range: '5–8 yrs', years: 6 },
+  { id: 'lead',   label: 'Lead / Director', range: '',        years: 10 },
+];
+
 const TOTAL_STEPS = 4;
 
 // Skills can come back as strings or objects — coerce to a clean label.
 const skillLabel = (s) =>
   typeof s === 'string' ? s : (s?.name || s?.skill || String(s ?? '')).trim();
+
+// Map an extracted years-of-experience number onto a seniority bucket.
+const yearsToLevel = (n) => {
+  if (n === undefined || n === null || n === '') return '';
+  const y = Number(n);
+  if (Number.isNaN(y)) return '';
+  if (y <= 2) return 'junior';
+  if (y <= 5) return 'mid';
+  if (y <= 8) return 'senior';
+  return 'lead';
+};
+
+// Small reusable "type a value + add as a chip" row (ghost add button).
+function ChipInput({ value, onChange, onAdd, placeholder, addLabel }) {
+  return (
+    <div className="flex gap-2">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); onAdd(); } }}
+        placeholder={placeholder}
+        className="flex-1 min-w-0 px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all"
+      />
+      <button
+        type="button"
+        onClick={onAdd}
+        className="inline-flex items-center gap-1.5 shrink-0 px-3.5 py-2 rounded-xl border border-neutral-dark text-secondary-dark hover:text-primary-dark hover:border-primary-light/40 text-sm font-semibold transition-colors"
+      >
+        <Plus className="w-4 h-4" /> {addLabel}
+      </button>
+    </div>
+  );
+}
 
 export default function ActivationFlow({ profile = null, onComplete }) {
   const queryClient = useQueryClient();
@@ -67,12 +110,15 @@ export default function ActivationFlow({ profile = null, onComplete }) {
 
   // Step 2 — editable extraction
   const [skills, setSkills] = useState([]);
-  const [years, setYears] = useState('');
+  const [experienceLevel, setExperienceLevel] = useState('');
+  const [newSkill, setNewSkill] = useState('');
 
   // Step 3 / 4 — preferences
   const [roleTypes, setRoleTypes] = useState([]);
   const [locations, setLocations] = useState([]);
   const [arrangement, setArrangement] = useState('');
+  const [newRole, setNewRole] = useState('');
+  const [newLocation, setNewLocation] = useState('');
 
   // Step 4 — final save
   const [saving, setSaving] = useState(false);
@@ -120,11 +166,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
       const data = res?.extracted || {};
       setExtracted(data);
       setSkills((data.skills || []).map(skillLabel).filter(Boolean));
-      setYears(
-        data.years_experience !== undefined && data.years_experience !== null
-          ? String(data.years_experience)
-          : ''
-      );
+      setExperienceLevel(yearsToLevel(data.years_experience));
       setStep(2);
     } catch (err) {
       toast.error(err?.message || 'We couldn’t read that CV. Please try again.');
@@ -138,24 +180,37 @@ export default function ActivationFlow({ profile = null, onComplete }) {
   // ── Step 2 helpers ───────────────────────────────────────────────────────
   const removeSkill = (idx) => setSkills((prev) => prev.filter((_, i) => i !== idx));
 
+  // Append a free-typed value to an array (case-insensitive de-dupe), then clear.
+  const addCustom = (setArr, value, clear) => {
+    const v = value.trim();
+    if (!v) return;
+    setArr((prev) => (prev.some((x) => x.toLowerCase() === v.toLowerCase()) ? prev : [...prev, v]));
+    clear('');
+  };
+  const addSkill    = () => addCustom(setSkills,    newSkill,    setNewSkill);
+  const addRole     = () => addCustom(setRoleTypes, newRole,     setNewRole);
+  const addLocation = () => addCustom(setLocations, newLocation, setNewLocation);
+
   // ── Step 3 / 4 toggles ───────────────────────────────────────────────────
   const toggle = (setter, value) =>
     setter((prev) => (prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]));
+  const removeValue = (setter, value) => setter((prev) => prev.filter((v) => v !== value));
 
   // ── Step 4 — finish ──────────────────────────────────────────────────────
   const completeCalibration = async () => {
     setSaving(true);
     try {
-      const parsedYears = years.trim() === '' ? undefined : (Number(years) || years.trim());
+      const level = EXPERIENCE_LEVELS.find((l) => l.id === experienceLevel);
       await updateProfile({
         skills_extracted: {
           ...(extracted || {}),
           skills,
-          ...(parsedYears !== undefined ? { years_experience: parsedYears } : {}),
+          ...(level ? { years_experience: level.years } : {}),
         },
         job_preferences: {
           role_types: roleTypes,
           desired_role: roleTypes[0] || '',
+          seniority: experienceLevel || '',
           locations,
           work_arrangement: arrangement,
           remote_only: arrangement === 'remote',
@@ -189,7 +244,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
     'inline-flex items-center justify-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-5 py-2.5 transition-all';
 
   return (
-    <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto animate-fade-in font-roboto">
+    <div className="flex-1 w-full bg-neutral p-4 md:p-8 animate-fade-in font-roboto">
       <div className="max-w-xl mx-auto">
 
         {/* Brand mark + step track */}
@@ -215,7 +270,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
         </div>
 
         {/* Card */}
-        <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 md:p-7">
+        <div className="bg-white rounded-2xl border border-neutral-dark shadow-md p-5 md:p-7">
 
           {/* ── Screen 1: CV upload ─────────────────────────────────────── */}
           {step === 1 && (
@@ -316,22 +371,43 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-secondary-dark">No skills detected — that&rsquo;s OK, you can refine later.</p>
+                  <p className="text-sm text-secondary-dark">No skills detected — add your own below.</p>
                 )}
+                <div className="mt-2.5">
+                  <ChipInput
+                    value={newSkill}
+                    onChange={setNewSkill}
+                    onAdd={addSkill}
+                    placeholder="Add a skill…"
+                    addLabel="Add Skill"
+                  />
+                </div>
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-2">
-                  Years of experience
-                </label>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={years}
-                  onChange={(e) => setYears(e.target.value)}
-                  placeholder="e.g. 4"
-                  className="w-full max-w-[160px] px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all"
-                />
+                <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-2">
+                  Experience level
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {EXPERIENCE_LEVELS.map((l) => {
+                    const active = experienceLevel === l.id;
+                    return (
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => setExperienceLevel((prev) => (prev === l.id ? '' : l.id))}
+                        className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-all ${
+                          active
+                            ? 'bg-primary-light text-white border-primary-light'
+                            : 'bg-white text-black-light border-neutral-dark hover:border-primary-light/40'
+                        }`}
+                      >
+                        {active && <Check className="w-3.5 h-3.5" />}
+                        {l.label}{l.range ? ` (${l.range})` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="flex items-center justify-between pt-1">
@@ -376,7 +452,33 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                     </button>
                   );
                 })}
+
+                {/* Custom roles the user typed in */}
+                {roleTypes.filter((r) => !ROLE_OPTIONS.includes(r)).map((r) => (
+                  <span
+                    key={r}
+                    className="inline-flex items-center gap-1.5 rounded-full pl-3.5 pr-2 py-2 text-sm font-medium bg-primary-light text-white border border-primary-light"
+                  >
+                    {r}
+                    <button
+                      type="button"
+                      onClick={() => removeValue(setRoleTypes, r)}
+                      className="p-0.5 text-white/80 hover:text-white rounded-full transition-colors"
+                      aria-label={`Remove ${r}`}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </span>
+                ))}
               </div>
+
+              <ChipInput
+                value={newRole}
+                onChange={setNewRole}
+                onAdd={addRole}
+                placeholder="Looking for a specific niche?"
+                addLabel="Add Role"
+              />
 
               <div className="flex items-center justify-between pt-1">
                 <button onClick={() => setStep(2)} className={secondaryBtn}>
@@ -424,6 +526,34 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                       </button>
                     );
                   })}
+
+                  {/* Custom countries the user typed in */}
+                  {locations.filter((l) => !LOCATION_OPTIONS.includes(l)).map((l) => (
+                    <span
+                      key={l}
+                      className="inline-flex items-center gap-1.5 rounded-full pl-3.5 pr-2 py-2 text-sm font-medium bg-primary-light text-white border border-primary-light"
+                    >
+                      {l}
+                      <button
+                        type="button"
+                        onClick={() => removeValue(setLocations, l)}
+                        className="p-0.5 text-white/80 hover:text-white rounded-full transition-colors"
+                        aria-label={`Remove ${l}`}
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="mt-2.5">
+                  <ChipInput
+                    value={newLocation}
+                    onChange={setNewLocation}
+                    onAdd={addLocation}
+                    placeholder="Add a specific country"
+                    addLabel="Add Country"
+                  />
                 </div>
               </div>
 
