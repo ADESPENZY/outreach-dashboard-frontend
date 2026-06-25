@@ -19,7 +19,7 @@ export default {
   		},
   		colors: {
   			primary: {
-  				DEFAULT: 'hsl(var(--primary))',
+  				DEFAULT: '#FF5B2E',
   				dark: '#B82E07',
   				light: '#FF5B2E',
   				foreground: 'hsl(var(--primary-foreground))'
@@ -89,9 +89,33 @@ export default {
   				'0%':   { transform: 'translateX(-100%)' },
   				'100%': { transform: 'translateX(250%)' },
   			},
+  			'fade-in': {
+  				'0%':   { opacity: '0', transform: 'translateY(8px)' },
+  				'100%': { opacity: '1', transform: 'translateY(0)' },
+  			},
+  			// ── ApplyDir brand loading system (ui/ApplyDirLoader.jsx) ──
+  			// Signature orange highlight sweeping left→right across a track.
+  			'shimmer': {
+  				'0%':   { transform: 'translateX(-100%)' },
+  				'100%': { transform: 'translateX(160%)' },
+  			},
+  			// Snappy button spinner (slightly faster than animate-spin).
+  			'spinner': {
+  				'0%':   { transform: 'rotate(0deg)' },
+  				'100%': { transform: 'rotate(360deg)' },
+  			},
+  			// Screen loader exit.
+  			'fade-out': {
+  				'0%':   { opacity: '1' },
+  				'100%': { opacity: '0' },
+  			},
   		},
   		animation: {
   			'slide-progress': 'slide-progress 1.4s ease-in-out infinite',
+  			'fade-in': 'fade-in 0.3s ease-out',
+  			'shimmer': 'shimmer 1.5s ease-in-out infinite',
+  			'spinner': 'spinner 0.8s linear infinite',
+  			'fade-out': 'fade-out 0.3s ease-out forwards',
   		},
   	}
   },

@@ -3,9 +3,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate } from 'react-router-dom';
 import {
-  User, Shield, AlertTriangle, LogOut, Save, Loader2, Lock,
+  User, Shield, AlertTriangle, LogOut, Save, Lock,
   ChevronRight, ArrowRight, Trash2, KeyRound, FileText, AtSign, Bell, Clock,
 } from 'lucide-react';
+import { ApplyDirLoader } from '@/components/ui/ApplyDirLoader';
 import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
 import { getProfile, updateProfile } from '@/services/apiProfile';
 import { useAuth } from '@/context/AuthContext';
@@ -155,7 +156,7 @@ function AccountTab({ navigate }) {
     finally { setSendingReset(false); }
   };
 
-  if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-7 h-7 animate-spin text-primary-light" /></div>;
+  if (isLoading) return <ApplyDirLoader.Inline />;
 
   const initials = (me?.first_name || me?.username || 'U').slice(0, 2).toUpperCase();
 
@@ -195,7 +196,7 @@ function AccountTab({ navigate }) {
             disabled={savingUname || !usernameChanged || !usernameValid}
             className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
           >
-            {savingUname ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+            {savingUname ? <ApplyDirLoader.Button variant="light" /> : <Save className="w-4 h-4" />} Save
           </button>
         </div>
       </Card>
@@ -240,7 +241,7 @@ function AccountTab({ navigate }) {
             disabled={saving || !current || !next || !confirm}
             className="flex items-center gap-2 px-5 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl shadow-sm hover:opacity-90 transition-all disabled:opacity-50"
           >
-            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />} Update Password
+            {saving ? <ApplyDirLoader.Button variant="light" /> : <KeyRound className="w-4 h-4" />} Update Password
           </button>
         </div>
       </Card>
@@ -328,7 +329,7 @@ function NotificationsTab() {
     finally { setSavingTz(false); }
   };
 
-  if (isLoading) return <div className="flex items-center justify-center py-20"><Loader2 className="w-7 h-7 animate-spin text-primary-light" /></div>;
+  if (isLoading) return <ApplyDirLoader.Inline />;
 
   if (!profile) {
     return (
@@ -373,7 +374,7 @@ function NotificationsTab() {
           >
             {tzOptions().map((z) => <option key={z} value={z}>{z.replace(/_/g, ' ')}</option>)}
           </select>
-          {savingTz && <Loader2 className="w-4 h-4 animate-spin text-primary-light" />}
+          {savingTz && <ApplyDirLoader.Button variant="dark" />}
         </div>
         {browserTz && tz !== browserTz && (
           <button onClick={() => saveTz(browserTz)} className="text-xs font-semibold text-primary-dark hover:underline mt-1">
@@ -456,7 +457,7 @@ function DangerTab({ navigate }) {
             disabled={deleting || confirmText.trim().toUpperCase() !== 'DELETE'}
             className="flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-red-200 transition-all disabled:opacity-50"
           >
-            {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />} Permanently delete my account
+            {deleting ? <ApplyDirLoader.Button variant="light" /> : <Trash2 className="w-4 h-4" />} Permanently delete my account
           </button>
         </div>
       </Card>

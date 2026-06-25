@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { MoreHorizontal, RefreshCw, Loader2 } from 'lucide-react';
+import { MoreHorizontal, RefreshCw } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getInboxStats } from '../services/apiInboxes';
 
 function timeAgo(date) {
@@ -48,14 +49,14 @@ const InboxOverview = () => {
             disabled={loading}
             className="p-1.5 rounded-full hover:bg-neutral-dark disabled:opacity-50 transition-colors"
           >
-            <RefreshCw className={`w-4 h-4 text-secondary-dark ${loading ? 'animate-spin' : ''}`} />
+            {loading ? <ApplyDirLoader.Button variant="dark" /> : <RefreshCw className="w-4 h-4 text-secondary-dark" />}
           </button>
         </div>
       </div>
 
       {loading && accounts.length === 0 ? (
         <div className="flex items-center justify-center h-32">
-          <Loader2 className="w-6 h-6 animate-spin text-primary-light" />
+          <ApplyDirLoader.Inline />
         </div>
       ) : accounts.length === 0 ? (
         <div className="bg-white rounded-xl border border-neutral-dark p-8 text-center text-sm text-secondary-dark">

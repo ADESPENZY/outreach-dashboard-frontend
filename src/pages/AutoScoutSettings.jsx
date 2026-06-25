@@ -4,9 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Target, Brain, Sparkles, Crown, X, Loader2, Save,
+  Target, Brain, Sparkles, Crown, X, Save,
   Briefcase, Zap, FileWarning, ArrowRight, History, CheckCircle2,
 } from 'lucide-react';
+import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '../services/apiSettings';
 import { getProfile } from '../services/apiProfile';
 
@@ -191,7 +192,7 @@ export default function AutoScoutSettings() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 text-primary-light animate-spin" />
+        <ApplyDirLoader.Inline />
       </div>
     );
   }
@@ -276,7 +277,7 @@ export default function AutoScoutSettings() {
                   }`}
                 >
                   {toggleMutation.isPending ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <ApplyDirLoader.Button variant="dark" />
                   ) : (
                     <span className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-500 animate-pulse' : 'bg-secondary-dark/40'}`} />
                   )}
@@ -446,7 +447,7 @@ export default function AutoScoutSettings() {
           className="flex items-center gap-2.5 px-7 py-3 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-bold rounded-xl shadow-lg shadow-primary-light/25 hover:opacity-90 hover:shadow-primary-light/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
         >
           {mutation.isPending ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
+            <ApplyDirLoader.Button variant="light" />
           ) : mutation.isSuccess && !isDirty ? (
             <CheckCircle2 className="w-4 h-4" />
           ) : (

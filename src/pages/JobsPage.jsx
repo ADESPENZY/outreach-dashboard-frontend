@@ -3,101 +3,87 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router';
 import {
-  CheckCircle, XCircle, Search, Plus, MapPin, Building, Briefcase,
-  ExternalLink, Calendar, Loader2, Download, FileText, X, Kanban, UserSearch, Link2,
-  Lock, Sparkles, ChevronDown,
+  Plus, X, MapPin, Sparkles, ChevronDown, Link2, CheckCircle,
+  Lock, UserSearch, ArrowRight,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import {
-  getJobsPage, updateJobStatus, trackJob,
+  getJobsPage, updateJobStatus,
   scrapeLinkedinJobs, scrapeRemoteJobs, scrapeApifyJobs, autoScrapeAts,
-  scrapeYcJobs, scrapeWellfoundJobs, getScrapeStatus, saveJobDescription,
+  scrapeYcJobs, scrapeWellfoundJobs, getScrapeStatus,
 } from '../services/apiJobs';
 import { getAutoScoutSettings } from '../services/apiSettings';
 import { getProfile } from '../services/apiProfile';
-import { generateJobCV, getJobCVJson, findContactManual } from '../services/apiOutreach';
-import TailoredCVPreview from '../components/TailoredCVPreview';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
+
+// ── Opportunities — the Discover Feed ─────────────────────────────────────
+// A curated stack of opportunity cards for the roles the headhunter found.
+// Every card answers "is this a fit, and what do I do?" in human language —
+// no scores, sources, or pipeline jargon. Two actions per card: Skip (reject)
+// and Reach Out (approve), both wired to the existing status-update endpoint.
+
+// Translate the numeric fit_score into a calm, number-free match label.
+const matchStrength = (score) => {
+  if (score == null) return { dot: '⚪', label: 'New match',    tone: 'text-secondary-dark' };
+  if (score >= 80)   return { dot: '🟢', label: 'Strong match', tone: 'text-emerald-600' };
+  if (score >= 60)   return { dot: '🔵', label: 'Good match',   tone: 'text-blue-600' };
+  return { dot: '⚪', label: 'Fair match', tone: 'text-secondary-dark' };
+};
 
 const JobsPage = () => {
     const navigate = useNavigate();
     const queryClient = useQueryClient();
 
-    // ── All state — hoisted above every hook so no const is read before initialisation (TDZ-safe) ──
+    // ── State ───────────────────────────────────────────────────────────────
     const [isScrapeActive, setIsScrapeActive]       = useState(() => localStorage.getItem('applydir_is_scraping') === 'true');
-    const [filterTab, setFilterTab]                 = useState('All');
-    const [currentPage, setCurrentPage]             = useState(1);
-    const itemsPerPage                              = 10;
-    const [searchQuery, setSearchQuery]             = useState('');
     const [isScrapeModalOpen, setIsScrapeModalOpen] = useState(false);
+    const [isScrapeSourceOpen, setIsScrapeSourceOpen] = useState(false);
+    const [scrapePhase, setScrapePhase]             = useState('scraping'); // 'scraping' | 'scoring'
     const [scrapeForm, setScrapeForm] = useState({
         source: 'linkedin', keywords: '', locations: ['remote'],
         time_range: '24h', count: 10, search_url: '', atsTitle: '', atsLocation: '',
         startupLocation: '',
     });
-    const [cvModal, setCvModal]                   = useState(null);
-    const [loadingCvPreview, setLoadingCvPreview] = useState(null);
-    const [selectedJob, setSelectedJob]           = useState(null);
-    const [showModalTour, setShowModalTour]       = useState(false);
-    const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
-    const [showCvNudge, setShowCvNudge] = useState(false);
-    const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
-    const [newJobsCount, setNewJobsCount] = useState(0);
+    const [newJobsCount, setNewJobsCount]           = useState(0);
     const [showNewJobsBanner, setShowNewJobsBanner] = useState(false);
-    const [isScrapeSourceOpen, setIsScrapeSourceOpen] = useState(false);
-    const [scrapePhase, setScrapePhase] = useState('scraping'); // 'scraping' | 'scoring'
-    const [pasteDescOpen, setPasteDescOpen]   = useState(false);
-    const [pasteDescValue, setPasteDescValue] = useState('');
+    const [showAutoScoutBanner, setShowAutoScoutBanner] = useState(false);
+    const [showCvNudge, setShowCvNudge]             = useState(false);
+    const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
 
-    // ── Router ────────────────────────────────────────────────────────────────
     const [searchParams] = useSearchParams();
-    const isTourActive       = searchParams.get('tour') === '1';
     const isActivateRequested = searchParams.get('activate') === '1';
 
-    // ── React Query — auto-scout settings (for banner logic) ─────────────────
+    // ── Queries ───────────────────────────────────────────────────────────────
     const { data: autoScoutSettings } = useQuery({
         queryKey: ['auto-scout-settings'],
         queryFn: getAutoScoutSettings,
         staleTime: 5 * 60 * 1000,
     });
 
-    // ── React Query — user profile (drives the AI activation gate) ───────────
     const { data: profile } = useQuery({
         queryKey: ['profile'],
         queryFn: getProfile,
         staleTime: 5 * 60 * 1000,
     });
-
-    // User has AI capabilities unlocked once they have saved CV text.
     const isActivated = !!profile?.cv_raw_text;
 
-    // ── React Query — single-page fetch ──────────────────────────────────────
-    // queryKey includes filterTab + currentPage so any change triggers exactly
-    // one clean network request and nothing more.
-    const { data: pageData, isLoading: loading, isFetching } = useQuery({
-        queryKey: ['jobs-page', filterTab, currentPage],
-        queryFn:  () => getJobsPage(currentPage, filterTab, itemsPerPage),
-        refetchInterval: false,
+    // The feed only surfaces fresh, undecided roles (status === 'scraped').
+    const { data: pageData, isLoading: loading } = useQuery({
+        queryKey: ['jobs-page', 'Scraped'],
+        queryFn:  () => getJobsPage(1, 'Scraped', 50),
         refetchOnWindowFocus: false,
-        refetchOnReconnect: false,
         staleTime: 30000,
     });
 
     const jobs       = pageData?.jobs        ?? [];
     const totalCount = pageData?.total_count ?? 0;
-    const totalPages = pageData?.total_pages ?? 1;
 
-    // Reset to page 1 whenever the filter tab changes so users always land
-    // on the first page of a new filter set.
-    useEffect(() => { setCurrentPage(1); }, [filterTab]);
+    // ── Live ref to totalCount for the scrape-poll callbacks ──────────────────
+    const totalCountRef = useRef(totalCount);
+    useEffect(() => { totalCountRef.current = totalCount; }, [totalCount]);
 
-    // Reset paste-description state whenever the details modal is closed.
-    useEffect(() => {
-        if (!selectedJob) { setPasteDescOpen(false); setPasteDescValue(''); }
-    }, [selectedJob]);
-
-    // While a scrape is running, poll the job list every 8 seconds so jobs
-    // appear incrementally on the page as the background thread saves them.
+    // While a scrape runs, refresh the feed every 8s so new roles stream in.
     useEffect(() => {
         if (!isScrapeActive) return;
         const id = setInterval(() => {
@@ -106,15 +92,7 @@ const JobsPage = () => {
         return () => clearInterval(id);
     }, [isScrapeActive, queryClient]);
 
-    // Keep a live ref to totalCount so async lock-poll callbacks always read
-    // the latest value without stale-closure issues.
-    const totalCountRef = useRef(totalCount);
-    useEffect(() => { totalCountRef.current = totalCount; }, [totalCount]);
-
-    // Poll the backend lock status every 3 s while a scrape is active.
-    // Only declare the scrape finished — and show the final job count —
-    // once the background thread actually releases the lock, not the moment
-    // the first few jobs appear (which caused the premature partial-count bug).
+    // Poll the backend lock; only declare "done" once the thread releases it.
     useEffect(() => {
         if (!isScrapeActive) return;
 
@@ -136,11 +114,7 @@ const JobsPage = () => {
                 if (phase) setScrapePhase(phase);
                 if (!is_active) {
                     done = true;
-                    // One final refresh so we capture any jobs saved between
-                    // the last 8-second poll and the moment the lock dropped.
                     queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-                    // Wait briefly for React Query to resolve the refetch,
-                    // then read the latest count from the ref.
                     setTimeout(() => {
                         const delta = totalCountRef.current - countAtStart;
                         if (delta > 0) {
@@ -148,7 +122,7 @@ const JobsPage = () => {
                             setShowNewJobsBanner(true);
                         } else {
                             toast.info(
-                                'No new jobs found — they may already be in your list or try different keywords.',
+                                'No new roles this time — try different keywords or check back later.',
                                 { autoClose: 6000 },
                             );
                         }
@@ -161,8 +135,6 @@ const JobsPage = () => {
         };
 
         const intervalId = setInterval(poll, 3000);
-
-        // 5-minute hard timeout mirrors the backend lock TTL.
         const timeoutId = setTimeout(() => {
             if (!done) { done = true; _clearScrapeState(); }
         }, 5 * 60 * 1000);
@@ -174,105 +146,41 @@ const JobsPage = () => {
         };
     }, [isScrapeActive, queryClient]);
 
+    // ── Mutations ─────────────────────────────────────────────────────────────
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
         onSuccess: (_, { newStatus }) => {
             if (newStatus === 'approved') {
-                toast.success('Approved! Head to Outreach to find a contact and send your email.');
+                toast.success('Reaching out — find this role under Introductions.');
             } else {
-                toast.success(`Job marked as ${newStatus}`);
+                toast.success('Skipped. Your headhunter will keep looking.');
             }
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
+            queryClient.invalidateQueries({ queryKey: ['analytics'] });
         },
-        onError: (err) => toast.error(err.message || 'Failed to update status. Please try again.'),
-    });
-
-    const generateCvMutation = useMutation({
-        mutationFn: async (job) => {
-            const cvData = await generateJobCV(job.id);
-            return { job, cvData };
-        },
-        onSuccess: ({ job, cvData }) => {
-            setCvModal({ jobId: job.id, cvData, title: `${job.company_name} — ${job.title}` });
-            toast.success('Tailored CV ready!');
-            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-        },
-        onError: (err) => toast.error(err.message || 'CV generation failed. Please try again.'),
-    });
-
-    const trackJobMutation = useMutation({
-        mutationFn: (jobId) => trackJob(jobId),
-        onSuccess: (data) => {
-            if (data.already_tracked) {
-                toast.info('Already in your tracker — taking you there');
-            } else {
-                toast.success('Added to Job Tracker!');
-            }
-            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-            navigate('/dashboard/job-tracker');
-        },
-        onError: (err) => toast.error(err.message || 'Could not add to tracker. Please try again in a moment.'),
-    });
-
-    const findContactMutation = useMutation({
-        mutationFn: (jobId) => findContactManual(jobId),
-        onSuccess: (data, jobId) => {
-            if (data.status === 'found') {
-                toast.success(`Contact found: ${data.contact?.email}`);
-                queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-            } else if (data.status === 'job_board') {
-                toast.info('This is a job board listing — apply directly on their site.');
-            } else {
-                toast.warn('No contact found for this company via our discovery engine.');
-            }
-        },
-        onError: (err) => toast.error(err.message || 'Contact search failed.'),
-    });
-
-    const saveDescMutation = useMutation({
-        mutationFn: ({ jobId, description }) => saveJobDescription(jobId, description),
-        onSuccess: () => {
-            toast.success('Description saved!');
-            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-            setSelectedJob(null);
-            setPasteDescOpen(false);
-            setPasteDescValue('');
-        },
-        onError: (err) => toast.error(err.message || 'Failed to save description'),
+        onError: (err) => toast.error(err.message || 'Something went wrong. Please try again.'),
     });
 
     const scrapeMutation = useMutation({
         mutationFn: async (form) => {
-            if (form.source === 'linkedin') {
-                return scrapeLinkedinJobs(form);
-            } else if (form.source === 'remote') {
-                return scrapeRemoteJobs(form.keywords);
-            } else if (form.source === 'ats') {
-                return autoScrapeAts({ title: form.atsTitle, location: form.atsLocation });
-            } else if (form.source === 'yc') {
-                return scrapeYcJobs({ keywords: form.keywords, location: form.startupLocation });
-            } else if (form.source === 'wellfound') {
-                return scrapeWellfoundJobs({ keywords: form.keywords, location: form.startupLocation });
-            } else {
-                return scrapeApifyJobs(form);
-            }
+            if (form.source === 'linkedin') return scrapeLinkedinJobs(form);
+            if (form.source === 'remote')   return scrapeRemoteJobs(form.keywords);
+            if (form.source === 'ats')      return autoScrapeAts({ title: form.atsTitle, location: form.atsLocation });
+            if (form.source === 'yc')       return scrapeYcJobs({ keywords: form.keywords, location: form.startupLocation });
+            if (form.source === 'wellfound') return scrapeWellfoundJobs({ keywords: form.keywords, location: form.startupLocation });
+            return scrapeApifyJobs(form);
         },
         onMutate: () => {
             setScrapePhase('scraping');
             setIsScrapeActive(true);
-            setCurrentPage(1);
             localStorage.setItem('applydir_is_scraping', 'true');
             localStorage.setItem('applydir_scraping_started_at', Date.now().toString());
-            const countNow = String(pageData?.total_count ?? 0);
-            localStorage.setItem('applydir_scraping_job_count', countNow);
+            localStorage.setItem('applydir_scraping_job_count', String(pageData?.total_count ?? 0));
         },
-        onSuccess: (data) => {
+        onSuccess: () => {
             setIsScrapeModalOpen(false);
             queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
-            // CV-aware nudge ordering. Auto-Scout (and all AI scoring) is useless
-            // without a CV — the nightly cron now skips CV-less users — so push
-            // CV upload FIRST. Only nudge Auto-Scout once the user is activated.
-            // Both nudges are snooze-based so they can re-prompt, not fire once.
+            // CV upload unlocks AI scoring; nudge it first, else nudge Auto-Scout.
             if (!isActivated) {
                 const cvSnooze = Number(localStorage.getItem('applydirCvNudgeSnoozeUntil') || 0);
                 if (Date.now() > cvSnooze) setShowCvNudge(true);
@@ -283,39 +191,17 @@ const JobsPage = () => {
                 }
             }
         },
-        // onSettled is the finally-equivalent: always runs after success or error.
-        // Guarantees the modal closes even if onSuccess throws, so the button
-        // can never get stuck regardless of the API outcome.
-        onSettled: () => {
-            setIsScrapeModalOpen(false);
-        },
+        onSettled: () => setIsScrapeModalOpen(false),
         onError: (err) => {
             setIsScrapeActive(false);
             localStorage.removeItem('applydir_is_scraping');
             localStorage.removeItem('applydir_scraping_started_at');
             localStorage.removeItem('applydir_scraping_job_count');
-            toast.error(err.message || 'Failed to start scrape. Please try again.');
+            toast.error(err.message || 'Could not start the search. Please try again.');
         },
     });
 
-
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
-    const handleGenerateCv = (job) => generateCvMutation.mutate(job);
-    const handleTrackJob = (jobId) => trackJobMutation.mutate(jobId);
-
-    const handleViewCv = async (job) => {
-        setLoadingCvPreview(job.id);
-        try {
-            const cvData = await getJobCVJson(job.id);
-            setCvModal({ jobId: job.id, cvData, title: `${job.company_name} — ${job.title}` });
-        } catch {
-            toast.error('Could not load CV preview. Please try again.');
-        } finally {
-            setLoadingCvPreview(null);
-        }
-    };
-
-    const handleCloseCvModal = () => setCvModal(null);
 
     const toggleLocation = (loc) => {
         setScrapeForm(prev => {
@@ -327,200 +213,187 @@ const JobsPage = () => {
     const handleScrape = (e) => {
         e.preventDefault();
         if (scrapeForm.source === 'linkedin' && scrapeForm.locations.length === 0) {
-            toast.error('Select at least one location');
-            return;
+            toast.error('Select at least one location'); return;
         }
         if (scrapeForm.source === 'remote' && !scrapeForm.keywords.trim()) {
-            toast.error('Keywords are required');
-            return;
+            toast.error('Keywords are required'); return;
         }
         if (scrapeForm.source === 'ats') {
-            if (!scrapeForm.atsTitle.trim()) {
-                toast.error('Job title is required');
-                return;
-            }
-            if (!scrapeForm.atsLocation.trim()) {
-                toast.error('Location is required');
-                return;
-            }
+            if (!scrapeForm.atsTitle.trim())    { toast.error('Job title is required'); return; }
+            if (!scrapeForm.atsLocation.trim()) { toast.error('Location is required'); return; }
         }
         if ((scrapeForm.source === 'yc' || scrapeForm.source === 'wellfound') && !scrapeForm.keywords.trim()) {
-            toast.error('Keywords are required');
-            return;
+            toast.error('Keywords are required'); return;
         }
         scrapeMutation.mutate(scrapeForm);
     };
 
-    // ── Derived data ──────────────────────────────────────────────────────────
-    // Status is now filtered server-side via the queryKey; only search is client-side.
-    const filteredJobs = searchQuery
-        ? jobs.filter(job => {
-            const q = searchQuery.toLowerCase();
-            return job.company_name?.toLowerCase().includes(q) || job.title?.toLowerCase().includes(q);
-        })
-        : jobs;
-
-    const getScoreBadgeColor = (score) => {
-        if (score == null) return 'bg-neutral-dark text-secondary-dark border-neutral-dark';
-        if (score >= 80) return 'bg-green-100 text-green-700 border-green-200';
-        if (score >= 60) return 'bg-yellow-100 text-yellow-700 border-yellow-200';
-        return 'bg-red-100 text-red-700 border-red-200';
-    };
-
-    const getStatusDotColor = (status) => {
-        switch (status?.toLowerCase()) {
-            case 'approved':  return 'bg-emerald-500';
-            case 'rejected':  return 'bg-red-400';
-            case 'outreach_automated': return 'bg-teal-500';
-            default:          return 'bg-gray-300';
-        }
-    };
-
-    // When on the Approved tab, totalCount IS the approved count (server-filtered).
-    // On other tabs, fall back to counting the visible page slice.
-    const approvedCount = filterTab === 'Approved'
-        ? totalCount
-        : jobs.filter(j => j.status === 'approved').length;
-
     const isScrapingInProgress = scrapeMutation.isPending || isScrapeActive;
-    const showScrapingBanner = isScrapingInProgress;
 
-
-    // Auto-open modal and activate tour step 1 on mount when tour param is present
+    // Open the CV-upload drawer when arriving via ?activate=1 (and not yet activated).
     useEffect(() => {
-        if (isTourActive) {
-            setIsScrapeModalOpen(true);
-            setShowModalTour(true);
-        }
-    }, [isTourActive]);
-
-    // Open the CV-upload drawer when arriving via the setup card's "Upload CV" step
-    // (?activate=1). Skip if already activated — nothing left to do.
-    useEffect(() => {
-        if (isActivateRequested && !isActivated) {
-            setIsActivationDrawerOpen(true);
-        }
+        if (isActivateRequested && !isActivated) setIsActivationDrawerOpen(true);
     }, [isActivateRequested, isActivated]);
 
-    const completeTour = () => {
-        localStorage.setItem('applydirTourDone', 'true');
-        setShowModalTour(false);
-        navigate('/dashboard/jobs', { replace: true });
-    };
-
     return (
-        <div className="p-4 md:p-8 w-full max-w-[1600px] mx-auto space-y-6 animate-fade-in font-roboto">
+        <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-6 animate-fade-in font-roboto">
 
-            {/* Header */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            {/* ── Header ──────────────────────────────────────────────────── */}
+            <div className="max-w-2xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">
-                        Job Opportunities
+                    <h1 className="text-2xl md:text-3xl font-bold font-montserrat text-black-light">
+                        Opportunities
                     </h1>
-                    <p className="text-sm text-secondary-dark mt-1">Manage, filter, and score scraped job listings</p>
+                    <p className="text-sm text-secondary-dark mt-1">
+                        Roles your headhunter found for you.
+                    </p>
                 </div>
-                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                    <button
-                        onClick={() => !showScrapingBanner && setIsScrapeModalOpen(true)}
-                        disabled={showScrapingBanner}
-                        className="flex items-center gap-2 bg-gradient-to-r hover:bg-gradient-to-br from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-orange-200 transition-all active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed disabled:active:scale-100"
+                <button
+                    onClick={() => !isScrapingInProgress && setIsScrapeModalOpen(true)}
+                    disabled={isScrapingInProgress}
+                    className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+                >
+                    {isScrapingInProgress
+                        ? <><ApplyDirLoader.Button variant="light" /> Sourcing…</>
+                        : <><Plus className="w-4 h-4" /> Find roles</>}
+                </button>
+            </div>
+
+            {/* ── Sourcing-in-progress banner ─────────────────────────────── */}
+            <AnimatePresence>
+                {isScrapingInProgress && (
+                    <motion.div
+                        key="scout-banner"
+                        initial={{ opacity: 0, y: -14, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0,  scale: 1    }}
+                        exit={{    opacity: 0, y: -14, scale: 0.97 }}
+                        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+                        className="max-w-2xl mx-auto bg-white border border-neutral-dark rounded-2xl px-5 py-4 flex items-center gap-4 shadow-sm"
                     >
-                        {showScrapingBanner
-                            ? <><Loader2 className="w-4 h-4 animate-spin" /> Scraping...</>
-                            : <><Plus className="w-4 h-4" /> Scrape New Jobs</>
-                        }
-                    </button>
-                </div>
-            </div>
-
-            {/* ── Adaptive "Next step" strip — always tells the user the single
-                 most important next action for where they are in the pipeline.
-                 Scrape → (upload CV) → review & approve → go to Outreach.      ── */}
-            {totalCount > 0 && (() => {
-                let step;
-                if (!isActivated) {
-                    step = {
-                        accent: 'amber',
-                        Icon: Lock,
-                        title: 'Next: unlock AI scoring',
-                        body: `Upload your CV so AI can score and rank these ${totalCount} jobs.`,
-                        cta: 'Upload CV',
-                        onClick: () => setIsActivationDrawerOpen(true),
-                    };
-                } else if (approvedCount > 0) {
-                    step = {
-                        accent: 'emerald',
-                        Icon: CheckCircle,
-                        title: `${approvedCount} approved job${approvedCount !== 1 ? 's' : ''} ready`,
-                        body: 'Head to Outreach to find contacts and generate emails.',
-                        cta: 'Go to Outreach',
-                        onClick: () => navigate('/dashboard/outreach'),
-                    };
-                } else {
-                    step = {
-                        accent: 'blue',
-                        Icon: Search,
-                        title: 'Next: review your scored jobs',
-                        body: 'Open the Approved tab and confirm the roles you want to pursue.',
-                        cta: 'View Approved',
-                        onClick: () => { setFilterTab('Approved'); setCurrentPage(1); },
-                    };
-                }
-                const tones = {
-                    amber:   { box: 'bg-amber-50 border-amber-200',     chip: 'text-amber-500',   title: 'text-amber-900',   btn: 'bg-amber-500 hover:bg-amber-600' },
-                    emerald: { box: 'bg-emerald-50 border-emerald-200', chip: 'text-emerald-500', title: 'text-emerald-800', btn: 'bg-emerald-500 hover:bg-emerald-600' },
-                    blue:    { box: 'bg-blue-50 border-blue-200',       chip: 'text-blue-500',    title: 'text-blue-900',    btn: 'bg-blue-500 hover:bg-blue-600' },
-                }[step.accent];
-                const StepIcon = step.Icon;
-                return (
-                    <div className={`flex items-center gap-3 px-5 py-3 rounded-2xl border ${tones.box}`}>
-                        <StepIcon className={`w-5 h-5 shrink-0 ${tones.chip}`} />
-                        <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-semibold ${tones.title}`}>{step.title}</p>
-                            <p className="text-xs text-secondary-dark mt-0.5">{step.body}</p>
+                        <div className="w-10 h-10 rounded-xl bg-primary-light/10 border border-primary-light/20 flex items-center justify-center shrink-0">
+                            {scrapePhase === 'scoring'
+                                ? <Sparkles className="w-5 h-5 text-primary-light" />
+                                : <ApplyDirLoader.Button variant="dark" />}
                         </div>
-                        <button
-                            onClick={step.onClick}
-                            className={`shrink-0 px-4 py-2 text-white text-xs font-bold rounded-xl transition-all active:scale-95 ${tones.btn}`}
-                        >
-                            {step.cta}
-                        </button>
-                    </div>
-                );
-            })()}
+                        <div className="min-w-0">
+                            <p className="text-sm font-bold font-montserrat text-black-light leading-snug">
+                                {scrapePhase === 'scoring'
+                                    ? 'Sizing up your matches…'
+                                    : 'Your headhunter is searching…'}
+                            </p>
+                            <p className="text-xs text-secondary-dark mt-0.5">
+                                This usually takes 30–60 seconds. New roles appear here automatically.
+                            </p>
+                        </div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
 
-            {/* Filters & Search */}
-            <div className="bg-white p-4 rounded-2xl shadow-sm border border-neutral-dark flex flex-col md:flex-row justify-between items-center gap-4">
-                <div className="flex overflow-x-auto space-x-2 w-full md:w-auto pb-2 md:pb-0 scrollbar-hide">
-                    {['All', 'Scraped', 'Approved', 'Rejected', 'Outreach Automated'].map(tab => (
-                        <button
-                            key={tab}
-                            onClick={() => setFilterTab(tab)}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap ${
-                                filterTab === tab
-                                ? 'bg-primary-light/10 text-primary-dark shadow-sm border border-primary-light/20'
-                                : 'text-secondary-dark hover:bg-neutral border border-transparent hover:border-neutral-dark'
-                            }`}
-                        >
-                            {tab}
-                        </button>
-                    ))}
-                </div>
-                <div className="relative w-full md:w-80">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-secondary-dark/60 w-4 h-4" />
-                    <input
-                        type="text"
-                        placeholder="Search company or role..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/50 focus:border-primary-light transition-all outline-none text-secondary-dark"
-                    />
-                </div>
+            {/* ── The card stack ──────────────────────────────────────────── */}
+            <div className="max-w-2xl mx-auto space-y-5">
+                {loading ? (
+                    <div className="py-20">
+                        <ApplyDirLoader.Inline message="Gathering your opportunities..." />
+                    </div>
+                ) : jobs.length === 0 ? (
+                    /* Empty / working state */
+                    <div className="min-h-[50vh] flex flex-col items-center justify-center text-center">
+                        <div className="relative w-16 h-16 mb-6">
+                            <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
+                            <span className="relative w-16 h-16 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
+                                <Sparkles className="w-7 h-7 text-primary-light" />
+                            </span>
+                        </div>
+                        <h2 className="text-lg md:text-xl font-bold font-montserrat text-black-light">
+                            Your pipeline is clear
+                        </h2>
+                        <p className="mt-2 text-sm text-secondary-dark max-w-sm leading-relaxed">
+                            Your headhunter is sourcing new roles. Check back later — we'll
+                            line up fresh matches for you.
+                        </p>
+                    </div>
+                ) : (
+                    <AnimatePresence mode="popLayout" initial={false}>
+                        {jobs.map(job => {
+                            const match = matchStrength(job.fit_score);
+                            const reason = job.fit_reasoning
+                                || 'Your background aligns with the core requirements for this role.';
+                            const pendingThisJob = updateStatusMutation.isPending && updateStatusMutation.variables?.id === job.id;
+                            const approvePending = pendingThisJob && updateStatusMutation.variables?.newStatus === 'approved';
+                            const rejectPending  = pendingThisJob && updateStatusMutation.variables?.newStatus === 'rejected';
+
+                            return (
+                                <motion.div
+                                    key={job.id}
+                                    layout
+                                    initial={{ opacity: 0, y: 20 }}
+                                    animate={{ opacity: 1, y: 0  }}
+                                    exit={{    opacity: 0, scale: 0.96 }}
+                                    transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                                    className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-6"
+                                >
+                                    {/* Header */}
+                                    <h2 className="font-montserrat text-lg font-bold text-black-light leading-snug">
+                                        {job.title}
+                                    </h2>
+                                    <p className="text-sm text-secondary-dark mt-1 flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-medium text-black-light">{job.company_name}</span>
+                                        {job.location && (
+                                            <>
+                                                <span className="text-secondary-dark/40">·</span>
+                                                <span className="inline-flex items-center gap-1">
+                                                    <MapPin className="w-3.5 h-3.5 shrink-0" />
+                                                    {job.location}
+                                                </span>
+                                            </>
+                                        )}
+                                    </p>
+
+                                    {/* Match strength — no numbers */}
+                                    <p className={`mt-3 text-sm font-semibold ${match.tone}`}>
+                                        <span aria-hidden="true">{match.dot}</span> {match.label}
+                                    </p>
+
+                                    {/* AI explanation */}
+                                    <p className="mt-3 text-sm italic text-secondary-dark leading-relaxed border-l-2 border-neutral-dark bg-neutral/50 rounded-r-lg pl-3 py-2">
+                                        {reason}
+                                    </p>
+
+                                    {/* Contact line */}
+                                    <p className="mt-3 text-xs text-secondary-dark">
+                                        {job.contact_name
+                                            ? <>Contact found: <span className="font-semibold text-black-light">{job.contact_name}</span></>
+                                            : 'Hiring manager discovery pending.'}
+                                    </p>
+
+                                    {/* Actions */}
+                                    <div className="mt-5 flex items-center justify-between gap-3">
+                                        <button
+                                            onClick={() => handleUpdateStatus(job.id, 'rejected')}
+                                            disabled={pendingThisJob}
+                                            className="inline-flex items-center justify-center gap-2 text-secondary-dark hover:bg-neutral font-semibold rounded-xl px-5 py-2.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            {rejectPending ? <ApplyDirLoader.Button variant="dark" /> : null}
+                                            Skip
+                                        </button>
+                                        <button
+                                            onClick={() => handleUpdateStatus(job.id, 'approved')}
+                                            disabled={pendingThisJob}
+                                            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                        >
+                                            {approvePending
+                                                ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
+                                                : <>Reach Out <ArrowRight className="w-4 h-4" /></>}
+                                        </button>
+                                    </div>
+                                </motion.div>
+                            );
+                        })}
+                    </AnimatePresence>
+                )}
             </div>
 
-            {/* ── New jobs arrival pill — fixed center-bottom, Render-style ───────
-                 Rendered outside the page flow via fixed positioning so it floats
-                 above all content without shifting the layout.                    ── */}
+            {/* ── New roles arrival pill ──────────────────────────────────── */}
             <AnimatePresence>
                 {showNewJobsBanner && (
                     <motion.div
@@ -529,53 +402,25 @@ const JobsPage = () => {
                         animate={{ opacity: 1, y: 0,  scale: 1    }}
                         exit={{    opacity: 0, y: 32, scale: 0.92  }}
                         transition={{ type: 'spring', stiffness: 380, damping: 26 }}
-                        className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 pointer-events-auto"
+                        className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2"
                     >
-                        {/* Main pill */}
-                        <motion.button
+                        <button
                             onClick={() => {
-                                setFilterTab('All');
-                                setCurrentPage(1);
+                                queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
                                 setShowNewJobsBanner(false);
                             }}
-                            whileHover={{ scale: 1.06 }}
-                            whileTap={{ scale: 0.96 }}
-                            animate={{
-                                boxShadow: [
-                                    '0 0 0px rgba(52,211,153,0)',
-                                    '0 0 22px rgba(52,211,153,0.40)',
-                                    '0 0 0px rgba(52,211,153,0)',
-                                ],
-                            }}
-                            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-                            className="flex items-center gap-2.5 pl-3.5 pr-5 py-2.5
-                                       bg-[#08111f]
-                                       border-2 border-dashed border-emerald-400/65
-                                       rounded-full
-                                       text-emerald-300 text-sm font-semibold font-montserrat
-                                       whitespace-nowrap cursor-pointer select-none
-                                       hover:border-emerald-300/90 hover:text-white
-                                       transition-colors duration-150"
+                            className="flex items-center gap-2.5 pl-3.5 pr-5 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark rounded-full text-white text-sm font-semibold font-montserrat shadow-lg shadow-primary-light/30 whitespace-nowrap"
                         >
-                            {/* Pulsing live dot */}
                             <span className="relative flex h-2 w-2 shrink-0">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
-                                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-400" />
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-70" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-white" />
                             </span>
-                            <Sparkles className="w-3.5 h-3.5 shrink-0 opacity-80" />
-                            <span>
-                                {newJobsCount} new job{newJobsCount !== 1 ? 's' : ''} &mdash; view scraped jobs
-                            </span>
-                        </motion.button>
-
-                        {/* Separate dismiss pill */}
+                            {newJobsCount} new {newJobsCount !== 1 ? 'roles' : 'role'} found — view now
+                        </button>
                         <button
                             onClick={() => setShowNewJobsBanner(false)}
                             aria-label="Dismiss"
-                            className="w-7 h-7 rounded-full bg-[#08111f] border border-white/10
-                                       flex items-center justify-center shrink-0
-                                       text-white/25 hover:text-white/65 hover:border-white/25
-                                       transition-all duration-150"
+                            className="w-7 h-7 rounded-full bg-white border border-neutral-dark flex items-center justify-center shrink-0 text-secondary-dark hover:text-black-light transition-colors"
                         >
                             <X className="w-3 h-3" />
                         </button>
@@ -583,355 +428,13 @@ const JobsPage = () => {
                 )}
             </AnimatePresence>
 
-            {/* ── Auto-Scout live status banner ──────────────────────────────────── */}
-            <AnimatePresence>
-                {showScrapingBanner && (
-                    <motion.div
-                        key="scout-banner"
-                        initial={{ opacity: 0, y: -14, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0,  scale: 1    }}
-                        exit={{    opacity: 0, y: -14, scale: 0.97 }}
-                        transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-                        className="relative overflow-hidden bg-gradient-to-r from-[#0F172A] to-[#1a2744] border border-white/10 rounded-2xl px-5 py-4 flex items-center gap-4 shadow-xl"
-                    >
-                        {/* Sweeping background glow */}
-                        <motion.div
-                            className="absolute inset-0 bg-gradient-to-r from-primary-light/10 via-primary-light/5 to-transparent pointer-events-none"
-                            animate={{ opacity: [0.5, 1, 0.5] }}
-                            transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-                        />
-
-                        {/* Icon — changes per phase */}
-                        <div className="relative z-10 w-9 h-9 rounded-xl bg-primary-light/15 border border-primary-light/30 flex items-center justify-center shrink-0">
-                            <motion.div
-                                animate={{ rotate: scrapePhase === 'scoring' ? 0 : 360 }}
-                                transition={{ duration: 1.6, repeat: scrapePhase === 'scoring' ? 0 : Infinity, ease: 'linear' }}
-                            >
-                                {scrapePhase === 'scoring'
-                                    ? <Sparkles className="w-4 h-4 text-primary-light" />
-                                    : <Loader2 className="w-4 h-4 text-primary-light" />
-                                }
-                            </motion.div>
-                        </div>
-
-                        {/* Copy — updates when phase changes */}
-                        <div className="relative z-10 min-w-0 flex-1">
-                            <AnimatePresence mode="wait">
-                                <motion.div
-                                    key={scrapePhase}
-                                    initial={{ opacity: 0, y: 6 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    exit={{ opacity: 0, y: -6 }}
-                                    transition={{ duration: 0.2 }}
-                                >
-                                    <p className="text-white font-bold text-sm font-montserrat leading-snug">
-                                        {scrapePhase === 'scoring'
-                                            ? 'AI is scoring your matches...'
-                                            : 'Fetching jobs in the background...'}
-                                    </p>
-                                    <p className="text-white/50 text-xs mt-0.5 font-roboto">
-                                        {scrapePhase === 'scoring'
-                                            ? 'Evaluating fit, generating tailored CVs for top matches'
-                                            : 'Searching job boards — this takes 30–60 seconds'}
-                                    </p>
-                                </motion.div>
-                            </AnimatePresence>
-                        </div>
-
-                        {/* Pulsing dots */}
-                        <div className="relative z-10 flex items-center gap-1.5 shrink-0">
-                            {[0, 0.18, 0.36].map((delay, i) => (
-                                <motion.span
-                                    key={i}
-                                    className="block w-1.5 h-1.5 rounded-full bg-primary-light"
-                                    animate={{ opacity: [0.25, 1, 0.25], scale: [0.8, 1.15, 0.8] }}
-                                    transition={{ duration: 1.2, repeat: Infinity, delay, ease: 'easeInOut' }}
-                                />
-                            ))}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* ── Card List ─────────────────────────────────────────────────────── */}
-            <div className="flex flex-col gap-4">
-                {loading ? (
-                    [0, 1, 2, 3, 4].map(i => (
-                        <div key={i} className="w-full bg-white border border-neutral-dark rounded-xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6 animate-pulse">
-                            {/* Left: icon + title/company bars */}
-                            <div className="flex items-start gap-4 flex-1 min-w-0">
-                                <div className="h-10 w-10 rounded-xl bg-gray-200 shrink-0" />
-                                <div className="flex-1 min-w-0 space-y-2 pt-0.5">
-                                    <div className="h-5 w-48 rounded bg-gray-200" />
-                                    <div className="h-3 w-32 rounded bg-gray-200" />
-                                </div>
-                            </div>
-                            {/* Middle: badge pills */}
-                            <div className="flex md:flex-col items-center md:items-start gap-2 shrink-0">
-                                <div className="w-16 h-6 rounded-md bg-gray-200" />
-                                <div className="w-16 h-6 rounded-md bg-gray-200" />
-                            </div>
-                            {/* Right: button shape */}
-                            <div className="hidden md:block w-24 h-8 rounded-lg bg-gray-200 shrink-0" />
-                        </div>
-                    ))
-                ) : filteredJobs.length === 0 ? (
-                    <div className="p-12 text-center bg-white rounded-xl border border-neutral-dark">
-                        <Briefcase className="w-12 h-12 mx-auto text-secondary-dark/40 mb-3" />
-                        {totalCount === 0 && filterTab === 'All' && !searchQuery ? (
-                            <>
-                                <p className="text-base font-semibold text-black">Let's find you some jobs</p>
-                                <p className="text-sm mt-1 text-secondary-dark max-w-md mx-auto">
-                                    Run your first scrape — we'll pull matching roles from LinkedIn, remote boards, and startup job boards, then AI-score each one against your CV.
-                                </p>
-                                <button
-                                    onClick={() => setIsScrapeModalOpen(true)}
-                                    className="mt-4 inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl text-sm font-bold shadow-md shadow-orange-200 transition-all active:scale-95"
-                                >
-                                    <Plus className="w-4 h-4" /> Scrape New Jobs
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <p className="text-base font-medium text-secondary-dark">No jobs in this view</p>
-                                <p className="text-sm mt-1 text-secondary-dark">
-                                    {searchQuery
-                                        ? 'No matches for your search — try a different term.'
-                                        : `Nothing under "${filterTab}" yet. Switch tabs or scrape new jobs.`}
-                                </p>
-                            </>
-                        )}
-                    </div>
-                ) : (
-                    <AnimatePresence mode="popLayout" initial={false}>
-                    {filteredJobs.map(job => (
-                        <motion.div
-                            key={job.id}
-                            layout
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0  }}
-                            exit={{    opacity: 0, scale: 0.97 }}
-                            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                            className="w-full bg-white border border-neutral-dark rounded-xl p-4 md:p-5 hover:shadow-lg hover:border-primary-light/40 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4 md:gap-6"
-                        >
-                            {/* Left: Icon + Title + Company */}
-                            <div className="flex items-start gap-4 flex-1 min-w-0">
-                                <div className="h-10 w-10 min-w-[2.5rem] rounded-xl bg-gradient-to-tr from-accent-teal/10 to-accent-teal/20 flex items-center justify-center border border-accent-teal/30 mt-0.5 shadow-sm shrink-0">
-                                    <Building className="w-4 h-4 text-accent-teal" />
-                                </div>
-                                <div className="min-w-0 flex-1">
-                                    <button
-                                        onClick={() => setSelectedJob(job)}
-                                        className="text-left font-bold text-black hover:text-primary-light transition-colors truncate w-full text-base md:text-lg block"
-                                    >
-                                        {job.title}
-                                    </button>
-                                    <p className="truncate w-full text-sm text-secondary-dark font-medium mt-0.5">{job.company_name}</p>
-                                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                        {job.location && (
-                                            <span className="flex items-center gap-1 text-xs text-secondary-dark/70">
-                                                <MapPin className="w-3 h-3 shrink-0" />
-                                                <span className="truncate max-w-[180px]">{job.location}</span>
-                                            </span>
-                                        )}
-                                        <span className="text-[10px] uppercase bg-neutral-dark px-1.5 py-0.5 rounded text-secondary-dark font-medium">{job.source}</span>
-                                        {job.posted_at && (
-                                            <span className="flex items-center gap-1 text-xs text-secondary-dark/60">
-                                                <Calendar className="w-3 h-3 shrink-0" />
-                                                {new Date(job.posted_at).toLocaleDateString()}
-                                            </span>
-                                        )}
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Middle: AI Match badge + status dot */}
-                            <div className="flex md:flex-col items-center md:items-start gap-3 md:gap-2 shrink-0">
-                                {isActivated ? (
-                                    <div className={`px-2.5 py-1 rounded-lg text-xs font-bold font-montserrat border flex items-center gap-1.5 shadow-sm ${getScoreBadgeColor(job.fit_score)}`}>
-                                        <span>AI Match:</span>
-                                        <span>{job.fit_score != null ? job.fit_score : '—'}</span>
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={() => setIsActivationDrawerOpen(true)}
-                                        className="px-2.5 py-1 rounded-lg text-xs font-bold font-montserrat border flex items-center gap-1.5 shadow-sm bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100 transition-colors"
-                                    >
-                                        <Lock className="w-3 h-3 shrink-0" />
-                                        <span>AI Score Locked</span>
-                                    </button>
-                                )}
-                                <span className="flex items-center gap-1.5 text-xs text-secondary-dark">
-                                    <div className={`w-2 h-2 rounded-full shrink-0 ${getStatusDotColor(job.status)}`} />
-                                    {job.status ? job.status.charAt(0).toUpperCase() + job.status.slice(1) : 'Scraped'}
-                                    {job.has_contact && ' • Contact Found'}
-                                </span>
-                                {job.salary_info && (
-                                    <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                                        {job.salary_info}
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Right: Decluttered actions */}
-                            <div className="flex items-center gap-2 shrink-0 flex-wrap md:flex-nowrap">
-                                {/* Not yet decided: approve + reject only */}
-                                {job.status !== 'approved' && job.status !== 'rejected' && (() => {
-                                    const pendingThisJob = updateStatusMutation.isPending && updateStatusMutation.variables?.id === job.id;
-                                    const approvePending = pendingThisJob && updateStatusMutation.variables?.newStatus === 'approved';
-                                    const rejectPending  = pendingThisJob && updateStatusMutation.variables?.newStatus === 'rejected';
-                                    return (<>
-                                        <button
-                                            onClick={() => handleUpdateStatus(job.id, 'approved')}
-                                            disabled={pendingThisJob}
-                                            className="w-9 h-9 rounded-full flex items-center justify-center bg-green-50 text-green-600 hover:bg-green-500 hover:text-white transition-all shadow-sm border border-green-100 hover:border-green-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                                            title="Approve"
-                                        >
-                                            {approvePending
-                                                ? <Loader2 className="w-4 h-4 animate-spin" />
-                                                : <CheckCircle className="w-4 h-4" />}
-                                        </button>
-                                        <button
-                                            onClick={() => handleUpdateStatus(job.id, 'rejected')}
-                                            disabled={pendingThisJob}
-                                            className="w-9 h-9 rounded-full flex items-center justify-center bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-sm border border-red-100 hover:border-red-500 disabled:opacity-60 disabled:cursor-not-allowed"
-                                            title="Reject"
-                                        >
-                                            {rejectPending
-                                                ? <Loader2 className="w-4 h-4 animate-spin" />
-                                                : <XCircle className="w-4 h-4" />}
-                                        </button>
-                                    </>);
-                                })()}
-
-                                {/* Approved: primary CV action — gated on AI activation */}
-                                {job.status === 'approved' && (
-                                    isActivated ? (
-                                        job.has_cv ? (
-                                            <button
-                                                onClick={() => handleViewCv(job)}
-                                                disabled={loadingCvPreview === job.id}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-700 border border-violet-200 text-xs font-semibold rounded-lg hover:bg-violet-100 transition-all disabled:opacity-60"
-                                            >
-                                                {loadingCvPreview === job.id
-                                                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                                                    : <FileText className="w-3 h-3" />}
-                                                View CV
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={() => handleGenerateCv(job)}
-                                                disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === job.id}
-                                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
-                                            >
-                                                {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id
-                                                    ? <Loader2 className="w-3 h-3 animate-spin" />
-                                                    : <Download className="w-3 h-3" />}
-                                                {generateCvMutation.isPending && generateCvMutation.variables?.id === job.id ? 'Generating...' : 'Gen CV'}
-                                            </button>
-                                        )
-                                    ) : (
-                                        <button
-                                            onClick={() => setIsActivationDrawerOpen(true)}
-                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg shadow-sm shadow-orange-200 hover:opacity-90 transition-all active:scale-95"
-                                        >
-                                            <Sparkles className="w-3 h-3" />
-                                            Unlock AI Score &amp; CV
-                                        </button>
-                                    )
-                                )}
-
-                                {/* Desktop: More Details link */}
-                                <button
-                                    onClick={() => setSelectedJob(job)}
-                                    className="hidden md:flex items-center text-xs font-semibold text-secondary-dark hover:text-primary-light transition-colors whitespace-nowrap"
-                                >
-                                    More Details &rarr;
-                                </button>
-
-                                {/* Mobile: tap job title or More Details */}
-                                <button
-                                    onClick={() => setSelectedJob(job)}
-                                    className="md:hidden flex items-center text-xs font-semibold text-secondary-dark hover:text-primary-light transition-colors"
-                                >
-                                    Details &rarr;
-                                </button>
-                            </div>
-                        </motion.div>
-                    ))}
-                    </AnimatePresence>
-                )}
-            </div>
-
-            {/* ── Pagination controls ──────────────────────────────────────────── */}
-            {!loading && totalCount > 0 && (
-                <div className="flex items-center justify-between pt-2 pb-1">
-                    {/* Summary */}
-                    <p className="text-xs text-secondary-dark/60 font-roboto select-none">
-                        {totalCount} job{totalCount !== 1 ? 's' : ''} &nbsp;·&nbsp; page {currentPage} of {totalPages}
-                    </p>
-
-                    {/* Controls */}
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                            disabled={currentPage <= 1 || isFetching}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-neutral-dark text-secondary-dark hover:bg-neutral hover:border-secondary-dark/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-                        >
-                            ← Prev
-                        </button>
-
-                        {/* Page number pills */}
-                        <div className="flex items-center gap-1">
-                            {Array.from({ length: totalPages }, (_, i) => i + 1)
-                                .filter(n => n === 1 || n === totalPages || Math.abs(n - currentPage) <= 1)
-                                .reduce((acc, n, idx, arr) => {
-                                    if (idx > 0 && n - arr[idx - 1] > 1) acc.push('...');
-                                    acc.push(n);
-                                    return acc;
-                                }, [])
-                                .map((item, idx) =>
-                                    item === '...'
-                                        ? <span key={`gap-${idx}`} className="px-1 text-xs text-secondary-dark/40 select-none">…</span>
-                                        : <button
-                                            key={item}
-                                            onClick={() => setCurrentPage(item)}
-                                            disabled={isFetching}
-                                            className={`w-7 h-7 rounded-lg text-xs font-bold transition-all disabled:cursor-not-allowed ${
-                                                item === currentPage
-                                                    ? 'bg-gradient-to-r from-primary-light to-primary-dark text-white shadow-sm shadow-orange-200'
-                                                    : 'text-secondary-dark hover:bg-neutral border border-neutral-dark'
-                                            }`}
-                                        >
-                                            {item}
-                                        </button>
-                                )
-                            }
-                        </div>
-
-                        <button
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                            disabled={currentPage >= totalPages || isFetching}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-neutral-dark text-secondary-dark hover:bg-neutral hover:border-secondary-dark/30 transition-all disabled:opacity-40 disabled:cursor-not-allowed active:scale-95"
-                        >
-                            Next →
-                        </button>
-                    </div>
-
-                    {/* Fetching indicator */}
-                    {isFetching && !loading && (
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary-light shrink-0" />
-                    )}
-                </div>
-            )}
-
-            {/* Scrape Modal */}
+            {/* ── Find-roles Modal (manual sourcing) ──────────────────────── */}
             {isScrapeModalOpen && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4">
-                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-neutral-dark relative slide-in-bottom overflow-hidden">
+                    <div className="bg-white rounded-2xl w-full max-w-lg shadow-2xl border border-neutral-dark relative overflow-hidden">
                         <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-dark">
                             <h2 className="text-lg font-bold font-montserrat text-black flex items-center gap-2">
-                                <Plus className="w-4 h-4 text-primary-light" /> Scrape New Jobs
+                                <Plus className="w-4 h-4 text-primary-light" /> Find roles
                             </h2>
                             <button onClick={() => setIsScrapeModalOpen(false)} className="p-1.5 text-secondary-dark hover:bg-neutral-dark rounded-lg transition-colors">
                                 <X className="w-4 h-4" />
@@ -941,57 +444,21 @@ const JobsPage = () => {
                         <form onSubmit={handleScrape} className="p-6 space-y-5 max-h-[80vh] overflow-y-auto">
                             <div>
                                 <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-2">Source</label>
-
-                                {/* Step 2 Tour Tooltip — inline above source tabs */}
-                                <AnimatePresence>
-                                    {showModalTour && (
-                                        <motion.div
-                                            initial={{ opacity: 0, y: -6 }}
-                                            animate={{ opacity: 1, y: 0 }}
-                                            exit={{ opacity: 0, y: -6 }}
-                                            transition={{ duration: 0.2, ease: 'easeOut' }}
-                                            className="relative bg-gray-900 text-white rounded-xl p-4 mb-3 border border-white/10"
-                                        >
-                                            {/* Downward caret pointing at tabs below */}
-                                            <div className="absolute left-1/2 -translate-x-1/2 bottom-0 translate-y-full w-0 h-0 border-l-[7px] border-r-[7px] border-t-[7px] border-l-transparent border-r-transparent border-t-gray-900" />
-                                            <p className="text-[11px] font-bold text-primary-light uppercase tracking-wider mb-1.5">
-                                                Step 2 of 2 · Tour
-                                            </p>
-                                            <p className="text-sm leading-relaxed text-white/85 mb-3">
-                                                Choose your source stream, enter your target title, and let the AI score matching roles live! You're ready to hunt.
-                                            </p>
-                                            <button
-                                                type="button"
-                                                onClick={completeTour}
-                                                className="w-full py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-bold rounded-xl hover:opacity-90 transition-opacity"
-                                            >
-                                                Got it! — Start Hunting
-                                            </button>
-                                        </motion.div>
-                                    )}
-                                </AnimatePresence>
-
                                 {(() => {
                                     const SOURCES = [
-                                        { key: 'linkedin',  label: 'LinkedIn',      icon: null,     premium: false, desc: 'Searches LinkedIn via Apify. Filter by location, time range, and count.' },
+                                        { key: 'linkedin',  label: 'LinkedIn',      icon: null,     premium: false, desc: 'Searches LinkedIn. Filter by location, time range, and count.' },
                                         { key: 'remote',    label: 'Remote Boards',  icon: null,     premium: false, desc: 'Searches Remotive, RemoteOK, Himalayas & WeWorkRemotely simultaneously.' },
                                         { key: 'custom',    label: 'Custom URL',    icon: null,     premium: false, desc: 'Paste any LinkedIn jobs search URL directly.' },
-                                        { key: 'ats',       label: 'Auto-Finder',   icon: Link2,    premium: false, desc: 'Auto-discovers Greenhouse & Lever pages via Google. Up to 10 jobs scored by AI.' },
-                                        { key: 'yc',        label: 'Y Combinator',  icon: Sparkles, premium: true,  desc: 'Scrapes Work at a Startup (workatastartup.com). Up to 25 jobs — AI scores & tailors your CV.' },
-                                        { key: 'wellfound', label: 'Wellfound',      icon: Sparkles, premium: true,  desc: 'Scrapes Wellfound (AngelList Talent). Up to 25 startup jobs — AI scores & tailors your CV.' },
+                                        { key: 'ats',       label: 'Auto-Finder',   icon: Link2,    premium: false, desc: 'Auto-discovers company career pages. Up to 10 roles per run.' },
+                                        { key: 'yc',        label: 'Y Combinator',  icon: Sparkles, premium: true,  desc: 'Searches Work at a Startup. Up to 25 roles, with tailored CVs.' },
+                                        { key: 'wellfound', label: 'Wellfound',      icon: Sparkles, premium: true,  desc: 'Searches Wellfound for startup roles. Up to 25 roles, with tailored CVs.' },
                                     ];
                                     const active = SOURCES.find(s => s.key === scrapeForm.source) || SOURCES[0];
                                     return (
                                         <div className="relative">
-                                            {/* Backdrop — closes dropdown when clicking outside */}
                                             {isScrapeSourceOpen && (
-                                                <div
-                                                    className="fixed inset-0 z-10"
-                                                    onClick={() => setIsScrapeSourceOpen(false)}
-                                                />
+                                                <div className="fixed inset-0 z-10" onClick={() => setIsScrapeSourceOpen(false)} />
                                             )}
-
-                                            {/* Trigger button */}
                                             <button
                                                 type="button"
                                                 onClick={() => setIsScrapeSourceOpen(p => !p)}
@@ -1008,23 +475,15 @@ const JobsPage = () => {
                                                         <p className="text-[10px] text-secondary-dark/60 mt-0.5 leading-none">{active.desc.split('.')[0]}</p>
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-1.5 shrink-0">
-                                                    <span className="text-[10px] text-secondary-dark/50 hidden sm:block">6 sources</span>
-                                                    <ChevronDown className={`w-4 h-4 text-secondary-dark transition-transform duration-200 ${isScrapeSourceOpen ? 'rotate-180' : ''}`} />
-                                                </div>
+                                                <ChevronDown className={`w-4 h-4 text-secondary-dark transition-transform duration-200 ${isScrapeSourceOpen ? 'rotate-180' : ''}`} />
                                             </button>
-
-                                            {/* Dropdown list */}
                                             {isScrapeSourceOpen && (
                                                 <div className="absolute top-full left-0 right-0 z-20 mt-1.5 bg-white border border-neutral-dark rounded-xl shadow-xl overflow-hidden">
                                                     {SOURCES.map((s, i) => (
                                                         <button
                                                             key={s.key}
                                                             type="button"
-                                                            onClick={() => {
-                                                                setScrapeForm(p => ({ ...p, source: s.key }));
-                                                                setIsScrapeSourceOpen(false);
-                                                            }}
+                                                            onClick={() => { setScrapeForm(p => ({ ...p, source: s.key })); setIsScrapeSourceOpen(false); }}
                                                             className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors ${
                                                                 i < SOURCES.length - 1 ? 'border-b border-neutral-dark/60' : ''
                                                             } ${scrapeForm.source === s.key ? 'bg-primary-light/5' : 'hover:bg-neutral'}`}
@@ -1040,9 +499,7 @@ const JobsPage = () => {
                                                                 <div className="flex items-center gap-2 flex-wrap">
                                                                     <span className={`text-xs font-bold ${scrapeForm.source === s.key ? 'text-primary-dark' : 'text-black'}`}>{s.label}</span>
                                                                     {s.premium && (
-                                                                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">
-                                                                            Premium
-                                                                        </span>
+                                                                        <span className="text-[9px] font-bold uppercase tracking-wider text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-full">Premium</span>
                                                                     )}
                                                                     {scrapeForm.source === s.key && <CheckCircle className="w-3 h-3 text-primary-light ml-auto shrink-0" />}
                                                                 </div>
@@ -1119,7 +576,7 @@ const JobsPage = () => {
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">
-                                        Jobs per location <span className="text-primary-light font-normal normal-case">({scrapeForm.count} × {scrapeForm.locations.length} location{scrapeForm.locations.length !== 1 ? 's' : ''} = up to {scrapeForm.count * scrapeForm.locations.length} total)</span>
+                                        Roles per location <span className="text-primary-light font-normal normal-case">(up to {scrapeForm.count * scrapeForm.locations.length} total)</span>
                                     </label>
                                     <input
                                         type="number" min="5" max="100"
@@ -1140,7 +597,7 @@ const JobsPage = () => {
                                         placeholder="e.g. Django developer"
                                         className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
                                     />
-                                    <p className="text-xs text-secondary-dark/60 mt-1.5">Searches Remotive, RemoteOK, Himalayas, and WeWorkRemotely simultaneously. Jobs from last 7 days.</p>
+                                    <p className="text-xs text-secondary-dark/60 mt-1.5">Searches Remotive, RemoteOK, Himalayas, and WeWorkRemotely. Roles from the last 7 days.</p>
                                 </div>
                             )}
 
@@ -1164,9 +621,7 @@ const JobsPage = () => {
                                         placeholder="e.g. Remote or New York"
                                         className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
                                     />
-                                    <p className="text-xs text-secondary-dark/60 mt-1.5">
-                                        Searches Greenhouse &amp; Lever automatically via Google. Up to 10 jobs found, scraped, and scored by AI. Daily limit: 50 jobs.
-                                    </p>
+                                    <p className="text-xs text-secondary-dark/60 mt-1.5">Auto-discovers company career pages. Up to 10 roles per run.</p>
                                 </div>
                             </>)}
 
@@ -1190,11 +645,6 @@ const JobsPage = () => {
                                         placeholder="e.g. Remote, San Francisco, New York"
                                         className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
                                     />
-                                    <p className="text-xs text-secondary-dark/60 mt-1.5">
-                                        {scrapeForm.source === 'yc'
-                                            ? 'Searches Y Combinator\'s Work at a Startup. Up to 25 jobs scored and CV-tailored by AI.'
-                                            : 'Searches Wellfound (AngelList Talent) for startup roles. Up to 25 jobs scored and CV-tailored by AI.'}
-                                    </p>
                                 </div>
                             </>)}
 
@@ -1208,7 +658,6 @@ const JobsPage = () => {
                                         placeholder="https://linkedin.com/jobs/search/?..."
                                         className="w-full p-2.5 bg-neutral border border-neutral-dark rounded-xl text-sm focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
                                     />
-                                    <p className="text-xs text-secondary-dark/60 mt-1.5">Paste any LinkedIn jobs search URL directly.</p>
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-secondary-dark uppercase tracking-wider mb-1.5">Count</label>
@@ -1228,8 +677,8 @@ const JobsPage = () => {
                                     className="w-full bg-gradient-to-r from-primary-light to-primary-dark text-white p-3 rounded-xl font-semibold shadow-md shadow-orange-100 hover:opacity-90 transition-all disabled:opacity-70 flex justify-center items-center gap-2"
                                 >
                                     {scrapeMutation.isPending
-                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Starting scrape...</>
-                                        : 'Start Scrape'}
+                                        ? <><ApplyDirLoader.Button variant="light" /> Starting…</>
+                                        : 'Start searching'}
                                 </button>
                             </div>
                         </form>
@@ -1237,226 +686,13 @@ const JobsPage = () => {
                 </div>
             )}
 
-            {/* ── Unified Details Modal (bottom-sheet mobile / centered popup desktop) ── */}
-            {selectedJob && (
-                <div
-                    className="fixed inset-0 z-[70] bg-black/50 md:flex md:justify-center"
-                    onClick={() => setSelectedJob(null)}
-                >
-                    <div
-                        className="absolute bottom-0 inset-x-0 bg-white rounded-t-3xl p-6 shadow-2xl md:relative md:bottom-auto md:inset-x-auto md:rounded-2xl md:max-w-md md:w-full md:mx-auto md:mt-20 md:h-fit"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Sheet handle (mobile only) */}
-                        <div className="w-10 h-1 rounded-full bg-neutral-dark mx-auto mb-5 md:hidden" />
-
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-3 mb-5">
-                            <div className="flex items-start gap-3 min-w-0">
-                                <div className="h-10 w-10 min-w-[2.5rem] rounded-xl bg-gradient-to-tr from-accent-teal/10 to-accent-teal/20 flex items-center justify-center border border-accent-teal/30 shadow-sm shrink-0">
-                                    <Building className="w-4 h-4 text-accent-teal" />
-                                </div>
-                                <div className="min-w-0">
-                                    <p className="font-bold text-black font-montserrat leading-tight truncate">{selectedJob.title}</p>
-                                    <p className="text-sm text-secondary-dark mt-0.5 truncate">{selectedJob.company_name}</p>
-                                    {selectedJob.location && (
-                                        <p className="flex items-center gap-1 text-xs text-secondary-dark/70 mt-0.5">
-                                            <MapPin className="w-3 h-3 shrink-0" />
-                                            <span className="truncate">{selectedJob.location}</span>
-                                        </p>
-                                    )}
-                                </div>
-                            </div>
-                            <button onClick={() => setSelectedJob(null)} className="p-1.5 text-secondary-dark hover:bg-neutral-dark rounded-lg transition-colors shrink-0">
-                                <X className="w-4 h-4" />
-                            </button>
-                        </div>
-
-                        {/* Action rows */}
-                        <div className="divide-y divide-neutral border border-neutral-dark rounded-2xl overflow-hidden">
-
-                            {/* Approve */}
-                            <button
-                                onClick={() => { handleUpdateStatus(selectedJob.id, 'approved'); setSelectedJob(null); }}
-                                disabled={updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id}
-                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-green-700 hover:bg-green-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                {updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id && updateStatusMutation.variables?.newStatus === 'approved'
-                                    ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                    : <CheckCircle className="w-5 h-5 shrink-0" />}
-                                Approve Job
-                            </button>
-
-                            {/* Reject */}
-                            <button
-                                onClick={() => { handleUpdateStatus(selectedJob.id, 'rejected'); setSelectedJob(null); }}
-                                disabled={updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id}
-                                className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                {updateStatusMutation.isPending && updateStatusMutation.variables?.id === selectedJob.id && updateStatusMutation.variables?.newStatus === 'rejected'
-                                    ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                    : <XCircle className="w-5 h-5 shrink-0" />}
-                                Reject Job
-                            </button>
-
-                            {/* Generate CV / Preview CV — approved only, gated on AI activation */}
-                            {selectedJob.status === 'approved' && (
-                                isActivated ? (<>
-                                    <button
-                                        onClick={() => { handleGenerateCv(selectedJob); setSelectedJob(null); }}
-                                        disabled={generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id}
-                                        className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-primary-dark hover:bg-primary-light/5 transition-colors disabled:opacity-60"
-                                    >
-                                        {generateCvMutation.isPending && generateCvMutation.variables?.id === selectedJob.id
-                                            ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                            : <Download className="w-5 h-5 shrink-0" />}
-                                        Generate Tailored CV
-                                    </button>
-                                    {selectedJob.has_cv && (
-                                        <button
-                                            onClick={() => { handleViewCv(selectedJob); setSelectedJob(null); }}
-                                            disabled={loadingCvPreview === selectedJob.id}
-                                            className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-violet-700 hover:bg-violet-50 transition-colors disabled:opacity-60"
-                                        >
-                                            {loadingCvPreview === selectedJob.id
-                                                ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                                : <FileText className="w-5 h-5 shrink-0" />}
-                                            Preview CV
-                                        </button>
-                                    )}
-                                </>) : (
-                                    <button
-                                        onClick={() => { setSelectedJob(null); setIsActivationDrawerOpen(true); }}
-                                        className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-primary-dark hover:bg-primary-light/5 transition-colors"
-                                    >
-                                        <Sparkles className="w-5 h-5 shrink-0 text-primary-light" />
-                                        Unlock AI Score &amp; Tailored CV
-                                    </button>
-                                )
-                            )}
-
-                            {/* Find Contact — approved + no contact */}
-                            {selectedJob.status === 'approved' && !selectedJob.has_contact && (
-                                <button
-                                    onClick={() => { findContactMutation.mutate(selectedJob.id); setSelectedJob(null); }}
-                                    disabled={findContactMutation.isPending && findContactMutation.variables === selectedJob.id}
-                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-sky-700 hover:bg-sky-50 transition-colors disabled:opacity-60"
-                                >
-                                    {findContactMutation.isPending && findContactMutation.variables === selectedJob.id
-                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                        : <UserSearch className="w-5 h-5 shrink-0" />}
-                                    Find Contact
-                                </button>
-                            )}
-
-                            {/* Track — approved + not yet tracked */}
-                            {selectedJob.status === 'approved' && !selectedJob.is_tracked && (
-                                <button
-                                    onClick={() => { handleTrackJob(selectedJob.id); setSelectedJob(null); }}
-                                    disabled={trackJobMutation.isPending && trackJobMutation.variables === selectedJob.id}
-                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-secondary-dark hover:bg-neutral transition-colors disabled:opacity-60"
-                                >
-                                    {trackJobMutation.isPending && trackJobMutation.variables === selectedJob.id
-                                        ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
-                                        : <Kanban className="w-5 h-5 shrink-0" />}
-                                    Add to Tracker
-                                </button>
-                            )}
-
-                            {/* View tracked — already tracked */}
-                            {selectedJob.is_tracked && (
-                                <button
-                                    onClick={() => { navigate('/dashboard/job-tracker'); setSelectedJob(null); }}
-                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-emerald-700 hover:bg-emerald-50 transition-colors"
-                                >
-                                    <CheckCircle className="w-5 h-5 shrink-0" />
-                                    View in Tracker
-                                </button>
-                            )}
-
-                            {/* View job post */}
-                            {selectedJob.apply_url && (
-                                <a
-                                    href={selectedJob.apply_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    onClick={() => setSelectedJob(null)}
-                                    className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-secondary-dark hover:bg-neutral transition-colors"
-                                >
-                                    <ExternalLink className="w-5 h-5 shrink-0" />
-                                    View Job Post
-                                </a>
-                            )}
-
-                            {/* Paste Description — only when no description yet */}
-                            {!selectedJob.has_description && (
-                                pasteDescOpen ? (
-                                    <div className="p-3.5 space-y-2">
-                                        <p className="text-xs font-semibold text-secondary-dark uppercase tracking-wider">Paste Job Description</p>
-                                        <textarea
-                                            autoFocus
-                                            value={pasteDescValue}
-                                            onChange={e => setPasteDescValue(e.target.value)}
-                                            placeholder="Go to the Wellfound page, copy the full job description, and paste it here..."
-                                            rows={5}
-                                            className="w-full p-2.5 text-sm border border-neutral-dark rounded-xl resize-none focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light outline-none"
-                                        />
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => saveDescMutation.mutate({ jobId: selectedJob.id, description: pasteDescValue })}
-                                                disabled={!pasteDescValue.trim() || saveDescMutation.isPending}
-                                                className="flex-1 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-xl hover:opacity-90 disabled:opacity-60"
-                                            >
-                                                {saveDescMutation.isPending ? 'Saving...' : 'Save Description'}
-                                            </button>
-                                            <button
-                                                onClick={() => { setPasteDescOpen(false); setPasteDescValue(''); }}
-                                                className="px-4 py-2 text-xs font-semibold text-secondary-dark bg-neutral rounded-xl border border-neutral-dark"
-                                            >
-                                                Cancel
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <button
-                                        onClick={() => setPasteDescOpen(true)}
-                                        className="w-full flex items-center gap-3 p-3.5 text-left font-medium text-amber-700 hover:bg-amber-50 transition-colors"
-                                    >
-                                        <FileText className="w-5 h-5 shrink-0" />
-                                        Paste Job Description
-                                    </button>
-                                )
-                            )}
-                        </div>
-
-                        {/* Cancel */}
-                        <button
-                            onClick={() => setSelectedJob(null)}
-                            className="w-full mt-3 py-3 text-sm font-semibold text-secondary-dark bg-neutral rounded-2xl border border-neutral-dark"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* CV Preview Modal */}
-            {cvModal && (
-                <TailoredCVPreview
-                    jobId={cvModal.jobId}
-                    data={cvModal.cvData}
-                    onClose={handleCloseCvModal}
-                />
-            )}
-
-            {/* AI Activation Drawer — slides in from right when user taps a locked element */}
+            {/* AI Activation Drawer — CV upload to unlock match scoring */}
             <ProfileActivationDrawer
                 isOpen={isActivationDrawerOpen}
                 onClose={() => setIsActivationDrawerOpen(false)}
             />
 
-            {/* CV-First Nudge — shown after a scrape when the user has no CV yet,
-                because nothing can be AI-scored or tailored until it's uploaded. */}
+            {/* CV-First Nudge — shown after sourcing when the user has no CV yet */}
             <AnimatePresence>
                 {showCvNudge && (
                     <motion.div
@@ -1467,14 +703,13 @@ const JobsPage = () => {
                         className="fixed right-0 bottom-8 z-50 w-80 bg-white rounded-l-2xl shadow-2xl border border-neutral-dark border-r-0 overflow-hidden"
                     >
                         <div className="h-1 bg-gradient-to-r from-primary-light to-primary-dark" />
-                        <div className="p-5 space-y-3">
+                        <div className="p-5 space-y-3 relative">
                             <button
                                 onClick={() => {
-                                    // Snooze ~2 days; re-prompts after the next scrape if still no CV.
                                     localStorage.setItem('applydirCvNudgeSnoozeUntil', String(Date.now() + 2 * 24 * 60 * 60 * 1000));
                                     setShowCvNudge(false);
                                 }}
-                                className="absolute top-3 right-3 text-secondary-dark hover:text-black transition-colors"
+                                className="absolute top-0 right-0 text-secondary-dark hover:text-black transition-colors"
                                 aria-label="Dismiss"
                             >
                                 <X className="w-4 h-4" />
@@ -1484,11 +719,11 @@ const JobsPage = () => {
                                     <Lock className="w-4 h-4 text-primary-light" />
                                 </div>
                                 <p className="text-sm font-bold text-black font-montserrat leading-tight pr-6">
-                                    Unlock AI scoring 🔓
+                                    Unlock match scoring 🔓
                                 </p>
                             </div>
                             <p className="text-xs text-secondary-dark leading-relaxed">
-                                Upload your CV once so the AI can <span className="font-semibold text-black">score these jobs and tailor a resume</span> for each one. It's also required before Auto-Scout can run.
+                                Upload your CV once so we can rank these roles by how well they fit you.
                             </p>
                             <button
                                 onClick={() => {
@@ -1505,7 +740,7 @@ const JobsPage = () => {
                 )}
             </AnimatePresence>
 
-            {/* Auto-Scout Contextual Banner */}
+            {/* Auto-Scout Contextual Nudge */}
             <AnimatePresence>
                 {showAutoScoutBanner && (
                     <motion.div
@@ -1516,14 +751,13 @@ const JobsPage = () => {
                         className="fixed right-0 bottom-8 z-50 w-80 bg-white rounded-l-2xl shadow-2xl border border-neutral-dark border-r-0 overflow-hidden"
                     >
                         <div className="h-1 bg-gradient-to-r from-primary-light to-primary-dark" />
-                        <div className="p-5 space-y-3">
+                        <div className="p-5 space-y-3 relative">
                             <button
                                 onClick={() => {
-                                    // Snooze ~3 days; it reappears after the next scrape if still inactive.
                                     localStorage.setItem('applydirAutoScoutSnoozeUntil', String(Date.now() + 3 * 24 * 60 * 60 * 1000));
                                     setShowAutoScoutBanner(false);
                                 }}
-                                className="absolute top-3 right-3 text-secondary-dark hover:text-black transition-colors"
+                                className="absolute top-0 right-0 text-secondary-dark hover:text-black transition-colors"
                                 aria-label="Dismiss"
                             >
                                 <X className="w-4 h-4" />
@@ -1533,23 +767,21 @@ const JobsPage = () => {
                                     <UserSearch className="w-4 h-4 text-primary-light" />
                                 </div>
                                 <p className="text-sm font-bold text-black font-montserrat leading-tight pr-6">
-                                    Want this done automatically? 🚀
+                                    Want this on autopilot? 🚀
                                 </p>
                             </div>
                             <p className="text-xs text-secondary-dark leading-relaxed">
-                                Activate Auto-Scout to let our system hunt, grade, and tailor resumes for up to <span className="font-semibold text-black">25 jobs every night</span> while you rest.
+                                Let your headhunter source and rank fresh roles for you every night while you rest.
                             </p>
                             <button
                                 onClick={() => {
-                                    // They're acting on it — snooze longer; if they activate, the
-                                    // banner stops on its own (it only shows when is_active is false).
                                     localStorage.setItem('applydirAutoScoutSnoozeUntil', String(Date.now() + 7 * 24 * 60 * 60 * 1000));
                                     setShowAutoScoutBanner(false);
-                                    navigate('/dashboard/auto-scout');
+                                    navigate('/dashboard/settings');
                                 }}
                                 className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold py-2.5 rounded-xl shadow-md shadow-orange-200 hover:opacity-90 transition-opacity active:scale-95"
                             >
-                                Configure Auto-Scout
+                                Turn on Auto-Scout
                             </button>
                         </div>
                     </motion.div>

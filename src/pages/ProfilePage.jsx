@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   User, MapPin, Phone, Mail, Linkedin, Github, Globe, Calendar,
-  FileText, Pencil, Loader2, ChevronDown, ChevronUp, Download,
+  FileText, Pencil, ChevronDown, ChevronUp, Download,
   Plus, X, Save, Sparkles, Upload,
 } from 'lucide-react';
+import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import { getProfile, updateProfile, uploadCV } from '../services/apiProfile';
 import api from '../api';
 
@@ -112,7 +113,7 @@ export default function ProfilePage() {
   };
 
   if (loading) {
-    return <div className="flex items-center justify-center h-64"><Loader2 className="w-8 h-8 text-primary-light animate-spin" /></div>;
+    return <div className="flex items-center justify-center h-64"><ApplyDirLoader.Inline /></div>;
   }
   if (!profile) {
     return (
@@ -166,13 +167,13 @@ export default function ProfilePage() {
               <>
                 <button onClick={() => setEditing(false)} className="px-4 py-2 text-sm font-semibold text-secondary-dark bg-neutral rounded-xl hover:bg-neutral-dark transition-all">Cancel</button>
                 <button onClick={save} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all disabled:opacity-60">
-                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Save
+                  {saving ? <ApplyDirLoader.Button variant="light" /> : <Save className="w-4 h-4" />} Save
                 </button>
               </>
             ) : (
               <>
                 <button onClick={handleDownloadPdf} disabled={downloading} className="flex items-center gap-2 px-4 py-2 bg-neutral text-secondary-dark text-sm font-semibold rounded-xl hover:bg-neutral-dark transition-all disabled:opacity-60">
-                  {downloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} PDF
+                  {downloading ? <ApplyDirLoader.Button variant="dark" /> : <Download className="w-4 h-4" />} PDF
                 </button>
                 <button onClick={startEdit} className="flex items-center gap-2 px-4 py-2 bg-primary-light/10 text-primary-dark text-sm font-semibold rounded-xl hover:bg-primary-light/20 transition-all">
                   <Pencil className="w-4 h-4" /> Edit
@@ -296,7 +297,7 @@ export default function ProfilePage() {
               <FileText className="w-4 h-4 text-secondary-dark/60" />
               <span className="text-xs text-secondary-dark">{profile.cv_raw_text.length.toLocaleString()} characters</span>
               <label htmlFor="cv-upload" className={`ml-auto flex items-center gap-1.5 text-xs font-semibold ${cvBusy ? 'text-secondary-dark/50 cursor-default' : 'text-primary-dark hover:text-primary-light cursor-pointer'}`}>
-                {cvBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />} {cvBusy ? 'Processing…' : 'Replace CV'}
+                {cvBusy ? <ApplyDirLoader.Button variant="dark" /> : <Upload className="w-3.5 h-3.5" />} {cvBusy ? 'Processing…' : 'Replace CV'}
               </label>
               <button onClick={() => setCvExpanded(v => !v)} className="flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors">
                 {cvExpanded ? <><ChevronUp className="w-3.5 h-3.5" /> Collapse</> : <><ChevronDown className="w-3.5 h-3.5" /> Expand</>}
@@ -309,7 +310,7 @@ export default function ProfilePage() {
         ) : (
           <label htmlFor="cv-upload" className={`block ${cvBusy ? 'cursor-default' : 'cursor-pointer'}`}>
             <div className="border-2 border-dashed border-neutral-dark rounded-xl py-10 text-center hover:border-primary-light/50 transition-all">
-              {cvBusy ? <Loader2 className="w-6 h-6 mx-auto animate-spin text-primary-light" /> : <Upload className="w-6 h-6 mx-auto text-secondary-dark/40" />}
+              {cvBusy ? <ApplyDirLoader.Inline size="sm" /> : <Upload className="w-6 h-6 mx-auto text-secondary-dark/40" />}
               <p className="text-sm font-semibold text-black mt-2">{cvBusy ? 'Processing your CV…' : 'Upload your CV (PDF)'}</p>
               <p className="text-xs text-secondary-dark mt-0.5">We extract your skills & project highlights automatically.</p>
             </div>

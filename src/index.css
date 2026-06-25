@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Roboto:ital,wght@0,100..900;1,100..900&display=swap');
-
+/* Fonts are loaded via <link> in index.html (Montserrat + Roboto). */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

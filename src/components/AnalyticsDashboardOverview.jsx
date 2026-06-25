@@ -1,6 +1,7 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Send, MailOpen, MessageSquare, Users, Loader2 } from 'lucide-react';
+import { Send, MailOpen, MessageSquare, Users } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import ReactECharts from 'echarts-for-react';
 import { getAnalytics } from '../services/apiAnalytics';
 
@@ -13,8 +14,8 @@ const AnalyticsDashboardOverview = () => {
 
   if (loading) {
     return (
-      <section className="mb-8 flex items-center justify-center py-16">
-        <Loader2 className="w-6 h-6 animate-spin text-primary-light" />
+      <section className="mb-8">
+        <ApplyDirLoader.Inline />
       </section>
     );
   }

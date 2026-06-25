@@ -1,237 +1,93 @@
-import { useState, useEffect, useRef } from 'react';
-import { Link, NavLink, useLocation } from 'react-router-dom';
+import { Link, NavLink } from 'react-router-dom';
 import {
   Rocket,
-  LayoutDashboard,
-  Mail,
+  Home,
   Briefcase,
-  BarChart,
-  Flame,
+  Mail,
+  BarChart3,
   Settings,
-  User,
-  UserCircle,
+  Flame,
   Plus,
-  MoreHorizontal,
-  Send,
-  ListChecks,
+  User,
   X,
-  Target,
   PanelLeft,
   PanelLeftClose,
-  ChevronDown,
 } from 'lucide-react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { getGmailAccounts } from '@/services/apiGmail';
+import { getInboxStats } from '@/services/apiInboxes';
 
-const NAV_GROUPS = [
-  {
-    label: 'Main',
-    items: [
-      {
-        name: 'Dashboard',
-        icon: LayoutDashboard,
-        path: '/dashboard',
-        tooltip: 'Overview of your pipeline — jobs scraped, emails sent, and activity stats',
-      },
-      {
-        name: 'Jobs & Outreach',
-        icon: Briefcase,
-        id: 'jobs-outreach',
-        tooltip: 'Scrape jobs, review AI scores, and send cold emails to hiring managers',
-        children: [
-          { name: 'Jobs',        icon: Briefcase,  path: '/dashboard/jobs',        tooltip: 'Scrape and browse AI-scored job opportunities' },
-          { name: 'Job Tracker', icon: ListChecks, path: '/dashboard/job-tracker', tooltip: 'Track the status of jobs you have applied to' },
-          { name: 'Outreach',    icon: Send,       path: '/dashboard/outreach',    tooltip: 'Draft, approve, and send cold emails to hiring contacts' },
-        ],
-      },
-    ],
-  },
-  {
-    label: 'Tools',
-    items: [
-      { name: 'Inboxes',        icon: Mail,    path: '/dashboard/inboxes',   tooltip: 'Connect and manage the Gmail accounts used for sending emails' },
-      { name: 'Analytics',      icon: BarChart, path: '/dashboard/analytics', tooltip: 'See open rates, reply rates, and outreach performance over time' },
-      { name: 'Warmup Manager', icon: Flame,   path: '/dashboard/warmup',    tooltip: 'Warm up your Gmail inbox to improve email deliverability' },
-    ],
-  },
-  {
-    label: 'Account',
-    items: [
-      {
-        name: 'Account',
-        icon: UserCircle,
-        id: 'account',
-        tooltip: 'Manage your profile, preferences, and automated job scout settings',
-        children: [
-          { name: 'Profile',    icon: UserCircle, path: '/dashboard/profile',    tooltip: 'Upload your CV and fill in your skills so the AI can tailor applications' },
-          { name: 'Settings',   icon: Settings,   path: '/dashboard/settings',   tooltip: 'Change password, notification preferences, and account options' },
-          { name: 'Auto-Scout', icon: Target,     path: '/dashboard/auto-scout', tooltip: 'Configure the nightly job scout — target roles, locations, and scoring rules' },
-        ],
-      },
-    ],
-  },
+// The 4-item product navigation. Settings is the gear pinned at the very
+// bottom; the live Connected Inboxes status sits just above it.
+// See ARCHITECTURE.md §1.
+const NAV = [
+  { name: 'Home',          icon: Home,       path: '/dashboard' },
+  { name: 'Opportunities', icon: Briefcase,  path: '/dashboard/opportunities' },
+  { name: 'Introductions', icon: Mail,       path: '/dashboard/introductions' },
+  { name: 'Progress',      icon: BarChart3,  path: '/dashboard/progress' },
 ];
+
+// Settings → Connected Emails is where inbox/warmup management lives. That
+// sub-section is built in a later phase; for now everything points at Settings.
+const CONNECTED_EMAILS_PATH = '/dashboard/settings';
+
+// Map the inbox-stats status enum to the sidebar's display.
+function inboxStatus(acc) {
+  if (acc.status === 'Warming') {
+    const day = acc.warmup?.days_running;
+    return {
+      label: day ? `Warming Day ${day}` : 'Warming',
+      cls: 'text-amber-600',
+      icon: 'flame',
+    };
+  }
+  if (acc.status === 'Paused') {
+    return { label: 'Issue', cls: 'text-red-600', dot: 'bg-red-500' };
+  }
+  return { label: 'LIVE', cls: 'text-emerald-600', dot: 'bg-emerald-500' };
+}
 
 const Sidebar = ({ isOpen, onClose }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [openDropdown, setOpenDropdown] = useState(null);
-  const location = useLocation();
-  const navRef = useRef(null);
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['gmailAccounts'],
-    queryFn: getGmailAccounts,
+  const { data: inboxData, isLoading: inboxLoading } = useQuery({
+    queryKey: ['inboxStats'],
+    queryFn: getInboxStats,
+    staleTime: 60 * 1000,
   });
 
-  const accounts = data?.results ?? [];
+  // Priority: warming-up inboxes first (need attention), then most sends today.
+  const allInboxes = inboxData?.accounts ?? [];
+  const sortedInboxes = [...allInboxes].sort((a, b) => {
+    const aWarming = a.status === 'Warming' ? 0 : 1;
+    const bWarming = b.status === 'Warming' ? 0 : 1;
+    if (aWarming !== bWarming) return aWarming - bWarming;
+    return (b.sent_today ?? 0) - (a.sent_today ?? 0);
+  });
+  const shownInboxes = sortedInboxes.slice(0, 2);
+  const totalInboxes = sortedInboxes.length;
 
-  const toggleDropdown = (id) => {
-    setOpenDropdown(prev => (prev === id ? null : id));
-  };
-
-  useEffect(() => {
-    if (!openDropdown) return;
-    const handler = (e) => {
-      if (navRef.current && !navRef.current.contains(e.target)) {
-        setOpenDropdown(null);
-      }
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [openDropdown]);
-
-  useEffect(() => { setOpenDropdown(null); }, [location.pathname]);
-  useEffect(() => { setOpenDropdown(null); }, [isCollapsed]);
-
-  const isChildActive = (children) =>
-    children.some(child =>
-      location.pathname === child.path || location.pathname.startsWith(child.path + '/')
-    );
-
-  const renderNavItem = (item) => {
-    if (item.children) {
-      const childActive = isChildActive(item.children);
-      const dropdownOpen = openDropdown === item.id;
-
-      return (
-        <li key={item.name} className="relative">
-          <button
-            onClick={() => toggleDropdown(item.id)}
-            className={[
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-xl',
-              'transition-all duration-200 border border-transparent',
-              isCollapsed ? 'md:justify-center md:px-2' : '',
-              childActive || dropdownOpen
-                ? 'bg-primary-light/10 text-primary-dark font-semibold border-primary-light/20 shadow-sm'
-                : 'text-secondary-dark hover:bg-neutral hover:text-black-light',
-            ].join(' ')}
-            title={isCollapsed ? item.name : item.tooltip}
-          >
-            <item.icon className="w-4 h-4 shrink-0 stroke-[1.75px]" />
-            <span className={`text-sm flex-1 text-left ${isCollapsed ? 'md:hidden' : ''}`}>
-              {item.name}
-            </span>
-            <ChevronDown className={[
-              'w-3.5 h-3.5 shrink-0 transition-transform duration-200',
-              dropdownOpen ? 'rotate-180' : '',
-              isCollapsed ? 'md:hidden' : '',
-            ].join(' ')} />
-          </button>
-
-          {/* Mobile: inline accordion — never shown on desktop */}
-          <div className={[
-            'md:hidden overflow-hidden transition-all duration-300 ease-in-out',
-            dropdownOpen ? 'max-h-48 opacity-100' : 'max-h-0 opacity-0',
-          ].join(' ')}>
-            <ul className="mt-0.5 ml-3 space-y-0.5 border-l border-neutral-dark pl-3">
-              {item.children.map(child => (
-                <NavLink
-                  key={child.name}
-                  to={child.path}
-                  end={child.path === '/dashboard'}
-                  onClick={() => { onClose(); setOpenDropdown(null); }}
-                  title={child.tooltip}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2 rounded-xl transition-all duration-200 border border-transparent ${
-                      isActive
-                        ? 'bg-primary-light/10 text-primary-dark font-semibold border-primary-light/20 shadow-sm'
-                        : 'text-secondary-dark hover:bg-neutral hover:text-black-light'
-                    }`
-                  }
-                >
-                  <child.icon className="w-3.5 h-3.5 shrink-0 stroke-[1.75px]" />
-                  <span className="text-sm">{child.name}</span>
-                </NavLink>
-              ))}
-            </ul>
-          </div>
-
-          {/* Desktop: floating absolute card — never shown on mobile */}
-          {dropdownOpen && (
-            <div className="hidden md:block absolute left-full ml-2 top-0 bg-white shadow-lg border border-neutral-dark rounded-xl p-2 min-w-[160px] z-[70]">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-secondary-dark/50 px-2.5 pt-1.5 pb-1 font-montserrat">
-                {item.name}
-              </p>
-              {item.children.map(child => (
-                <NavLink
-                  key={child.name}
-                  to={child.path}
-                  end={child.path === '/dashboard'}
-                  onClick={() => setOpenDropdown(null)}
-                  title={child.tooltip}
-                  className={({ isActive }) =>
-                    `flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-all duration-150 ${
-                      isActive
-                        ? 'bg-primary-light/10 text-primary-dark font-semibold'
-                        : 'text-secondary-dark hover:bg-neutral hover:text-black-light'
-                    }`
-                  }
-                >
-                  <child.icon className="w-3.5 h-3.5 shrink-0 stroke-[1.75px]" />
-                  <span className="text-sm">{child.name}</span>
-                </NavLink>
-              ))}
-            </div>
-          )}
-        </li>
-      );
-    }
-
-    return (
-      <NavLink
-        key={item.name}
-        to={item.path}
-        end={item.path === '/dashboard'}
-        onClick={onClose}
-        className={({ isActive }) =>
-          [
-            'flex items-center gap-3 px-3 py-2.5 rounded-xl',
-            'transition-all duration-200 border border-transparent',
-            isCollapsed ? 'md:justify-center md:px-2' : '',
-            isActive
-              ? 'bg-primary-light/10 text-primary-dark font-semibold border-primary-light/20 shadow-sm'
-              : 'text-secondary-dark hover:bg-neutral hover:text-black-light',
-          ].join(' ')
-        }
-        title={isCollapsed ? item.name : item.tooltip}
-      >
-        <item.icon className="w-4 h-4 shrink-0 stroke-[1.75px]" />
-        <span className={`text-sm ${isCollapsed ? 'md:hidden' : ''}`}>{item.name}</span>
-      </NavLink>
-    );
-  };
+  const itemClasses = (isActive) =>
+    [
+      'flex items-center gap-3 px-3 py-2.5 rounded-xl',
+      'transition-all duration-200 border border-transparent',
+      isCollapsed ? 'md:justify-center md:px-2' : '',
+      isActive
+        ? 'bg-primary-light/10 text-primary-dark font-semibold border-primary-light/20 shadow-sm'
+        : 'text-secondary-dark hover:bg-neutral hover:text-black-light',
+    ].join(' ');
 
   return (
     <aside
       className={[
         'bg-white border-r border-neutral-dark h-screen flex flex-col py-5',
         'shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto',
-        // Mobile: fixed drawer, slide in/out — PRESERVED unchanged
+        // Mobile: fixed drawer, slide in/out
         'fixed inset-y-0 left-0 z-[60] w-[85vw] max-w-xs px-4',
         'overflow-y-auto',
         'transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : '-translate-x-full',
-        // Desktop: static sidebar; overflow-visible lets the floating dropdown escape
+        // Desktop: static sidebar
         'md:relative md:z-40 md:translate-x-0 md:overflow-visible',
         'md:transition-[width] md:duration-300 md:ease-in-out',
         isCollapsed ? 'md:w-20 md:px-2' : 'md:w-64 md:px-4',
@@ -243,8 +99,6 @@ const Sidebar = ({ isOpen, onClose }) => {
         'flex items-center w-full px-1 justify-between',
         isCollapsed ? 'md:justify-center' : '',
       ].join(' ')}>
-
-        {/* Brand logo + text — hidden on desktop when collapsed */}
         <div className={`flex items-center gap-2.5 ${isCollapsed ? 'md:hidden' : ''}`}>
           <div className="bg-gradient-to-br from-primary-light to-primary-dark p-2 rounded-xl shadow-lg shadow-primary-light/30 shrink-0">
             <Rocket className="text-white w-5 h-5" />
@@ -254,20 +108,15 @@ const Sidebar = ({ isOpen, onClose }) => {
           </h2>
         </div>
 
-        {/* Desktop collapse toggle — hidden on mobile */}
         <button
           onClick={() => setIsCollapsed(prev => !prev)}
           className="hidden md:flex p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
           title="Toggle Sidebar"
           aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         >
-          {isCollapsed
-            ? <PanelLeft className="w-4 h-4" />
-            : <PanelLeftClose className="w-4 h-4" />
-          }
+          {isCollapsed ? <PanelLeft className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
         </button>
 
-        {/* Mobile drawer close — hidden on desktop */}
         <button
           onClick={onClose}
           className="md:hidden p-1.5 rounded-lg text-secondary-dark hover:bg-neutral hover:text-black-light transition-colors"
@@ -277,79 +126,87 @@ const Sidebar = ({ isOpen, onClose }) => {
         </button>
       </div>
 
-      {/* ── Nav — flex-1 fills all space between header and bottom ── */}
-      <nav ref={navRef} className="flex-1 flex flex-col gap-2 mt-4">
-        {NAV_GROUPS.map((group) => (
-          <div key={group.label}>
-            {isCollapsed ? (
-              <div className="hidden md:block h-px bg-neutral-dark mx-1 mt-6 mb-2" />
-            ) : (
-              <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-dark/60 px-3 mt-6 mb-2 font-montserrat">
-                {group.label}
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              {group.items.map(renderNavItem)}
-            </ul>
-          </div>
-        ))}
+      {/* ── MAIN nav — the 4 product items ──────────────────────── */}
+      <nav className="flex-1 mt-6">
+        {isCollapsed ? (
+          <div className="hidden md:block h-px bg-neutral-dark mx-1 mb-2" />
+        ) : (
+          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-dark/60 px-3 mb-2 font-montserrat">
+            Main
+          </p>
+        )}
+        <ul className="space-y-1">
+          {NAV.map((item) => (
+            <li key={item.name}>
+              <NavLink
+                to={item.path}
+                end={item.path === '/dashboard'}
+                onClick={onClose}
+                className={({ isActive }) => itemClasses(isActive)}
+                title={isCollapsed ? item.name : undefined}
+              >
+                <item.icon className="w-4 h-4 shrink-0 stroke-[1.75px]" />
+                <span className={`text-sm ${isCollapsed ? 'md:hidden' : ''}`}>{item.name}</span>
+              </NavLink>
+            </li>
+          ))}
+        </ul>
       </nav>
 
-      {/* ── Bottom section — mt-auto pins it to the foot of the sidebar ── */}
+      {/* ── Bottom: Connected Inboxes + Settings gear ───────────── */}
       <div className="mt-auto">
 
-        {/* Connected Inboxes — full view when expanded */}
-        <div className={`pt-4 border-t border-neutral-dark mt-3 ${isCollapsed ? 'md:hidden' : ''}`}>
-          <div className="flex items-center justify-between px-1 mb-2">
-            <h3 className="text-[10px] font-bold text-secondary-dark/60 uppercase tracking-widest font-montserrat">
-              Connected Inboxes
-            </h3>
-            <div className="w-2 h-2 rounded-full bg-primary-light animate-pulse shadow-[0_0_8px_rgba(255,91,46,0.6)]" />
-          </div>
+        {/* CONNECTED INBOXES — full status display when expanded */}
+        <div className={`pt-4 border-t border-neutral-dark ${isCollapsed ? 'md:hidden' : ''}`}>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary-dark/60 px-1 mb-2 font-montserrat">
+            Connected Inboxes
+          </p>
 
-          <ul className="space-y-2 mb-2">
-            {isLoading ? (
-              <li className="text-center text-xs text-secondary-dark/60 animate-pulse py-2">Fetching accounts...</li>
-            ) : isError ? (
-              <li className="text-center text-xs text-red-500 bg-red-50 p-2 rounded-lg">{error.message}</li>
-            ) : accounts.length > 0 ? (
-              accounts.slice(0, 3).map((account) => (
-                <li
-                  key={account.id}
-                  className="group flex items-center justify-between bg-white border border-neutral-dark rounded-xl p-2 shadow-sm hover:shadow-md hover:border-primary-light/30 transition-all duration-200 cursor-pointer"
-                >
-                  <div className="flex items-center overflow-hidden">
-                    <div className="w-7 h-7 min-w-7 rounded-full bg-gradient-to-tr from-neutral to-neutral-dark border border-neutral-dark flex items-center justify-center text-secondary-dark/60 mr-2.5 group-hover:text-primary-light group-hover:border-primary-light/20 transition-colors">
-                      <User className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="truncate">
-                      <p className="text-xs font-semibold text-black-light truncate">{account.email}</p>
-                      <div className="flex items-center mt-0.5 gap-1">
-                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                          account.is_active
-                            ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]'
-                            : 'bg-amber-400 shadow-[0_0_6px_rgba(245,158,11,0.5)]'
-                        }`} />
-                        <span className="text-[10px] uppercase font-bold tracking-wider text-secondary-dark/60">
-                          {account.is_active ? 'Live' : 'Warming'}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                  <button className="text-secondary-dark/40 hover:text-secondary-dark transition-colors shrink-0">
-                    <MoreHorizontal className="w-3.5 h-3.5" />
-                  </button>
-                </li>
-              ))
+          <ul className="space-y-1 mb-1.5">
+            {inboxLoading ? (
+              <li className="text-xs text-secondary-dark/60 animate-pulse px-1 py-1.5">Loading…</li>
+            ) : shownInboxes.length === 0 ? (
+              <li className="text-xs text-secondary-dark px-1 py-1.5">No inboxes connected</li>
             ) : (
-              <li className="text-center text-xs text-secondary-dark bg-neutral rounded-xl p-3 border border-dashed border-neutral-dark">
-                No accounts linked
-              </li>
+              shownInboxes.map((acc) => {
+                const s = inboxStatus(acc);
+                return (
+                  <li key={acc.id}>
+                    <Link
+                      to={CONNECTED_EMAILS_PATH}
+                      onClick={onClose}
+                      title={`${acc.email} — ${s.label}`}
+                      className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-neutral transition-colors"
+                    >
+                      <span className="w-5 h-5 rounded-full bg-neutral border border-neutral-dark flex items-center justify-center shrink-0 text-secondary-dark/60 group-hover:text-primary-light">
+                        <User className="w-3 h-3" />
+                      </span>
+                      <span className="text-xs font-medium text-black-light truncate flex-1 min-w-0">{acc.email}</span>
+                      {s.icon === 'flame' ? (
+                        <Flame className="w-3 h-3 text-amber-500 shrink-0" />
+                      ) : (
+                        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${s.dot}`} />
+                      )}
+                      <span className={`text-[10px] font-bold uppercase tracking-wide shrink-0 ${s.cls}`}>{s.label}</span>
+                    </Link>
+                  </li>
+                );
+              })
             )}
           </ul>
 
+          {totalInboxes > 2 && (
+            <Link
+              to={CONNECTED_EMAILS_PATH}
+              onClick={onClose}
+              className="block px-2 mb-1.5 text-[11px] font-semibold text-primary-dark hover:text-primary-light transition-colors"
+            >
+              View all ({totalInboxes})
+            </Link>
+          )}
+
           <Link
-            to="/dashboard/inboxes"
+            to={CONNECTED_EMAILS_PATH}
             onClick={onClose}
             className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
           >
@@ -358,17 +215,29 @@ const Sidebar = ({ isOpen, onClose }) => {
           </Link>
         </div>
 
-        {/* Connected Inboxes — icon-only when collapsed on desktop */}
-        <div className={`pt-4 border-t border-neutral-dark mt-3 flex-col items-center gap-3 ${isCollapsed ? 'hidden md:flex' : 'hidden'}`}>
-          <div className="w-2 h-2 rounded-full bg-primary-light animate-pulse shadow-[0_0_8px_rgba(255,91,46,0.6)]" />
+        {/* CONNECTED INBOXES — icon-only Add when collapsed on desktop */}
+        <div className={`pt-4 border-t border-neutral-dark flex-col items-center ${isCollapsed ? 'hidden md:flex' : 'hidden'}`}>
           <Link
-            to="/dashboard/inboxes"
+            to={CONNECTED_EMAILS_PATH}
             onClick={onClose}
             title="Add Gmail"
             className="flex items-center justify-center w-9 h-9 rounded-xl border-2 border-dashed border-neutral-dark text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
           </Link>
+        </div>
+
+        {/* Settings gear — the very bottom */}
+        <div className="pt-3 mt-3 border-t border-neutral-dark">
+          <NavLink
+            to="/dashboard/settings"
+            onClick={onClose}
+            className={({ isActive }) => itemClasses(isActive)}
+            title={isCollapsed ? 'Settings' : undefined}
+          >
+            <Settings className="w-4 h-4 shrink-0 stroke-[1.75px]" />
+            <span className={`text-sm ${isCollapsed ? 'md:hidden' : ''}`}>Settings</span>
+          </NavLink>
         </div>
 
       </div>

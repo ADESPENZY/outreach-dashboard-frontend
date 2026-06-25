@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import {
   Shield, Mail, ChevronRight, ChevronLeft, X, ExternalLink,
-  Lock, Rocket, AlertTriangle, Loader2, Zap, Globe, Inbox,
+  Lock, Rocket, AlertTriangle, Zap, Globe, Inbox,
 } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 
 const STEPS = ['Your Mission', 'Connect Gmail', 'Protect Your Domain'];
 
@@ -334,7 +335,7 @@ export default function OnboardingModal({ onClose, onComplete }) {
                   style={{ background: 'linear-gradient(135deg, #059669 0%, #10b981 100%)' }}
                 >
                   {submitting ? (
-                    <Loader2 className="w-5 h-5 animate-spin text-white" />
+                    <ApplyDirLoader.Button variant="light" />
                   ) : (
                     <Shield className="w-5 h-5 text-white" />
                   )}

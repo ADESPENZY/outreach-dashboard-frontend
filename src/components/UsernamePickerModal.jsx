@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { AtSign, Loader2, CheckCircle } from 'lucide-react';
+import { AtSign, CheckCircle } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { toast } from 'react-toastify';
 import { setUsername } from '../services/apiAuth';
 import { useAuth } from '../context/AuthContext';
@@ -119,7 +120,7 @@ export default function UsernamePickerModal({ onDone }) {
               className="w-full h-11 rounded-xl text-white font-montserrat font-semibold text-sm flex items-center justify-center gap-2 disabled:opacity-60 transition-all"
               style={{ background: 'linear-gradient(135deg, #B82E07 0%, #FF5B2E 100%)' }}
             >
-              {loading ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : 'Set Username'}
+              {loading ? <><ApplyDirLoader.Button variant="light" /> Saving…</> : 'Set Username'}
             </motion.button>
           </form>
         </div>

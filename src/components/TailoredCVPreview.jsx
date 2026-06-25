@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { X, Download, Loader2, LayoutTemplate, AlignLeft } from 'lucide-react';
+import { X, Download, LayoutTemplate, AlignLeft } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getJobCV } from '../services/apiOutreach';
 import { toast } from 'react-toastify';
 import ModernCVTemplate from './ModernCVTemplate';
@@ -93,7 +94,7 @@ export default function TailoredCVPreview({ jobId, data, onClose }) {
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-primary-dark to-primary-light text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60"
             >
               {downloading
-                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ? <ApplyDirLoader.Button variant="light" />
                 : <Download className="w-3.5 h-3.5" />
               }
               Download PDF

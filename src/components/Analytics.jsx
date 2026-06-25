@@ -3,9 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import {
   ArrowUp, ArrowDown, Send, Mail, MailOpen, MessageSquare,
-  AlertCircle, FileText, Users, Briefcase, Loader2, RefreshCw
+  AlertCircle, FileText, Users, Briefcase, RefreshCw
 } from 'lucide-react';
 import ReactECharts from 'echarts-for-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getAnalytics } from '../services/apiAnalytics';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -61,8 +62,7 @@ const Analytics = () => {
   if (loading) {
     return (
       <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 flex flex-col items-center justify-center min-h-[60vh] font-roboto">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-light mb-3" />
-        <p className="text-sm text-secondary-dark/60 animate-pulse">Loading analytics...</p>
+        <ApplyDirLoader.Inline message="Loading analytics..." />
       </main>
     );
   }

@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   Mail, Send, MailOpen, MessageSquare, ChevronDown, ChevronUp,
-  Search, Pause, Play, RefreshCw, Loader2, AlertCircle, Users, Plus, Trash2,
+  Search, Pause, Play, RefreshCw, AlertCircle, Users, Plus, Trash2,
 } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getInboxStats } from '../services/apiInboxes';
 import { toggleGmailAccount, createGmailAccount, deleteGmailAccount } from '../services/apiGmail';
 import OnboardingModal from './OnboardingModal';
@@ -117,7 +118,7 @@ const Inboxes = () => {
   if (loading) {
     return (
       <main className="w-full max-w-[1600px] mx-auto p-4 md:p-8 flex items-center justify-center min-h-[60vh] font-roboto">
-        <Loader2 className="w-8 h-8 animate-spin text-primary-light" />
+        <ApplyDirLoader.Inline />
       </main>
     );
   }
@@ -141,7 +142,7 @@ const Inboxes = () => {
             disabled={isFetching}
             className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm hover:bg-neutral transition-all disabled:opacity-50"
           >
-            <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+            {isFetching ? <ApplyDirLoader.Button variant="dark" /> : <RefreshCw className="w-4 h-4" />}
             Refresh
           </button>
           <button
@@ -283,7 +284,7 @@ const Inboxes = () => {
                               className="w-8 h-8 flex items-center justify-center rounded-full text-secondary-dark hover:bg-neutral-dark disabled:opacity-50 transition-colors"
                             >
                               {toggleMutation.isPending && toggleMutation.variables === account.id
-                                ? <Loader2 className="w-4 h-4 animate-spin" />
+                                ? <ApplyDirLoader.Button variant="dark" />
                                 : account.is_active
                                   ? <Pause className="w-4 h-4" />
                                   : <Play className="w-4 h-4" />}

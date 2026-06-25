@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, Sparkles, Upload, FileText, Loader2, ShieldCheck,
+  X, Sparkles, Upload, FileText, ShieldCheck,
 } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { getProfile, createProfile, updateProfile, uploadCV } from '../services/apiProfile';
@@ -237,7 +238,7 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
                       {/* Uploading indicator */}
                       {cvUploading && (
                         <span className="flex items-center gap-1.5 text-xs font-medium text-primary-light shrink-0">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Uploading…
+                          <ApplyDirLoader.Button variant="dark" /> Uploading…
                         </span>
                       )}
 
@@ -249,7 +250,7 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
                       {/* AI reading indicator */}
                       {cvExtracting && !cvUploading && (
                         <span className="flex items-center gap-1.5 text-xs font-medium text-primary-light shrink-0">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> AI reading…
+                          <ApplyDirLoader.Button variant="dark" /> AI reading…
                         </span>
                       )}
 
@@ -307,7 +308,7 @@ export default function ProfileActivationDrawer({ isOpen, onClose }) {
               {cvExtracting && (
                 <div className="px-6 pb-5">
                   <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-primary-light/5 border border-primary-light/15 text-xs text-primary-dark font-medium">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                    <ApplyDirLoader.Button variant="dark" />
                     AI is computing your job match scores — this window will close automatically.
                   </div>
                 </div>

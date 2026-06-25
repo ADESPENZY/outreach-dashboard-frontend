@@ -1,184 +1,213 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Rocket, Target, Lock, Zap, ArrowRight, X } from 'lucide-react';
+import { Sparkles, MailOpen, Send, Briefcase, ArrowRight } from 'lucide-react';
+import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { useAuth } from '../context/AuthContext';
 import { getScrapedJobs } from '../services/apiJobs';
-import InboxOverview from './InboxOverview';
-import AnalyticsDashboardOverview from './AnalyticsDashboardOverview';
-import SetupChecklist from './SetupChecklist';
-import PipelineStepper from './PipelineStepper';
+import { getAnalytics } from '../services/apiAnalytics';
+import { getDraftEmails } from '../services/apiOutreach';
+import { getProfile } from '../services/apiProfile';
+import ActivationFlow from './onboarding/ActivationFlow';
 
-const BULLETS = [
-  { Icon: Target, text: 'Every role is AI-scored against your CV' },
-  { Icon: Zap,    text: 'Scrape one source at a time — LinkedIn, a remote board, an ATS, or any URL' },
-  { Icon: Lock,   text: 'Outreach sends from your own inbox for the best deliverability' },
-];
+// The Home page is the returning user's daily briefing. It answers:
+// "What happened while I was away? What do I do now?"
+// It reshapes existing data (jobs, analytics, drafts, profile) into a calm,
+// jargon-free briefing — no scrape/queue/fit-score language reaches the user.
+
+function greetingForNow() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
-  const tourKey = `applydirTourDone_${currentUser?.id ?? currentUser?.username ?? 'anon'}`;
+  const firstName = currentUser?.first_name || currentUser?.username || 'there';
+
+  // ── Data layer (unchanged pattern: react-query + existing services) ──────
+  const { data: profile, isLoading: profileLoading } = useQuery({
+    queryKey: ['profile'],
+    queryFn: getProfile,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const { data: jobs = [], isLoading: jobsLoading } = useQuery({
     queryKey: ['jobs'],
     queryFn: getScrapedJobs,
   });
 
-  const [showModal, setShowModal] = useState(false);
+  // This-week metrics: analytics windowed to 7 days. pipeline inside the
+  // payload is not windowed, so it stays correct regardless.
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
+    queryKey: ['analytics', 7],
+    queryFn: () => getAnalytics(7),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  useEffect(() => {
-    if (currentUser && !jobsLoading && jobs.length === 0 && localStorage.getItem(tourKey) !== 'true') {
-      setShowModal(true);
-    }
-  }, [currentUser, jobsLoading, jobs.length, tourKey]);
+  const { data: drafts } = useQuery({
+    queryKey: ['draftEmails'],
+    queryFn: getDraftEmails,
+    staleTime: 5 * 60 * 1000,
+  });
 
-  const dismissModal = () => {
-    localStorage.setItem(tourKey, 'true');
-    setShowModal(false);
-  };
+  const loading = profileLoading || jobsLoading || analyticsLoading;
 
-  const handleLaunchScraper = () => {
-    setShowModal(false);
-    navigate('/dashboard/jobs?tour=1');
-  };
+  // ── Page-level loader (mandatory — never a blank screen) ─────────────────
+  if (loading) {
+    return (
+      <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto">
+        <ApplyDirLoader.Inline message="Loading your progress..." />
+      </div>
+    );
+  }
 
-  const firstName = currentUser?.first_name || currentUser?.username || 'there';
+  const cvUploaded = !!profile?.cv_raw_text;
+  const summary  = analytics?.summary  || {};
+  const pipeline = analytics?.pipeline || {};
+
+  // ── ONBOARDING: no CV yet — run the 4-step Calibration flow ──────────────
+  // ActivationFlow invalidates the ['profile'] query on completion, which
+  // re-renders this page out of onboarding.
+  if (!cvUploaded) {
+    return <ActivationFlow profile={profile} />;
+  }
+
+  // ── Derived briefing data ────────────────────────────────────────────────
+  // New roles = freshly sourced jobs the user hasn't reviewed yet.
+  const newOppsCount = jobs.filter((j) => j.status === 'scraped').length;
+
+  const draftList  = Array.isArray(drafts) ? drafts : [];
+  const draftCount = draftList.length || (summary.total_drafts || 0);
+
+  const nothingToDo = newOppsCount === 0 && draftCount === 0;
+
+  // ── Mini-stats (this week) ───────────────────────────────────────────────
+  const fmt = (v) => (v === null || v === undefined ? '—' : v);
+  const stats = [
+    { label: 'Introductions Sent',  value: fmt(summary.total_sent),    Icon: Send,      color: 'bg-blue-50 text-blue-500' },
+    { label: 'Opened',              value: fmt(summary.total_opened),  Icon: MailOpen,  color: 'bg-purple-50 text-purple-500' },
+    { label: 'Active Opportunities', value: fmt(pipeline.approved_jobs), Icon: Briefcase, color: 'bg-amber-50 text-amber-500' },
+  ];
+
+  const cardBase =
+    'bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-5 flex flex-col';
+  const cardBtn =
+    'mt-4 self-start inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all';
 
   return (
     <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-8 animate-fade-in font-roboto">
 
-      {/* Whole-journey map — where the user is across the 5 stages */}
-      <PipelineStepper />
+      {/* 1 ── Greeting ─────────────────────────────────────────────────── */}
+      <header className="space-y-1">
+        <h1 className="text-2xl md:text-3xl font-bold font-montserrat text-black-light">
+          {greetingForNow()}, {firstName}
+        </h1>
+        <p className="text-sm md:text-base text-secondary-dark">
+          Here is your opportunity pipeline.
+        </p>
+      </header>
 
-      {/* Compact setup card — sits top-right, shrinks as steps complete, vanishes when done */}
-      <div className="flex justify-end -mb-4">
-        <SetupChecklist />
-      </div>
+      {/* 2 ── Briefing cards (1–3, conditional) ────────────────────────── */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-      <InboxOverview />
-      <AnalyticsDashboardOverview />
-
-      {/* ── Welcome Modal ── */}
-      <AnimatePresence>
-        {showModal && (
-          <motion.div
-            key="welcome-overlay"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.22 }}
-            className="fixed inset-0 z-50 flex items-center justify-center px-4"
-            style={{ background: 'rgba(0,0,0,0.78)', backdropFilter: 'blur(8px)' }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 28, scale: 0.94 }}
-              animate={{ opacity: 1, y: 0,  scale: 1    }}
-              exit={{    opacity: 0, y: 28, scale: 0.94 }}
-              transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
-              className="relative w-full max-w-md overflow-hidden rounded-2xl border border-white/[0.09] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.75)]"
-              style={{ background: 'linear-gradient(160deg, #0F1019 0%, #0B0C10 100%)' }}
-            >
-              {/* Ambient glow */}
-              <div
-                className="absolute -top-24 -right-24 w-60 h-60 rounded-full pointer-events-none"
-                style={{ background: 'radial-gradient(circle, rgba(255,91,46,0.18) 0%, transparent 70%)', filter: 'blur(50px)' }}
-              />
-
-              {/* Close */}
-              <button
-                onClick={dismissModal}
-                className="absolute top-4 right-4 p-1.5 rounded-lg text-white/25 hover:text-white/70 hover:bg-white/[0.06] transition-all z-10"
-              >
-                <X className="w-4 h-4" />
-              </button>
-
-              <div className="px-8 pt-8 pb-8 relative z-10 space-y-6">
-
-                {/* Step track */}
-                <div className="flex gap-1.5">
-                  <div
-                    className="h-[3px] w-10 rounded-full"
-                    style={{ background: 'linear-gradient(90deg, #B82E07, #FF5B2E)' }}
-                  />
-                  <div className="h-[3px] flex-1 rounded-full bg-white/[0.07]" />
-                </div>
-
-                {/* Icon */}
-                <motion.div
-                  initial={{ scale: 0.75, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  transition={{ delay: 0.1, type: 'spring', stiffness: 280, damping: 22 }}
-                  className="flex items-center justify-center w-14 h-14 rounded-2xl mx-auto"
-                  style={{
-                    background: 'linear-gradient(135deg, rgba(184,46,7,0.25) 0%, rgba(255,91,46,0.12) 100%)',
-                    border: '1px solid rgba(255,91,46,0.22)',
-                  }}
-                >
-                  <Rocket className="w-7 h-7" style={{ color: '#FF5B2E' }} />
-                </motion.div>
-
-                {/* Heading */}
-                <div className="text-center space-y-2.5">
-                  <p className="text-[rgba(255,255,255,0.30)] font-montserrat text-[10px] tracking-[0.2em] uppercase">
-                    Welcome aboard
-                  </p>
-                  <h2 className="text-[1.6rem] font-bold text-white font-montserrat leading-snug">
-                    Ready to land your<br />next role, {firstName}?
-                  </h2>
-                  <p className="text-[rgba(255,255,255,0.42)] text-sm font-roboto leading-relaxed">
-                    Your job board is empty. Pick a source — LinkedIn, a remote board, an ATS,
-                    or a custom URL — and ApplyDir pulls in the latest roles, then scores each
-                    one against your CV.
-                  </p>
-                </div>
-
-                {/* Feature rows */}
-                <div className="space-y-2">
-                  {BULLETS.map(({ Icon, text }, i) => (
-                    <motion.div
-                      key={text}
-                      initial={{ opacity: 0, x: -10 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.18 + i * 0.07, duration: 0.35 }}
-                      className="flex items-center gap-3 rounded-xl px-3.5 py-2.5"
-                      style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)' }}
-                    >
-                      <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                        style={{ background: 'rgba(255,91,46,0.12)', border: '1px solid rgba(255,91,46,0.18)' }}
-                      >
-                        <Icon className="w-3.5 h-3.5" style={{ color: '#FF5B2E' }} />
-                      </div>
-                      <span className="text-[rgba(255,255,255,0.62)] text-sm font-roboto">{text}</span>
-                    </motion.div>
-                  ))}
-                </div>
-
-                {/* CTA */}
-                <motion.button
-                  onClick={handleLaunchScraper}
-                  whileHover={{ y: -1, boxShadow: '0 0 24px rgba(255,91,46,0.38), 0 0 48px rgba(184,46,7,0.22)' }}
-                  whileTap={{ y: 0, scale: 0.98, boxShadow: 'none' }}
-                  className="group w-full flex items-center justify-center gap-2.5 py-3.5 text-white font-montserrat font-semibold text-sm rounded-xl transition-all duration-200"
-                  style={{ background: 'linear-gradient(135deg, #B82E07 0%, #FF5B2E 100%)' }}
-                >
-                  <Zap className="w-4 h-4" />
-                  Launch Job Scraper
-                  <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform duration-200" />
-                </motion.button>
-
-                <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.18)' }}>
-                  You can always start a new scrape from the Jobs page.
+        {/* A) New opportunities */}
+        {newOppsCount > 0 && (
+          <div className={cardBase}>
+            <div className="flex items-start gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-primary-light" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                  Your headhunter found {newOppsCount} new {newOppsCount === 1 ? 'role' : 'roles'}
+                </h2>
+                <p className="text-sm text-secondary-dark mt-1">
+                  Fresh matches are waiting for your review.
                 </p>
-
               </div>
-            </motion.div>
-          </motion.div>
+            </div>
+            <button onClick={() => navigate('/dashboard/opportunities')} className={cardBtn}>
+              Review Opportunities
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
         )}
-      </AnimatePresence>
+
+        {/* B) Introductions waiting */}
+        {draftCount > 0 && (
+          <div className={cardBase}>
+            <div className="flex items-start gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
+                <Send className="w-5 h-5 text-primary-light" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                  {draftCount} {draftCount === 1 ? 'introduction' : 'introductions'} waiting for review
+                </h2>
+                <p className="text-sm text-secondary-dark mt-1">
+                  They get colder each day — a quick review keeps them warm.
+                </p>
+              </div>
+            </div>
+            <button onClick={() => navigate('/dashboard/introductions')} className={cardBtn}>
+              Review Introductions
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* C) Working / empty state — nothing needs the user right now */}
+        {nothingToDo && (
+          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-6 flex items-center gap-4 md:col-span-2">
+            <div className="relative w-12 h-12 shrink-0">
+              <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
+              <span className="relative w-12 h-12 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-primary-light" />
+              </span>
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                Your headhunter is sourcing new roles
+              </h2>
+              <p className="text-sm text-secondary-dark mt-1">
+                There's nothing you need to do — check back later.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* 3 ── Progress (mini-stats) ────────────────────────────────────── */}
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
+          Your progress
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {stats.map((s) => {
+            const StatIcon = s.Icon;
+            return (
+              <div
+                key={s.label}
+                className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-4 flex items-center gap-3"
+              >
+                <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.color}`}>
+                  <StatIcon className="w-5 h-5" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-2xl font-bold font-montserrat text-black-light leading-none">
+                    {s.value}
+                  </p>
+                  <p className="text-xs text-secondary-dark mt-1 truncate">{s.label}</p>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
     </div>
   );
 };

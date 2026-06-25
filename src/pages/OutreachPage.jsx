@@ -3,11 +3,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
   Send, Users, FileText, CheckCircle, Search, Building, Mail,
-  Loader2, ChevronDown, ChevronUp, Sparkles, Pencil, X,
+  ChevronDown, ChevronUp, Sparkles, Pencil, X,
   MailOpen, MessageSquare, Download, Clock, ListOrdered,
   Trash2, CalendarClock, Ban, ExternalLink, AlertTriangle, MapPin,
   DollarSign, Briefcase, Layers, ArrowRight, Zap, RefreshCw,
 } from 'lucide-react';
+import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import {
   getContacts, getDraftEmails, getSentEmails, getOutreachCounts,
   generateEmail, approveEmail, bulkGenerateEmails,
@@ -745,7 +746,7 @@ function ContactPipelineAction({ email, jobId, onGenerateEmail, generatingFor, o
         disabled={generatingFor.has(jobId)}
         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all disabled:opacity-60"
       >
-        {generatingFor.has(jobId) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+        {generatingFor.has(jobId) ? <ApplyDirLoader.Button variant="light" /> : <Sparkles className="w-3 h-3" />}
         {generatingFor.has(jobId) ? 'Writing…' : 'Write Email'}
       </button>
     );
@@ -811,7 +812,7 @@ function ContactsTab({ contacts, searchQuery, setSearchQuery, onGenerateEmail, o
               onClick={onGenerateAll} disabled={generatingAll}
               className="flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-orange-100 transition-all active:scale-95 disabled:opacity-70 whitespace-nowrap"
             >
-              {generatingAll ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+              {generatingAll ? <ApplyDirLoader.Button variant="light" /> : <Sparkles className="w-3.5 h-3.5" />}
               {generatingAll ? 'Generating…' : `Generate All (${pendingGenerate})`}
             </button>
           )}
@@ -912,7 +913,7 @@ function DraftsTab({
           onClick={onGenerateAll} disabled={generatingAll}
           className="flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white px-5 py-2.5 rounded-xl font-medium shadow-md shadow-orange-100 transition-all active:scale-95 disabled:opacity-70"
         >
-          {generatingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+          {generatingAll ? <ApplyDirLoader.Button variant="light" /> : <Sparkles className="w-4 h-4" />}
           Generate All
         </button>
       </div>
@@ -1015,7 +1016,7 @@ function QueueTab({
               onClick={onQueueAll} disabled={queuingAll}
               className="flex items-center gap-2 bg-black text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-black/10 hover:bg-black/80 transition-all active:scale-95 disabled:opacity-60"
             >
-              {queuingAll ? <Loader2 className="w-4 h-4 animate-spin" /> : <ListOrdered className="w-4 h-4" />}
+              {queuingAll ? <ApplyDirLoader.Button variant="light" /> : <ListOrdered className="w-4 h-4" />}
               {queuingAll ? 'Scheduling…' : `Schedule All (${approvedUnqueued.length})`}
             </button>
           )}
@@ -1023,7 +1024,7 @@ function QueueTab({
             onClick={onRunFollowups} disabled={runningFollowups}
             className="flex items-center gap-2 bg-gradient-to-r from-violet-500 to-violet-600 text-white px-4 py-2 rounded-xl text-sm font-semibold shadow-md shadow-violet-200 hover:opacity-90 transition-all active:scale-95 disabled:opacity-70"
           >
-            {runningFollowups ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {runningFollowups ? <ApplyDirLoader.Button variant="light" /> : <Send className="w-4 h-4" />}
             Queue Follow-ups
           </button>
         </div>
@@ -1339,7 +1340,7 @@ function EmailCard({
             disabled={!rescheduleVal || rescheduling}
             className="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-all flex items-center gap-1"
           >
-            {rescheduling ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle className="w-3 h-3" />}
+            {rescheduling ? <ApplyDirLoader.Button variant="light" /> : <CheckCircle className="w-3 h-3" />}
             Set
           </button>
           <button onClick={() => setReschOpen(false)} className="text-secondary-dark hover:text-black">
@@ -1358,7 +1359,7 @@ function EmailCard({
               disabled={generatingCvFor === email.job_id}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral border border-neutral-dark text-xs font-semibold text-secondary-dark rounded-lg hover:bg-neutral-dark transition-all disabled:opacity-60"
             >
-              {generatingCvFor === email.job_id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Download className="w-3 h-3" />}
+              {generatingCvFor === email.job_id ? <ApplyDirLoader.Button variant="dark" /> : <Download className="w-3 h-3" />}
               CV
             </button>
           )}
@@ -1369,7 +1370,7 @@ function EmailCard({
               title="Generate a fresh draft for this job — pick a different strategy or notes"
               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-neutral border border-neutral-dark text-xs font-semibold text-secondary-dark rounded-lg hover:bg-neutral-dark transition-all disabled:opacity-60"
             >
-              {regenerating ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              {regenerating ? <ApplyDirLoader.Button variant="dark" /> : <RefreshCw className="w-3 h-3" />}
               Regenerate
             </button>
           )}
@@ -1389,7 +1390,7 @@ function EmailCard({
               onClick={onApprove} disabled={approving || approveQueueing}
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-xl transition-all disabled:opacity-60"
             >
-              {approving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle className="w-3.5 h-3.5" />}
+              {approving ? <ApplyDirLoader.Button variant="dark" /> : <CheckCircle className="w-3.5 h-3.5" />}
               Approve
             </button>
           )}
@@ -1399,7 +1400,7 @@ function EmailCard({
               onClick={onApproveQueue} disabled={approving || approveQueueing}
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition-all disabled:opacity-60"
             >
-              {approveQueueing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+              {approveQueueing ? <ApplyDirLoader.Button variant="light" /> : <Clock className="w-3.5 h-3.5" />}
               {approveQueueing ? 'Scheduling…' : 'Approve & Queue'}
             </button>
           )}
@@ -1409,7 +1410,7 @@ function EmailCard({
               onClick={onQueue} disabled={queueing}
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-emerald-500 hover:bg-emerald-600 rounded-xl transition-all disabled:opacity-60"
             >
-              {queueing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Clock className="w-3.5 h-3.5" />}
+              {queueing ? <ApplyDirLoader.Button variant="light" /> : <Clock className="w-3.5 h-3.5" />}
               {queueing ? 'Scheduling…' : 'Schedule'}
             </button>
           )}
@@ -1426,7 +1427,7 @@ function EmailCard({
                 onClick={onUnqueue} disabled={unqueueing}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-secondary-dark bg-neutral border border-neutral-dark rounded-xl hover:bg-neutral-dark transition-all disabled:opacity-60"
               >
-                {unqueueing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
+                {unqueueing ? <ApplyDirLoader.Button variant="dark" /> : <Ban className="w-3.5 h-3.5" />}
                 Cancel
               </button>
             </>
@@ -1437,7 +1438,7 @@ function EmailCard({
               onClick={onMarkReplied} disabled={markingReplied}
               className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold text-white bg-green-500 hover:bg-green-600 rounded-xl transition-all disabled:opacity-60"
             >
-              {markingReplied ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <MessageSquare className="w-3.5 h-3.5" />}
+              {markingReplied ? <ApplyDirLoader.Button variant="light" /> : <MessageSquare className="w-3.5 h-3.5" />}
               Mark Replied
             </button>
           )}
@@ -1451,7 +1452,7 @@ function EmailCard({
                   : 'text-red-500 bg-red-50 border-red-200 hover:bg-red-100'
               }`}
             >
-              {deleting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+              {deleting ? <ApplyDirLoader.Button variant="light" /> : <Trash2 className="w-3.5 h-3.5" />}
               {confirmDelete ? 'Confirm delete' : 'Delete'}
             </button>
           )}
@@ -1515,7 +1516,7 @@ function EditEmailModal({ email, onClose, onSaved }) {
               onClick={save} disabled={saving}
               className="px-5 py-2.5 text-sm font-medium text-white bg-black rounded-xl hover:bg-black/80 disabled:opacity-70 flex items-center gap-2"
             >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              {saving ? <ApplyDirLoader.Button variant="light" /> : <CheckCircle className="w-4 h-4" />}
               Save
             </button>
           </div>
@@ -1583,7 +1584,7 @@ function StagingTab({ jobs, onRunBulkSearch, isSearching, progress, batchSize })
         >
           {isSearching ? (
             <>
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <ApplyDirLoader.Button variant="light" />
               Searching for Contacts…
             </>
           ) : (
@@ -1602,7 +1603,7 @@ function StagingTab({ jobs, onRunBulkSearch, isSearching, progress, batchSize })
         <div className="px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
           <div className="flex items-center justify-between text-sm text-blue-700">
             <span className="flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              <ApplyDirLoader.Button variant="dark" />
               {progress
                 ? `Searching ${progress.processed} / ${progress.total} jobs`
                 : 'Starting contact search…'}
@@ -1889,7 +1890,7 @@ function ManualApplyCard({ job, onGenerateCv, generatingCvFor }) {
             className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white border-2 border-black text-black text-xs font-bold rounded-xl hover:bg-black hover:text-white transition-all disabled:opacity-50 whitespace-nowrap"
           >
             {isGenCV
-              ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ? <ApplyDirLoader.Button variant="dark" />
               : <Download className="w-3.5 h-3.5" />
             }
             {isGenCV ? 'Generating…' : 'Tailored CV'}
