@@ -29,14 +29,14 @@ const CARD_ITEM = {
   show:   { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
 };
 
-// Translate the numeric fit_score into a calm, number-free match badge with a
-// subtle inset ring, plus a matching top-accent gradient that gives the grid a
-// scannable hierarchy (stronger matches read first).
+// Translate the numeric fit_score into a calm, number-free match signal. Colors
+// are deliberately sheer so the only saturated element on a card stays the
+// orange Reach Out CTA. `accent` is the thin top bar; `badge` is the pill.
 const matchStrength = (score) => {
-  if (score == null) return { dot: '⚪', label: 'New match',    badge: 'bg-neutral text-secondary-dark ring-1 ring-inset ring-secondary-dark/15',   accent: 'from-secondary-dark/25 to-secondary-dark/5' };
-  if (score >= 80)   return { dot: '🟢', label: 'Strong match', badge: 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20',      accent: 'from-emerald-400 to-emerald-500' };
-  if (score >= 60)   return { dot: '🔵', label: 'Good match',   badge: 'bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20',               accent: 'from-blue-400 to-blue-500' };
-  return { dot: '⚪', label: 'Fair match', badge: 'bg-neutral text-secondary-dark ring-1 ring-inset ring-secondary-dark/15', accent: 'from-secondary-dark/25 to-secondary-dark/5' };
+  if (score == null) return { label: 'New match',    badge: 'bg-neutral text-secondary-dark border border-neutral-dark',          accent: 'bg-neutral-200' };
+  if (score >= 80)   return { label: 'Strong match', badge: 'bg-emerald-50/80 text-emerald-700 border border-emerald-200/50',     accent: 'bg-emerald-400/30' };
+  if (score >= 60)   return { label: 'Good match',   badge: 'bg-blue-50/80 text-blue-700 border border-blue-200/50',              accent: 'bg-blue-400/30' };
+  return { label: 'Fair match', badge: 'bg-neutral text-secondary-dark border border-neutral-dark', accent: 'bg-neutral-200' };
 };
 
 const JobsPage = () => {
@@ -206,12 +206,12 @@ const JobsPage = () => {
                                         whileHover={{ y: -6, transition: { duration: 0.3, ease: 'easeOut' } }}
                                         className="group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30"
                                     >
-                                        {/* Match-strength top accent — glanceable hierarchy, glows on hover */}
-                                        <span className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${match.accent} opacity-80 group-hover:opacity-100 transition-opacity duration-300`} />
+                                        {/* Match-strength top accent — sheer, glanceable hierarchy */}
+                                        <span className={`absolute inset-x-0 top-0 h-1 ${match.accent}`} />
 
-                                        {/* Header — company monogram anchors the card's identity */}
+                                        {/* Header — neutral company monogram anchors the card's identity */}
                                         <div className="flex items-start gap-3">
-                                            <span className="w-11 h-11 shrink-0 rounded-xl bg-accent-teal/10 border border-accent-teal/20 flex items-center justify-center font-montserrat font-bold text-base text-accent-teal">
+                                            <span className="w-11 h-11 shrink-0 rounded-xl bg-neutral text-secondary-dark border border-neutral-dark flex items-center justify-center font-montserrat font-bold text-base">
                                                 {(job.company_name || '?').trim().charAt(0).toUpperCase()}
                                             </span>
                                             <div className="min-w-0 flex-1">
@@ -233,9 +233,9 @@ const JobsPage = () => {
                                             </div>
                                         </div>
 
-                                        {/* Match strength — no numbers, ring'd badge */}
-                                        <span className={`mt-3 self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${match.badge}`}>
-                                            <span aria-hidden="true">{match.dot}</span> {match.label}
+                                        {/* Match strength — no numbers, no dot, sheer pill */}
+                                        <span className={`mt-3 self-start inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold tracking-wide ${match.badge}`}>
+                                            {match.label}
                                         </span>
 
                                         {/* AI explanation — "lightning" tint on card hover */}
