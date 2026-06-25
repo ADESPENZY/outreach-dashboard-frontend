@@ -19,12 +19,23 @@ import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 
 const ITEMS_PER_PAGE = 9;
 
-// Translate the numeric fit_score into a calm, number-free match label.
+// Staggered entrance — the grid orchestrates a cascade, each card fades + rises.
+const GRID_STAGGER = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
+};
+const CARD_ITEM = {
+  hidden: { opacity: 0, y: 20 },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } },
+};
+
+// Translate the numeric fit_score into a calm, number-free match badge with a
+// subtle inset ring so it pops off the card.
 const matchStrength = (score) => {
-  if (score == null) return { dot: '⚪', label: 'New match',    tone: 'text-secondary-dark' };
-  if (score >= 80)   return { dot: '🟢', label: 'Strong match', tone: 'text-emerald-600' };
-  if (score >= 60)   return { dot: '🔵', label: 'Good match',   tone: 'text-blue-600' };
-  return { dot: '⚪', label: 'Fair match', tone: 'text-secondary-dark' };
+  if (score == null) return { dot: '⚪', label: 'New match',    badge: 'bg-neutral text-secondary-dark ring-1 ring-inset ring-secondary-dark/15' };
+  if (score >= 80)   return { dot: '🟢', label: 'Strong match', badge: 'bg-emerald-50 text-emerald-700 ring-1 ring-inset ring-emerald-600/20' };
+  if (score >= 60)   return { dot: '🔵', label: 'Good match',   badge: 'bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-600/20' };
+  return { dot: '⚪', label: 'Fair match', badge: 'bg-neutral text-secondary-dark ring-1 ring-inset ring-secondary-dark/15' };
 };
 
 const JobsPage = () => {
@@ -123,8 +134,14 @@ const JobsPage = () => {
                 </div>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        <AnimatePresence mode="popLayout" initial={false}>
+                    <motion.div
+                        key={currentPage}
+                        variants={GRID_STAGGER}
+                        initial="hidden"
+                        animate="show"
+                        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                    >
+                        <AnimatePresence mode="popLayout">
                             {pageJobs.map(job => {
                                 const match = matchStrength(job.fit_score);
                                 const reason = job.fit_reasoning
@@ -137,11 +154,10 @@ const JobsPage = () => {
                                     <motion.div
                                         key={job.id}
                                         layout
-                                        initial={{ opacity: 0, y: 20 }}
-                                        animate={{ opacity: 1, y: 0  }}
-                                        exit={{    opacity: 0, scale: 0.96 }}
-                                        transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                                        className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full"
+                                        variants={CARD_ITEM}
+                                        exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
+                                        whileHover={{ y: -6, transition: { duration: 0.3, ease: 'easeOut' } }}
+                                        className="group bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30"
                                     >
                                         {/* Header */}
                                         <h2 className="font-montserrat text-lg font-bold text-black-light leading-snug">
@@ -160,13 +176,13 @@ const JobsPage = () => {
                                             )}
                                         </p>
 
-                                        {/* Match strength — no numbers */}
-                                        <p className={`mt-3 text-sm font-semibold ${match.tone}`}>
+                                        {/* Match strength — no numbers, ring'd badge */}
+                                        <span className={`mt-3 self-start inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold ${match.badge}`}>
                                             <span aria-hidden="true">{match.dot}</span> {match.label}
-                                        </p>
+                                        </span>
 
-                                        {/* AI explanation */}
-                                        <p className="mt-3 text-sm italic text-secondary-dark leading-relaxed border-l-2 border-neutral-dark bg-neutral/50 rounded-r-lg pl-3 py-2">
+                                        {/* AI explanation — "lightning" tint on card hover */}
+                                        <p className="mt-3 text-sm italic text-secondary-dark leading-relaxed border-l-2 border-neutral-dark bg-neutral/50 rounded-r-lg pl-3 py-2 transition-colors duration-300 group-hover:bg-primary-light/5">
                                             {reason}
                                         </p>
 
@@ -190,7 +206,7 @@ const JobsPage = () => {
                                             <button
                                                 onClick={() => handleUpdateStatus(job.id, 'approved')}
                                                 disabled={pendingThisJob}
-                                                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                                             >
                                                 {approvePending
                                                     ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
@@ -201,7 +217,7 @@ const JobsPage = () => {
                                 );
                             })}
                         </AnimatePresence>
-                    </div>
+                    </motion.div>
 
                     {/* ── Pagination ──────────────────────────────────────────── */}
                     {totalPages > 1 && (
