@@ -252,6 +252,10 @@ const OutreachPage = () => {
   const { data: drafts = [], isLoading: loadingDrafts } = useQuery({
     queryKey: ['outreach-drafts'],
     queryFn: getDraftEmails,
+    // Drafts arrive a few seconds after "Reach Out" (auto-draft runs in the
+    // background), so poll while the page is open and refetch on focus.
+    refetchInterval: 15000,
+    refetchOnWindowFocus: true,
   });
   const { data: sentEmails = [], isLoading: loadingSent } = useQuery({
     queryKey: ['outreach-sent'],
