@@ -112,8 +112,6 @@ export default function ActivationFlow({ profile = null, onComplete }) {
   const [skills, setSkills] = useState([]);
   const [experienceLevel, setExperienceLevel] = useState('');
   const [newSkill, setNewSkill] = useState('');
-  // Humanizing context a CV misses — feeds the cold-email personalisation later.
-  const [humanContext, setHumanContext] = useState('');
 
   // Step 3 / 4 — preferences
   const [roleTypes, setRoleTypes] = useState([]);
@@ -216,7 +214,6 @@ export default function ActivationFlow({ profile = null, onComplete }) {
           locations,
           work_arrangement: arrangement,
           remote_only: arrangement === 'remote',
-          human_context: humanContext.trim(),
         },
         onboarding_complete: true,
       });
@@ -411,23 +408,6 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                     );
                   })}
                 </div>
-              </div>
-
-              {/* The Human Element — context a CV misses, used to personalise outreach */}
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">
-                  The Human Element <span className="font-medium normal-case tracking-normal text-secondary-dark/50">(Optional)</span>
-                </p>
-                <p className="text-sm text-secondary-dark mb-2">
-                  What is something great about you that isn&rsquo;t on your CV?
-                </p>
-                <textarea
-                  rows={3}
-                  value={humanContext}
-                  onChange={(e) => setHumanContext(e.target.value)}
-                  placeholder="e.g., I run a tech podcast, I taught myself to code on weekends, I used to be a professional chef…"
-                  className="w-full px-3 py-2.5 rounded-xl border border-neutral-dark bg-white text-sm text-black placeholder:text-secondary-dark/50 outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all resize-none leading-relaxed"
-                />
               </div>
 
               <div className="flex items-center justify-between pt-1">

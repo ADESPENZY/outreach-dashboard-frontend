@@ -1,7 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Sparkles, MailOpen, Send, Briefcase, ArrowRight } from 'lucide-react';
+import {
+  Sparkles, MessageSquare, Send, Eye, MailOpen,
+  ArrowRight, Flame, Trophy,
+} from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { useAuth } from '../context/AuthContext';
 import { getScrapedJobs } from '../services/apiJobs';
@@ -10,10 +13,10 @@ import { getDraftEmails } from '../services/apiOutreach';
 import { getProfile } from '../services/apiProfile';
 import ActivationFlow from './onboarding/ActivationFlow';
 
-// The Home page is the returning user's daily briefing. It answers:
-// "What happened while I was away? What do I do now?"
-// It reshapes existing data (jobs, analytics, drafts, profile) into a calm,
-// jargon-free briefing — no scrape/queue/fit-score language reaches the user.
+// The Home page is the returning user's daily briefing (ARCHITECTURE §1,
+// ONBOARDING phase 8). It answers, in one glance: "What happened while I was
+// away? What's the ONE thing to do now?" — never a dashboard of metrics, and
+// never the machinery words (scrape / fit-score / queue / SMTP).
 
 function greetingForNow() {
   const h = new Date().getHours();
@@ -22,13 +25,36 @@ function greetingForNow() {
   return 'Good evening';
 }
 
+// Human, jargon-free names for the cold-email strategies (the model labels are
+// technical: "Value-Upfront", "Problem-First"). The user hears plain language.
+const STRATEGY_LABELS = {
+  problem_first:   'Lead with their problem',
+  proof_first:     'Lead with proof',
+  their_work:      'Reference their work',
+  direct:          'Keep it short and direct',
+  value_upfront:   'Lead with the offer',
+  question_opener: 'Open with a question',
+};
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} minute${mins === 1 ? '' : 's'} ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs} hour${hrs === 1 ? '' : 's'} ago`;
+  const days = Math.round(hrs / 24);
+  return `${days} day${days === 1 ? '' : 's'} ago`;
+}
+
 const DashboardPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
 
   const firstName = currentUser?.first_name || currentUser?.username || 'there';
 
-  // ── Data layer (unchanged pattern: react-query + existing services) ──────
+  // ── Data layer (react-query + existing services) ─────────────────────────
   const { data: profile, isLoading: profileLoading } = useQuery({
     queryKey: ['profile'],
     queryFn: getProfile,
@@ -40,8 +66,9 @@ const DashboardPage = () => {
     queryFn: getScrapedJobs,
   });
 
-  // This-week metrics: analytics windowed to 7 days. pipeline inside the
-  // payload is not windowed, so it stays correct regardless.
+  // This-week briefing: analytics windowed to 7 days. summary metrics +
+  // daily_activity are windowed; strategy_performance is all-time (the backend
+  // does not apply the cutoff to it), so the "best approach" readout is stable.
   const { data: analytics, isLoading: analyticsLoading } = useQuery({
     queryKey: ['analytics', 7],
     queryFn: () => getAnalytics(7),
@@ -60,37 +87,82 @@ const DashboardPage = () => {
   if (loading) {
     return (
       <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto">
-        <ApplyDirLoader.Inline message="Loading your progress..." />
+        <ApplyDirLoader.Inline message="Putting together your briefing..." />
       </div>
     );
   }
 
   const cvUploaded = !!profile?.cv_raw_text;
-  const summary  = analytics?.summary  || {};
-  const pipeline = analytics?.pipeline || {};
 
-  // ── ONBOARDING: no CV yet — run the 4-step Calibration flow ──────────────
-  // ActivationFlow invalidates the ['profile'] query on completion, which
-  // re-renders this page out of onboarding.
+  // ── ONBOARDING: no CV yet — run the Calibration flow (invalidates ['profile']
+  // on completion, which re-renders this page out of onboarding). ────────────
   if (!cvUploaded) {
     return <ActivationFlow profile={profile} />;
   }
 
+  const summary       = analytics?.summary || {};
+  const dailyActivity = analytics?.daily_activity || [];
+  const recentEmails  = analytics?.recent_emails || [];
+  const strategyPerf  = analytics?.strategy_performance || [];
+
   // ── Derived briefing data ────────────────────────────────────────────────
-  // New roles = freshly sourced jobs the user hasn't reviewed yet.
+  // Opportunities waiting = scored roles the user hasn't reviewed yet.
   const newOppsCount = jobs.filter((j) => j.status === 'scraped').length;
 
   const draftList  = Array.isArray(drafts) ? drafts : [];
   const draftCount = draftList.length || (summary.total_drafts || 0);
 
-  const nothingToDo = newOppsCount === 0 && draftCount === 0;
+  // The "someone opened your email" delight signal — the most recently opened
+  // introduction, shown only if it was opened recently (last 48h).
+  const lastOpened = recentEmails
+    .filter((e) => e.status === 'opened' && e.opened_at)
+    .sort((a, b) => new Date(b.opened_at) - new Date(a.opened_at))[0];
+  const openedRecently =
+    lastOpened && Date.now() - new Date(lastOpened.opened_at).getTime() < 48 * 60 * 60 * 1000
+      ? lastOpened
+      : null;
 
-  // ── Mini-stats (this week) ───────────────────────────────────────────────
-  const fmt = (v) => (v === null || v === undefined ? '—' : v);
-  const stats = [
-    { label: 'Introductions Sent',  value: fmt(summary.total_sent),    Icon: Send,      color: 'bg-blue-50 text-blue-500' },
-    { label: 'Opened',              value: fmt(summary.total_opened),  Icon: MailOpen,  color: 'bg-purple-50 text-purple-500' },
-    { label: 'Active Opportunities', value: fmt(pipeline.approved_jobs), Icon: Briefcase, color: 'bg-amber-50 text-amber-500' },
+  const hasAnyCard = newOppsCount > 0 || draftCount > 0 || !!openedRecently;
+
+  // ── This-week activity (windowed summary) ────────────────────────────────
+  const weekSent    = summary.total_sent    || 0;
+  const weekOpened  = summary.total_opened  || 0;
+  const weekReplied = summary.total_replied || 0;
+  const barMax = Math.max(weekSent, weekOpened, weekReplied, 1);
+  const bars = [
+    { label: 'Sent',    value: weekSent,    color: 'bg-blue-500' },
+    { label: 'Opened',  value: weekOpened,  color: 'bg-purple-500' },
+    { label: 'Replied', value: weekReplied, color: 'bg-emerald-500' },
+  ];
+
+  // ── Streak: consecutive recent days with any activity. Today counting 0
+  // does not break the streak (the day isn't over yet). ─────────────────────
+  let streak = 0;
+  for (let i = dailyActivity.length - 1; i >= 0; i--) {
+    const d = dailyActivity[i];
+    const active = (d.sent || 0) + (d.opened || 0) + (d.replied || 0) > 0;
+    if (active) {
+      streak += 1;
+    } else if (i === dailyActivity.length - 1) {
+      continue; // today not active yet — keep looking back
+    } else {
+      break;
+    }
+  }
+  const showStreak = streak >= 3;
+
+  // ── Best-performing strategy (only once there's a fair all-time sample) ───
+  const allTimeSent = strategyPerf.reduce((sum, s) => sum + (s.sent || 0), 0);
+  const bestStrategy = strategyPerf
+    .filter((s) => (s.sent || 0) > 0)
+    .sort((a, b) => (b.reply_rate || 0) - (a.reply_rate || 0))[0];
+  const showStrategy = allTimeSent >= 20 && bestStrategy && bestStrategy.reply_rate > 0;
+
+  // ── Status-bar chips (this week) ─────────────────────────────────────────
+  const statChips = [
+    { label: 'Replies this week',       value: weekReplied,           Icon: MessageSquare, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Introductions this week', value: weekSent,              Icon: Send,          color: 'bg-blue-50 text-blue-500' },
+    { label: 'Open rate this week',     value: `${summary.open_rate ?? 0}%`, Icon: Eye,    color: 'bg-purple-50 text-purple-500' },
   ];
 
   const cardBase =
@@ -99,103 +171,29 @@ const DashboardPage = () => {
     'mt-4 self-start inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all';
 
   return (
-    <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-8 animate-fade-in font-roboto">
+    <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-8 font-roboto">
 
-      {/* 1 ── Greeting ─────────────────────────────────────────────────── */}
-      <header className="space-y-1">
-        <h1 className="text-2xl md:text-3xl font-bold font-montserrat text-black-light">
-          {greetingForNow()}, {firstName}
-        </h1>
-        <p className="text-sm md:text-base text-secondary-dark">
-          Here is your opportunity pipeline.
-        </p>
-      </header>
+      {/* 1 ── Greeting + status bar ─────────────────────────────────────── */}
+      <header className="space-y-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl md:text-3xl font-bold font-montserrat text-black-light">
+            {greetingForNow()}, {firstName} <span aria-hidden="true">👋</span>
+          </h1>
+          <p className="text-sm md:text-base text-secondary-dark">
+            Here's what's happened since you were last here.
+          </p>
+        </div>
 
-      {/* 2 ── Briefing cards (1–3, conditional) ────────────────────────── */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        {/* A) New opportunities */}
-        {newOppsCount > 0 && (
-          <div className={cardBase}>
-            <div className="flex items-start gap-3">
-              <span className="w-10 h-10 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
-                <Sparkles className="w-5 h-5 text-primary-light" />
-              </span>
-              <div className="min-w-0">
-                <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
-                  Your headhunter found {newOppsCount} new {newOppsCount === 1 ? 'role' : 'roles'}
-                </h2>
-                <p className="text-sm text-secondary-dark mt-1">
-                  Fresh matches are waiting for your review.
-                </p>
-              </div>
-            </div>
-            <button onClick={() => navigate('/dashboard/opportunities')} className={cardBtn}>
-              Review Opportunities
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* B) Introductions waiting */}
-        {draftCount > 0 && (
-          <div className={cardBase}>
-            <div className="flex items-start gap-3">
-              <span className="w-10 h-10 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
-                <Send className="w-5 h-5 text-primary-light" />
-              </span>
-              <div className="min-w-0">
-                <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
-                  {draftCount} {draftCount === 1 ? 'introduction' : 'introductions'} waiting for review
-                </h2>
-                <p className="text-sm text-secondary-dark mt-1">
-                  They get colder each day — a quick review keeps them warm.
-                </p>
-              </div>
-            </div>
-            <button onClick={() => navigate('/dashboard/introductions')} className={cardBtn}>
-              Review Introductions
-              <ArrowRight className="w-4 h-4" />
-            </button>
-          </div>
-        )}
-
-        {/* C) Working / empty state — nothing needs the user right now */}
-        {nothingToDo && (
-          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-6 flex items-center gap-4 md:col-span-2">
-            <div className="relative w-12 h-12 shrink-0">
-              <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
-              <span className="relative w-12 h-12 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-primary-light" />
-              </span>
-            </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
-                Your headhunter is sourcing new roles
-              </h2>
-              <p className="text-sm text-secondary-dark mt-1">
-                There's nothing you need to do — check back later.
-              </p>
-            </div>
-          </div>
-        )}
-      </section>
-
-      {/* 3 ── Progress (mini-stats) ────────────────────────────────────── */}
-      <section className="space-y-3">
-        <h2 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
-          Your progress
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {stats.map((s) => {
-            const StatIcon = s.Icon;
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {statChips.map((s) => {
+            const ChipIcon = s.Icon;
             return (
               <div
                 key={s.label}
                 className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-4 flex items-center gap-3"
               >
                 <span className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${s.color}`}>
-                  <StatIcon className="w-5 h-5" />
+                  <ChipIcon className="w-5 h-5" />
                 </span>
                 <div className="min-w-0">
                   <p className="text-2xl font-bold font-montserrat text-black-light leading-none">
@@ -207,7 +205,155 @@ const DashboardPage = () => {
             );
           })}
         </div>
+      </header>
+
+      {/* 2 ── Action cards (up to 3, conditional) ───────────────────────── */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+        {/* A) Opportunities waiting for review */}
+        {newOppsCount > 0 && (
+          <div className={cardBase}>
+            <div className="flex items-start gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-primary-light" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                  {newOppsCount} {newOppsCount === 1 ? 'opportunity' : 'opportunities'} waiting for review
+                </h2>
+                <p className="text-sm text-secondary-dark mt-1">
+                  Fresh matches your headhunter found for you.
+                </p>
+              </div>
+            </div>
+            <button onClick={() => navigate('/dashboard/opportunities')} className={cardBtn}>
+              Review opportunities
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* B) Introductions ready to approve */}
+        {draftCount > 0 && (
+          <div className={cardBase}>
+            <div className="flex items-start gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0">
+                <Send className="w-5 h-5 text-primary-light" />
+              </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                  {draftCount} {draftCount === 1 ? 'introduction' : 'introductions'} ready to approve
+                </h2>
+                <p className="text-sm text-secondary-dark mt-1">
+                  They get colder each day — a quick review keeps them warm.
+                </p>
+              </div>
+            </div>
+            <button onClick={() => navigate('/dashboard/introductions')} className={cardBtn}>
+              Review introductions
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* C) Someone opened your email (delight / social-proof signal) */}
+        {openedRecently && (
+          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-purple-500 shadow-sm p-5 flex items-start gap-3">
+            <span className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
+              <MailOpen className="w-5 h-5 text-purple-500" />
+            </span>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                Someone opened your email
+              </h2>
+              <p className="text-sm text-secondary-dark mt-1">
+                <span className="font-semibold text-black-light">{openedRecently.recipient}</span>
+                {openedRecently.company ? <> at {openedRecently.company}</> : null}{' '}
+                opened your email {timeAgo(openedRecently.opened_at)}.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Nothing needs attention */}
+        {!hasAnyCard && (
+          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-6 flex items-center gap-4 md:col-span-2">
+            <div className="relative w-12 h-12 shrink-0">
+              <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
+              <span className="relative w-12 h-12 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
+                <Sparkles className="w-5 h-5 text-primary-light" />
+              </span>
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                Your headhunter is searching
+              </h2>
+              <p className="text-sm text-secondary-dark mt-1">
+                There's nothing for you to do right now — check back soon.
+              </p>
+            </div>
+          </div>
+        )}
       </section>
+
+      {/* 3 ── This week's activity ──────────────────────────────────────── */}
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
+          This week's activity
+        </h2>
+        <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 space-y-4">
+          {bars.map((b) => (
+            <div key={b.label} className="flex items-center gap-3">
+              <span className="w-16 shrink-0 text-sm text-secondary-dark">{b.label}</span>
+              <span className="w-7 shrink-0 text-sm font-bold font-montserrat text-black-light tabular-nums text-right">
+                {b.value}
+              </span>
+              <div className="flex-1 h-2.5 rounded-full bg-neutral-dark overflow-hidden">
+                <div
+                  className={`h-full rounded-full ${b.color} transition-all duration-500`}
+                  style={{ width: `${Math.round((b.value / barMax) * 100)}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* 4 ── Streak (only when active 3+ consecutive days) ──────────────── */}
+      {showStreak && (
+        <section>
+          <div className="bg-amber-50 rounded-2xl border border-amber-200 shadow-sm p-5 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
+              <Flame className="w-5 h-5 text-amber-500" />
+            </span>
+            <p className="text-sm md:text-base font-semibold text-amber-700">
+              {streak} day streak — keep it going.
+            </p>
+          </div>
+        </section>
+      )}
+
+      {/* 5 ── Best-performing strategy (only with 20+ sent) ──────────────── */}
+      {showStrategy && (
+        <section className="space-y-3">
+          <h2 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
+            What's working best
+          </h2>
+          <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 flex items-center gap-3">
+            <span className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+              <Trophy className="w-5 h-5 text-emerald-600" />
+            </span>
+            <div className="min-w-0">
+              <p className="text-sm text-secondary-dark">Your strongest approach</p>
+              <p className="text-base font-bold font-montserrat text-black-light leading-snug">
+                {STRATEGY_LABELS[bestStrategy.strategy] || bestStrategy.label}
+                {' — '}
+                <span className="text-emerald-600">{bestStrategy.reply_rate}% reply rate</span>
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
     </div>
   );
 };
