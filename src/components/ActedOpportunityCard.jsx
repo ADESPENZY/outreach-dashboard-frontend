@@ -27,11 +27,12 @@ const ActedOpportunityCard = ({ job, onOpenDrawer }) => {
     queryKey: ['job-detail', job.id],
     queryFn: () => getJob(job.id),
     initialData: job,
-    // Poll every 3s until the draft exists (terminal), then stop. Give up after
-    // 90s so a stalled background job never polls forever.
+    // Poll every 3s until a terminal state, then stop: a draft exists, OR the
+    // job was flagged manual_apply (no contact found — no draft is coming).
+    // Give up after 90s so a stalled background job never polls forever.
     refetchInterval: (query) => {
       const d = query.state.data;
-      if (d?.has_draft) return false;
+      if (d?.has_draft || d?.status === 'manual_apply') return false;
       if (Date.now() - startRef.current > POLL_GIVE_UP_MS) return false;
       return 3000;
     },
@@ -40,8 +41,11 @@ const ActedOpportunityCard = ({ job, onOpenDrawer }) => {
   const hasDraft = !!detail?.has_draft;
   const hasRealContact = !!detail?.has_real_contact;
   const primary = detail?.primary_contact;
+  const noContact = detail?.status === 'manual_apply' || (hasDraft && !hasRealContact);
 
-  const stage = !hasDraft ? 'finding' : hasRealContact ? 'drafted' : 'no_contact';
+  // manual_apply (no contact) is terminal even without a draft now that we no
+  // longer draft against placeholders.
+  const stage = noContact ? 'no_contact' : hasDraft && hasRealContact ? 'drafted' : 'finding';
 
   const handleApplyDirect = async () => {
     const url = detail?.apply_url || job.apply_url;

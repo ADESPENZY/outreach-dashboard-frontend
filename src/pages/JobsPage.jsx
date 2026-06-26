@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useSearchParams } from 'react-router';
-import { MapPin, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, Search } from 'lucide-react';
+import { MapPin, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, Search, Loader2, UserX, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
-import { getJobsPage, updateJobStatus } from '../services/apiJobs';
+import { getOpportunityJobs, updateJobStatus, trackJob } from '../services/apiJobs';
 import { getProfile } from '../services/apiProfile';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePersonalizationModal';
@@ -52,10 +53,29 @@ const positiveReason = (text) =>
     ? 'Your experience aligns well with this role.'
     : text;
 
+// A card progresses through visual states on the SAME page instead of
+// disappearing. Derived from server status + contact/draft flags:
+//   new        → scraped, undecided → Skip / Write Intro
+//   working    → approved, draft still being written → "finding…" (muted)
+//   drafted    → real contact + draft ready → "Contact: …" / View on Intros
+//   no_contact → manual_apply (or a legacy placeholder draft) → Apply Direct
+//   sent       → contacted/outreach_automated → "Intro sent ✓" (muted)
+const cardState = (job) => {
+  if (job.status === 'contacted' || job.status === 'outreach_automated') return 'sent';
+  if (job.has_draft && job.has_real_contact) return 'drafted';
+  if (job.status === 'manual_apply' || (job.has_draft && !job.has_real_contact)) return 'no_contact';
+  if (job.status === 'approved' && !job.has_draft) return 'working';
+  return 'new';
+};
+
 const JobsPage = () => {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
 
     const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
+    // Per-job "Track this application" choice for the no-contact / Apply Direct
+    // state (default on). Keyed by job id.
+    const [trackChoice, setTrackChoice] = useState({});
     const [currentPage, setCurrentPage] = useState(1);
     const [pendingJobId, setPendingJobId] = useState(null);
     const [showPersonalization, setShowPersonalization] = useState(false);
@@ -76,12 +96,20 @@ const JobsPage = () => {
     });
     const isActivated = !!profile?.cv_raw_text;
 
-    // The feed only surfaces fresh, undecided roles (status === 'scraped').
+    // The feed surfaces roles across the whole review-and-progress span so a
+    // card never disappears when it advances (scraped → approved → contacted).
+    // Visual state is derived per card from status + contact/draft flags.
     const { data: pageData, isLoading: loading } = useQuery({
-        queryKey: ['jobs-page', 'Scraped'],
-        queryFn:  () => getJobsPage(1, 'Scraped', 50),
+        queryKey: ['jobs-page', 'opportunities'],
+        queryFn:  () => getOpportunityJobs(60),
         refetchOnWindowFocus: false,
         staleTime: 30000,
+        // While any approved job is still drafting in the background, poll so
+        // its card flips from "finding…" to the contact/draft state on its own.
+        refetchInterval: (query) => {
+            const list = query.state.data?.jobs ?? [];
+            return list.some((j) => j.status === 'approved' && !j.has_draft) ? 5000 : false;
+        },
     });
 
     const jobs = pageData?.jobs ?? [];
@@ -91,6 +119,9 @@ const JobsPage = () => {
     // it from `jobs` can lag a beat behind the optimistic acted snapshot).
     const actedIds = new Set(actedJobs.map((j) => j.id));
     const normalJobs = jobs.filter((j) => !actedIds.has(j.id));
+    // Only undecided (scraped) cards are "waiting for review" — progressed
+    // cards (drafted / sent / no-contact) stay on the page but aren't pending.
+    const reviewCount = normalJobs.filter((j) => cardState(j) === 'new').length;
 
     // ── Client-side pagination (over the normal, not-yet-acted jobs) ──────────
     const totalPages = Math.max(1, Math.ceil(normalJobs.length / ITEMS_PER_PAGE));
@@ -148,6 +179,20 @@ const JobsPage = () => {
         setPendingJobId(null);
     };
 
+    // Apply Direct (no contact found) — open the job posting and, if the user
+    // left tracking on, drop an 'applied' card onto the Progress board.
+    const handleApplyDirect = async (job) => {
+        if (job.apply_url) window.open(job.apply_url, '_blank', 'noopener,noreferrer');
+        if (trackChoice[job.id] !== false) {
+            try {
+                await trackJob(job.id, 'applied');
+                toast.success('Tracking this application in your Progress board.');
+            } catch (err) {
+                toast.error(err?.message || 'Could not track this application.');
+            }
+        }
+    };
+
     // Skip from the drawer — reject + close.
     const handleDrawerSkip = () => {
         if (drawerJobId != null) handleUpdateStatus(drawerJobId, 'rejected');
@@ -176,12 +221,12 @@ const JobsPage = () => {
                         Opportunities
                     </h1>
                     <p className="text-sm text-secondary-dark mt-1">
-                        {normalJobs.length > 0
+                        {reviewCount > 0
                             ? 'Reviewed by your headhunter — your call on who to reach.'
                             : 'Roles your headhunter found for you.'}
                     </p>
                 </div>
-                {normalJobs.length > 0 && (
+                {reviewCount > 0 && (
                     <motion.span
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -192,7 +237,7 @@ const JobsPage = () => {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
                             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                         </span>
-                        {normalJobs.length} waiting for your review
+                        {reviewCount} waiting for your review
                     </motion.span>
                 )}
             </div>
@@ -272,6 +317,7 @@ const JobsPage = () => {
                             {pageJobs.map(job => {
                                 const match = matchStrength(job.fit_score);
                                 const reason = positiveReason(job.fit_reasoning);
+                                const state = cardState(job);
                                 const pendingThisJob = updateStatusMutation.isPending && updateStatusMutation.variables?.id === job.id;
                                 const approvePending = pendingThisJob && updateStatusMutation.variables?.newStatus === 'approved';
                                 const rejectPending  = pendingThisJob && updateStatusMutation.variables?.newStatus === 'rejected';
@@ -331,12 +377,30 @@ const JobsPage = () => {
                                             {reason}
                                         </p>
 
-                                        {/* Contact line — pre-reach-out it's a prompt, not active work */}
-                                        <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark">
-                                            {job.contact_name ? (
+                                        {/* Contact / status line — reflects how far the card has progressed */}
+                                        <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
+                                            {state === 'drafted' ? (
                                                 <>
                                                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                                    <span className="truncate">Contact found: <span className="font-semibold text-black-light">{job.contact_name}</span></span>
+                                                    <span className="truncate">
+                                                        Contact: <span className="font-semibold text-black-light">{job.contact_name}</span>
+                                                        {job.contact_title ? <span className="text-secondary-dark">, {job.contact_title}</span> : null}
+                                                    </span>
+                                                </>
+                                            ) : state === 'working' ? (
+                                                <>
+                                                    <Loader2 className="w-3.5 h-3.5 text-primary-light shrink-0 animate-spin" />
+                                                    <span>Finding the hiring manager and writing your intro…</span>
+                                                </>
+                                            ) : state === 'no_contact' ? (
+                                                <>
+                                                    <UserX className="w-3.5 h-3.5 text-secondary-dark shrink-0" />
+                                                    <span>No hiring manager found</span>
+                                                </>
+                                            ) : state === 'sent' ? (
+                                                <>
+                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                                    <span>Intro sent</span>
                                                 </>
                                             ) : (
                                                 <>
@@ -346,25 +410,65 @@ const JobsPage = () => {
                                             )}
                                         </div>
 
+                                        {/* No-contact: optional tracking before applying directly */}
+                                        {state === 'no_contact' && (
+                                            <label className="mt-3 flex items-center gap-2 text-xs text-secondary-dark cursor-pointer select-none">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={trackChoice[job.id] !== false}
+                                                    onChange={(e) => setTrackChoice((prev) => ({ ...prev, [job.id]: e.target.checked }))}
+                                                    className="w-4 h-4 rounded border-neutral-dark accent-primary-light"
+                                                />
+                                                Track this application
+                                            </label>
+                                        )}
+
                                         {/* Actions — pushed to the bottom so cards in a row match height */}
                                         <div className="mt-auto pt-5 flex items-center justify-between gap-3">
-                                            <button
-                                                onClick={() => handleUpdateStatus(job.id, 'rejected')}
-                                                disabled={pendingThisJob}
-                                                className="inline-flex items-center justify-center gap-2 text-secondary-dark hover:bg-neutral font-semibold rounded-xl px-5 py-2.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
-                                            >
-                                                {rejectPending ? <ApplyDirLoader.Button variant="dark" /> : null}
-                                                Skip
-                                            </button>
-                                            <button
-                                                onClick={() => handleReachOut(job.id)}
-                                                disabled={pendingThisJob}
-                                                className="group/btn inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                                            >
-                                                {approvePending
-                                                    ? <><ApplyDirLoader.Button variant="light" /> Writing…</>
-                                                    : <>Write Intro <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
-                                            </button>
+                                            {state === 'new' ? (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleUpdateStatus(job.id, 'rejected')}
+                                                        disabled={pendingThisJob}
+                                                        className="inline-flex items-center justify-center gap-2 text-secondary-dark hover:bg-neutral font-semibold rounded-xl px-5 py-2.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {rejectPending ? <ApplyDirLoader.Button variant="dark" /> : null}
+                                                        Skip
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleReachOut(job.id)}
+                                                        disabled={pendingThisJob}
+                                                        className="group/btn inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                                                    >
+                                                        {approvePending
+                                                            ? <><ApplyDirLoader.Button variant="light" /> Writing…</>
+                                                            : <>Write Intro <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
+                                                    </button>
+                                                </>
+                                            ) : state === 'drafted' ? (
+                                                <button
+                                                    onClick={() => navigate('/dashboard/introductions')}
+                                                    className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
+                                                >
+                                                    View on Intros <ArrowRight className="w-4 h-4" />
+                                                </button>
+                                            ) : state === 'no_contact' ? (
+                                                <button
+                                                    onClick={() => handleApplyDirect(job)}
+                                                    className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
+                                                >
+                                                    Apply Direct <ExternalLink className="w-4 h-4" />
+                                                </button>
+                                            ) : state === 'sent' ? (
+                                                <span className="w-full inline-flex items-center justify-center gap-2 text-emerald-600 font-semibold rounded-xl px-5 py-2.5 bg-emerald-50 border border-emerald-200/60">
+                                                    <CheckCircle2 className="w-4 h-4" /> Intro sent
+                                                </span>
+                                            ) : (
+                                                /* working */
+                                                <span className="w-full inline-flex items-center justify-center gap-2 text-secondary-dark font-semibold rounded-xl px-5 py-2.5 bg-neutral border border-neutral-dark">
+                                                    <Loader2 className="w-4 h-4 animate-spin" /> Preparing…
+                                                </span>
+                                            )}
                                         </div>
                                     </motion.div>
                                 );

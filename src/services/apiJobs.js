@@ -66,6 +66,27 @@ export async function getJobsStream(cursor = null, filterTab = 'All') {
   }
 }
 
+/**
+ * The Opportunities feed. Returns jobs across the whole "to review / in
+ * progress" span so a card never disappears when its status advances —
+ * scraped → approved → contacted all stay on the page (and manual_apply for
+ * the "Apply Direct" branch). Visual state per card is derived client-side.
+ */
+export async function getOpportunityJobs(limit = 60) {
+  try {
+    const response = await api.get("/api/jobs/", {
+      params: {
+        page: 1,
+        limit,
+        status: "scraped,approved,outreach_automated,contacted,manual_apply",
+      },
+    });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function getManualApplyJobs() {
   try {
     const response = await api.get("/api/jobs/?status=manual_apply");
