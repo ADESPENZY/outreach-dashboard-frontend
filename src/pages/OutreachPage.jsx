@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { Mail, Send, CheckCircle2, MessageSquare, X, ArrowRight } from 'lucide-react';
+import { Mail, Send, CheckCircle2, MessageSquare, X, ArrowRight, Users } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import { getDraftEmails, getSentEmails, approveEmail, queueEmail, editEmail } from '../services/apiOutreach';
 import { getGmailAccounts } from '../services/apiGmail';
@@ -64,6 +64,8 @@ function DraftCard({ email, canSend, onNeedConnect, onSaveEdit, onApproveSend })
     }
   };
 
+  const backups = Array.isArray(email.backup_contacts) ? email.backup_contacts : [];
+
   return (
     <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-6">
       {/* Recipient */}
@@ -80,6 +82,21 @@ function DraftCard({ email, canSend, onNeedConnect, onSaveEdit, onApproveSend })
           </span>
         )}
       </div>
+
+      {/* Backup decision-makers at the same company — held in reserve */}
+      {backups.length > 0 && (
+        <div className="mt-3 flex items-start gap-2 rounded-xl bg-neutral border border-neutral-dark px-3 py-2">
+          <Users className="w-4 h-4 mt-0.5 shrink-0 text-secondary-dark" />
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-black-light">
+              {backups.length} more {backups.length === 1 ? 'contact' : 'contacts'} available if no reply
+            </p>
+            <p className="text-xs text-secondary-dark truncate">
+              {backups.map((c) => c.name + (c.title ? ` (${c.title})` : '')).join(' · ')}
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Subject */}
       <div className="mt-4">

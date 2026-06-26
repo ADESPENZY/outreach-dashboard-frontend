@@ -15,6 +15,21 @@ export async function getScrapedJobs() {
 }
 
 /**
+ * Full detail for ONE job — includes the description, extracted contacts
+ * (ranked), and post-approval state (has_real_contact / has_draft /
+ * primary_contact). Powers the Opportunities detail drawer and the
+ * "stays-in-place" card polling after Write Intro.
+ */
+export async function getJob(id) {
+  try {
+    const response = await api.get(`/api/jobs/${id}/`);
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/**
  * Page-based fetch for the Jobs dashboard.
  * Returns { jobs, total_count, total_pages, page }
  * Hits /api/jobs/?page=N&limit=10 so the first slice arrives immediately
@@ -87,9 +102,10 @@ export async function updateJobStatus(id, status) {
   }
 }
 
-export async function trackJob(jobId) {
+export async function trackJob(jobId, status) {
   try {
-    const response = await api.post(`/api/jobs/${jobId}/track/`);
+    const body = status ? { status } : {};
+    const response = await api.post(`/api/jobs/${jobId}/track/`, body);
     return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));

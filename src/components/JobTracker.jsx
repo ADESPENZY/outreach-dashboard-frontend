@@ -16,9 +16,10 @@ import SmallSpinner from './SmallSpinner';
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-const STATUS_COLUMNS = ['contacted', 'replied', 'interview', 'offer', 'closed'];
+const STATUS_COLUMNS = ['applied', 'contacted', 'replied', 'interview', 'offer', 'closed'];
 
 const STATUS_STYLES = {
+  applied:   { badge: 'bg-amber-100 text-amber-800',  col: 'border-t-amber-400' },
   contacted: { badge: 'bg-blue-100 text-blue-800',    col: 'border-t-blue-400' },
   replied:   { badge: 'bg-teal-100 text-teal-800',    col: 'border-t-teal-400' },
   interview: { badge: 'bg-purple-100 text-purple-800', col: 'border-t-purple-400' },
@@ -61,7 +62,7 @@ const JobTracker = () => {
     queryFn: () => getJobs({ search, status: statusFilter }),
   });
 
-  const { data: stats = { contacted: 0, replied: 0, interview: 0, offer: 0, closed: 0 } } = useQuery({
+  const { data: stats = { applied: 0, contacted: 0, replied: 0, interview: 0, offer: 0, closed: 0 } } = useQuery({
     queryKey: ['jobStats'],
     queryFn: getJobStats,
   });
@@ -130,6 +131,7 @@ const JobTracker = () => {
         type: 'pie', radius: ['55%', '80%'], label: { show: false },
         emphasis: { label: { show: false } }, labelLine: { show: false },
         data: [
+          { value: stats.applied,   name: 'Applied',    itemStyle: { color: '#fbbf24' } },
           { value: stats.contacted, name: 'Contacted',  itemStyle: { color: '#60a5fa' } },
           { value: stats.replied,   name: 'Replied',    itemStyle: { color: '#2dd4bf' } },
           { value: stats.interview, name: 'Interview',  itemStyle: { color: '#a78bfa' } },

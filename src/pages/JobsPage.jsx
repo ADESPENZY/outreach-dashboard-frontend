@@ -9,6 +9,8 @@ import { getJobsPage, updateJobStatus } from '../services/apiJobs';
 import { getProfile } from '../services/apiProfile';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePersonalizationModal';
+import JobDetailDrawer from '../components/JobDetailDrawer';
+import ActedOpportunityCard from '../components/ActedOpportunityCard';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // A responsive grid of opportunity cards for the roles the headhunter found.
@@ -41,11 +43,13 @@ const matchStrength = (score) => {
 };
 
 // The reasoning is shown to the user, so keep it positive. If the model slips
-// into negative framing, fall back to a neutral positive line.
-const NEGATIVE_RE = /\b(weak|fail|fails|failed|does ?n.?t align|not align|mismatch|not a match|no match|lack|lacks|lacking|limited|poor|poorly|gaps?|missing|unrelated|irrelevant)\b/i;
+// into negative framing — ANY of these signals — replace the whole sentence
+// with a neutral positive line. This mirrors the server-side sanitizer; it's a
+// belt-and-suspenders safety net for legacy rows scored before that landed.
+const NEGATIVE_RE = /(does ?not|does ?n['’]?t|\bweak\b|\bfails?\b|not match|not align|\black(s|ing)?\b|\bmissing\b|mismatch|\bgaps?\b|\bunfortunately\b|\bpoor(ly)?\b|unrelated|irrelevant)/i;
 const positiveReason = (text) =>
   (!text || NEGATIVE_RE.test(text))
-    ? 'Your background has relevant overlap with this role.'
+    ? 'Your experience aligns well with this role.'
     : text;
 
 const JobsPage = () => {
@@ -55,6 +59,11 @@ const JobsPage = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [pendingJobId, setPendingJobId] = useState(null);
     const [showPersonalization, setShowPersonalization] = useState(false);
+    // Jobs the user tapped "Write Intro" on this session. They DON'T leave the
+    // feed — they stay in place (top of grid) and show the contact/draft result.
+    const [actedJobs, setActedJobs] = useState([]);
+    // The job whose detail drawer is open (null = closed).
+    const [drawerJobId, setDrawerJobId] = useState(null);
 
     const [searchParams] = useSearchParams();
     const isActivateRequested = searchParams.get('activate') === '1';
@@ -77,22 +86,28 @@ const JobsPage = () => {
 
     const jobs = pageData?.jobs ?? [];
 
-    // ── Client-side pagination ────────────────────────────────────────────────
-    const totalPages = Math.max(1, Math.ceil(jobs.length / ITEMS_PER_PAGE));
+    // Acted jobs stay pinned at the top of the feed; exclude them from the
+    // normal scraped grid so a job never renders twice (the refetch that drops
+    // it from `jobs` can lag a beat behind the optimistic acted snapshot).
+    const actedIds = new Set(actedJobs.map((j) => j.id));
+    const normalJobs = jobs.filter((j) => !actedIds.has(j.id));
+
+    // ── Client-side pagination (over the normal, not-yet-acted jobs) ──────────
+    const totalPages = Math.max(1, Math.ceil(normalJobs.length / ITEMS_PER_PAGE));
     // When jobs are removed (skip/reach out), the list shrinks. Pull the next
     // jobs onto the current page automatically, and clamp if the current page
     // no longer exists.
     useEffect(() => {
         if (currentPage > totalPages) setCurrentPage(totalPages);
     }, [currentPage, totalPages]);
-    const pageJobs = jobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const pageJobs = normalJobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
     // ── Mutation: approve (Reach Out) / reject (Skip) ─────────────────────────
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
         onSuccess: (_, { newStatus }) => {
             if (newStatus === 'approved') {
-                toast.success('Writing your intro — find it under Introductions in a moment.');
+                toast.success('Writing your intro — it’ll appear on this card in a moment.');
             } else {
                 toast.success('Skipped. Your headhunter will keep looking.');
             }
@@ -104,6 +119,18 @@ const JobsPage = () => {
 
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
 
+    // Write Intro → approve, but keep the card on the feed. We snapshot it into
+    // actedJobs so it stays rendered (and polls for the contact/draft result)
+    // even after the refetch drops it from the scraped list.
+    const approveJob = (jobId) => {
+        const snapshot = jobs.find((j) => j.id === jobId);
+        if (snapshot) {
+            setActedJobs((prev) => (prev.some((j) => j.id === jobId) ? prev : [snapshot, ...prev]));
+        }
+        setDrawerJobId(null); // close the drawer if the action came from there
+        handleUpdateStatus(jobId, 'approved');
+    };
+
     // First-ever Reach Out gates on the personalization popup so the AI draft
     // uses the user's tone + secret weapon. Every reach-out after that is instant.
     const handleReachOut = (jobId) => {
@@ -112,13 +139,19 @@ const JobsPage = () => {
             setShowPersonalization(true);
             return;
         }
-        handleUpdateStatus(jobId, 'approved');
+        approveJob(jobId);
     };
     const handlePersonalizationComplete = () => {
         queryClient.invalidateQueries({ queryKey: ['profile'] });
         setShowPersonalization(false);
-        if (pendingJobId != null) handleUpdateStatus(pendingJobId, 'approved');
+        if (pendingJobId != null) approveJob(pendingJobId);
         setPendingJobId(null);
+    };
+
+    // Skip from the drawer — reject + close.
+    const handleDrawerSkip = () => {
+        if (drawerJobId != null) handleUpdateStatus(drawerJobId, 'rejected');
+        setDrawerJobId(null);
     };
     const handlePersonalizationCancel = () => {
         setShowPersonalization(false);
@@ -143,12 +176,12 @@ const JobsPage = () => {
                         Opportunities
                     </h1>
                     <p className="text-sm text-secondary-dark mt-1">
-                        {jobs.length > 0
+                        {normalJobs.length > 0
                             ? 'Reviewed by your headhunter — your call on who to reach.'
                             : 'Roles your headhunter found for you.'}
                     </p>
                 </div>
-                {jobs.length > 0 && (
+                {normalJobs.length > 0 && (
                     <motion.span
                         initial={{ opacity: 0, y: -6 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -159,10 +192,23 @@ const JobsPage = () => {
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
                             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
                         </span>
-                        {jobs.length} waiting for your review
+                        {normalJobs.length} waiting for your review
                     </motion.span>
                 )}
             </div>
+
+            {/* ── Acted cards — stay pinned here after Write Intro ─────────── */}
+            {actedJobs.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {actedJobs.map((job) => (
+                        <ActedOpportunityCard
+                            key={job.id}
+                            job={job}
+                            onOpenDrawer={setDrawerJobId}
+                        />
+                    ))}
+                </div>
+            )}
 
             {/* ── The feed ────────────────────────────────────────────────── */}
             {loading ? (
@@ -188,7 +234,8 @@ const JobsPage = () => {
                         </div>
                     ))}
                 </div>
-            ) : jobs.length === 0 ? (
+            ) : normalJobs.length === 0 ? (
+                actedJobs.length > 0 ? null : (
                 /* Empty / working state — calm, with a sense of background motion */
                 <motion.div
                     initial={{ opacity: 0, y: 12 }}
@@ -211,6 +258,7 @@ const JobsPage = () => {
                         matches will land here automatically — no need to refresh.
                     </p>
                 </motion.div>
+                )
             ) : (
                 <>
                     <motion.div
@@ -246,9 +294,15 @@ const JobsPage = () => {
                                                 {(job.company_name || '?').trim().charAt(0).toUpperCase()}
                                             </span>
                                             <div className="min-w-0 flex-1">
-                                                <h2 className="font-montserrat text-lg font-bold text-black-light leading-snug line-clamp-2">
-                                                    {job.title}
-                                                </h2>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setDrawerJobId(job.id)}
+                                                    className="text-left w-full"
+                                                >
+                                                    <h2 className="font-montserrat text-lg font-bold text-black-light leading-snug line-clamp-2 hover:text-primary-dark transition-colors">
+                                                        {job.title}
+                                                    </h2>
+                                                </button>
                                                 <p className="text-sm text-secondary-dark mt-0.5 flex items-center gap-1.5 flex-wrap">
                                                     <span className="font-medium text-black-light truncate max-w-full">{job.company_name}</span>
                                                     {job.location && (
@@ -356,6 +410,18 @@ const JobsPage = () => {
                     onComplete={handlePersonalizationComplete}
                 />
             )}
+
+            {/* Opportunity detail drawer — opens on title tap. Skip / Write Intro
+                are hidden once the job has been acted on (it's already drafting). */}
+            <JobDetailDrawer
+                jobId={drawerJobId}
+                isOpen={drawerJobId != null}
+                onClose={() => setDrawerJobId(null)}
+                onSkip={handleDrawerSkip}
+                onWriteIntro={() => drawerJobId != null && handleReachOut(drawerJobId)}
+                showActions={drawerJobId != null && !actedIds.has(drawerJobId)}
+                actionPending={updateStatusMutation.isPending && updateStatusMutation.variables?.id === drawerJobId}
+            />
         </div>
     );
 };
