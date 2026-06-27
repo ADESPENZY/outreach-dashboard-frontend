@@ -99,24 +99,41 @@ export default function ActivationFlow({ profile = null, onComplete }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef(null);
 
-  const [step, setStep] = useState(1);
+  // ── Resume support ───────────────────────────────────────────────────────
+  // If the user already uploaded a CV but didn't finish (e.g. closed the tab
+  // after step 1), pick up at the skills step with their extracted data and any
+  // preferences already saved — onboarding never silently disappears.
+  const resuming = !!(profile && (profile.cv_raw_text || '').trim());
+  const savedPrefs = profile?.job_preferences || {};
+  const initialSkills = (() => {
+    const se = profile?.skills_extracted;
+    const list = Array.isArray(se) ? se : (se && Array.isArray(se.skills) ? se.skills : []);
+    return list.map(skillLabel).filter(Boolean);
+  })();
+  const initialExperience = savedPrefs.seniority
+    || (() => {
+      const se = profile?.skills_extracted;
+      return yearsToLevel(se && !Array.isArray(se) ? se.years_experience : undefined);
+    })();
+
+  const [step, setStep] = useState(resuming ? 2 : 1);
   const [profileExists, setProfileExists] = useState(!!profile);
 
   // Step 1 — CV
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [uploaded, setUploaded] = useState(false);
+  const [uploaded, setUploaded] = useState(resuming);
   const [extracted, setExtracted] = useState(null);
 
   // Step 2 — editable extraction
-  const [skills, setSkills] = useState([]);
-  const [experienceLevel, setExperienceLevel] = useState('');
+  const [skills, setSkills] = useState(initialSkills);
+  const [experienceLevel, setExperienceLevel] = useState(initialExperience);
   const [newSkill, setNewSkill] = useState('');
 
   // Step 3 / 4 — preferences
-  const [roleTypes, setRoleTypes] = useState([]);
-  const [locations, setLocations] = useState([]);
-  const [arrangement, setArrangement] = useState('');
+  const [roleTypes, setRoleTypes] = useState(Array.isArray(savedPrefs.role_types) ? savedPrefs.role_types : []);
+  const [locations, setLocations] = useState(Array.isArray(savedPrefs.locations) ? savedPrefs.locations : []);
+  const [arrangement, setArrangement] = useState(savedPrefs.work_arrangement || '');
   const [newRole, setNewRole] = useState('');
   const [newLocation, setNewLocation] = useState('');
 
@@ -222,7 +239,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
-      toast.success('Calibration complete — your headhunter is on it.');
+      toast.success('Calibration complete — your headhunter is searching now, and every morning from here.');
       onComplete?.();
     } catch (err) {
       toast.error(err?.message || 'Could not save your preferences. Please try again.');
@@ -411,9 +428,13 @@ export default function ActivationFlow({ profile = null, onComplete }) {
               </div>
 
               <div className="flex items-center justify-between pt-1">
-                <button onClick={() => setStep(1)} className={secondaryBtn}>
-                  <ArrowLeft className="w-4 h-4" /> Back
-                </button>
+                {/* No way back to the upload screen when resuming (CV already on
+                    file and no local file to re-continue with) — avoids a dead end. */}
+                {file ? (
+                  <button onClick={() => setStep(1)} className={secondaryBtn}>
+                    <ArrowLeft className="w-4 h-4" /> Back
+                  </button>
+                ) : <span />}
                 <button onClick={() => setStep(3)} className={primaryBtn}>
                   Looks good <ArrowRight className="w-4 h-4" />
                 </button>

@@ -92,11 +92,20 @@ const DashboardPage = () => {
     );
   }
 
+  // Onboarding is only DONE once the user has both uploaded a CV AND saved
+  // their role preferences (role_types is written only by the final step). CV
+  // upload alone isn't enough — it's set at step 1, so gating on it would hide
+  // onboarding for anyone who bailed before finishing. Saved role preferences
+  // is the reliable "finished" signal (and is what activates the daily scout).
   const cvUploaded = !!profile?.cv_raw_text;
+  const roleTypes = profile?.job_preferences?.role_types;
+  const hasPreferences = Array.isArray(roleTypes) && roleTypes.length > 0;
+  const onboardingDone = cvUploaded && hasPreferences;
 
-  // ── ONBOARDING: no CV yet — run the Calibration flow (invalidates ['profile']
-  // on completion, which re-renders this page out of onboarding). ────────────
-  if (!cvUploaded) {
+  // ── ONBOARDING / RESUME — run (or resume) the Calibration flow. ActivationFlow
+  // reads the profile to pick up where the user left off, and invalidates
+  // ['profile'] on completion so this page re-renders out of onboarding. ──────
+  if (!onboardingDone) {
     return <ActivationFlow profile={profile} />;
   }
 
