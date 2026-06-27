@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useSearchParams } from 'react-router';
-import { MapPin, Sparkles, ArrowRight, ArrowLeft, CheckCircle2, Search, Loader2, UserX, ExternalLink } from 'lucide-react';
+import { MapPin, ArrowRight, ArrowLeft, CheckCircle2, Search, Loader2, UserX, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
@@ -12,6 +12,7 @@ import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePersonalizationModal';
 import JobDetailDrawer from '../components/JobDetailDrawer';
 import ActedOpportunityCard from '../components/ActedOpportunityCard';
+import ApplyDirectModal from '../components/ApplyDirectModal';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // A responsive grid of opportunity cards for the roles the headhunter found.
@@ -84,6 +85,8 @@ const JobsPage = () => {
     const [actedJobs, setActedJobs] = useState([]);
     // The job whose detail drawer is open (null = closed).
     const [drawerJobId, setDrawerJobId] = useState(null);
+    // Apply-Direct modal context: { job, track } | null.
+    const [applyModal, setApplyModal] = useState(null);
 
     const [searchParams] = useSearchParams();
     const isActivateRequested = searchParams.get('activate') === '1';
@@ -164,7 +167,10 @@ const JobsPage = () => {
 
     // First-ever Reach Out gates on the personalization popup so the AI draft
     // uses the user's tone + secret weapon. Every reach-out after that is instant.
+    // Always close the detail drawer first so the action isn't hidden behind it
+    // (this is what makes the drawer's Write Intro behave like the card's).
     const handleReachOut = (jobId) => {
+        setDrawerJobId(null);
         if (profile && !profile.tone_preference) {
             setPendingJobId(jobId);
             setShowPersonalization(true);
@@ -179,17 +185,17 @@ const JobsPage = () => {
         setPendingJobId(null);
     };
 
-    // Apply Direct (no contact found) — open the job posting and, if the user
-    // left tracking on, drop an 'applied' card onto the Progress board.
-    const handleApplyDirect = async (job) => {
-        if (job.apply_url) window.open(job.apply_url, '_blank', 'noopener,noreferrer');
-        if (trackChoice[job.id] !== false) {
-            try {
-                await trackJob(job.id, 'applied');
-                toast.success('Tracking this application in your Progress board.');
-            } catch (err) {
-                toast.error(err?.message || 'Could not track this application.');
-            }
+    // Apply Direct (no contact found) — opens the tailored-CV modal first. The
+    // modal opens the listing; we just record the application if tracking is on.
+    const openApplyModal = (job, track) => setApplyModal({ job, track });
+
+    const trackApplication = async (job) => {
+        if (!applyModal?.track) return;
+        try {
+            await trackJob(job.id, 'applied');
+            toast.success('Tracking this application in your Progress board.');
+        } catch (err) {
+            toast.error(err?.message || 'Could not track this application.');
         }
     };
 
@@ -207,6 +213,30 @@ const JobsPage = () => {
     useEffect(() => {
         if (isActivateRequested && !isActivated) setIsActivationDrawerOpen(true);
     }, [isActivateRequested, isActivated]);
+
+    // Shown when there's nothing left to review (everything skipped or acted on).
+    const allCaughtUp = (
+        <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: 'easeOut' }}
+            className="min-h-[40vh] flex flex-col items-center justify-center text-center py-10"
+        >
+            <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
+                <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
+                <span className="absolute inset-2 rounded-full bg-primary-light/10 animate-ping [animation-delay:600ms]" />
+                <span className="relative w-16 h-16 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
+                    <CheckCircle2 className="w-7 h-7 text-primary-light" />
+                </span>
+            </div>
+            <h2 className="text-lg md:text-xl font-bold font-montserrat text-black-light">
+                All caught up!
+            </h2>
+            <p className="mt-2 text-sm text-secondary-dark max-w-sm leading-relaxed">
+                Your headhunter will find more opportunities overnight. Check back tomorrow.
+            </p>
+        </motion.div>
+    );
 
     return (
         <div className="relative isolate p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-6 animate-fade-in font-roboto">
@@ -250,6 +280,7 @@ const JobsPage = () => {
                             key={job.id}
                             job={job}
                             onOpenDrawer={setDrawerJobId}
+                            onApplyDirect={openApplyModal}
                         />
                     ))}
                 </div>
@@ -280,30 +311,7 @@ const JobsPage = () => {
                     ))}
                 </div>
             ) : normalJobs.length === 0 ? (
-                actedJobs.length > 0 ? null : (
-                /* Empty / working state — calm, with a sense of background motion */
-                <motion.div
-                    initial={{ opacity: 0, y: 12 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, ease: 'easeOut' }}
-                    className="min-h-[50vh] flex flex-col items-center justify-center text-center"
-                >
-                    <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
-                        <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
-                        <span className="absolute inset-2 rounded-full bg-primary-light/10 animate-ping [animation-delay:600ms]" />
-                        <span className="relative w-16 h-16 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
-                            <Sparkles className="w-7 h-7 text-primary-light" />
-                        </span>
-                    </div>
-                    <h2 className="text-lg md:text-xl font-bold font-montserrat text-black-light">
-                        Your pipeline is clear
-                    </h2>
-                    <p className="mt-2 text-sm text-secondary-dark max-w-sm leading-relaxed">
-                        Your headhunter is out sourcing fresh roles right now. New
-                        matches will land here automatically — no need to refresh.
-                    </p>
-                </motion.div>
-                )
+                allCaughtUp
             ) : (
                 <>
                     <motion.div
@@ -329,7 +337,7 @@ const JobsPage = () => {
                                         variants={CARD_ITEM}
                                         exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
                                         whileHover={{ y: -6, transition: { duration: 0.3, ease: 'easeOut' } }}
-                                        className="group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30"
+                                        className={`group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 ${state !== 'new' ? 'border-l-4 border-l-primary-light' : ''}`}
                                     >
                                         {/* Match-strength top accent — sheer, glanceable hierarchy */}
                                         <span className={`absolute inset-x-0 top-0 h-1 ${match.accent}`} />
@@ -378,37 +386,41 @@ const JobsPage = () => {
                                         </p>
 
                                         {/* Contact / status line — reflects how far the card has progressed */}
-                                        <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
-                                            {state === 'drafted' ? (
-                                                <>
-                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                                    <span className="truncate">
-                                                        Contact: <span className="font-semibold text-black-light">{job.contact_name}</span>
-                                                        {job.contact_title ? <span className="text-secondary-dark">, {job.contact_title}</span> : null}
-                                                    </span>
-                                                </>
-                                            ) : state === 'working' ? (
-                                                <>
-                                                    <Loader2 className="w-3.5 h-3.5 text-primary-light shrink-0 animate-spin" />
-                                                    <span>Finding the hiring manager and writing your intro…</span>
-                                                </>
-                                            ) : state === 'no_contact' ? (
-                                                <>
-                                                    <UserX className="w-3.5 h-3.5 text-secondary-dark shrink-0" />
-                                                    <span>No hiring manager found</span>
-                                                </>
-                                            ) : state === 'sent' ? (
-                                                <>
-                                                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                                                    <span>Intro sent</span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <Search className="w-3.5 h-3.5 text-secondary-dark/50 shrink-0" />
-                                                    <span>We&rsquo;ll find the contact and draft your intro</span>
-                                                </>
-                                            )}
-                                        </div>
+                                        {(state === 'drafted' || state === 'sent') ? (
+                                            <div className="mt-3 space-y-1.5">
+                                                {job.contact_name && (
+                                                    <p className="flex items-center gap-1.5 text-xs text-secondary-dark truncate">
+                                                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                                        <span className="truncate">
+                                                            <span className="font-semibold text-black-light">{job.contact_name}</span>
+                                                            {job.contact_title ? <span>, {job.contact_title}</span> : null}
+                                                        </span>
+                                                    </p>
+                                                )}
+                                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2.5 py-0.5 text-[11px] font-semibold">
+                                                    {state === 'sent' ? 'Intro sent' : 'Intro drafted'}
+                                                </span>
+                                            </div>
+                                        ) : (
+                                            <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
+                                                {state === 'working' ? (
+                                                    <>
+                                                        <Loader2 className="w-3.5 h-3.5 text-primary-light shrink-0 animate-spin" />
+                                                        <span>Finding the hiring manager and writing your intro…</span>
+                                                    </>
+                                                ) : state === 'no_contact' ? (
+                                                    <>
+                                                        <UserX className="w-3.5 h-3.5 text-secondary-dark shrink-0" />
+                                                        <span>No hiring manager found</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Search className="w-3.5 h-3.5 text-secondary-dark/50 shrink-0" />
+                                                        <span>We&rsquo;ll find the contact and draft your intro</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        )}
 
                                         {/* No-contact: optional tracking before applying directly */}
                                         {state === 'no_contact' && (
@@ -445,7 +457,7 @@ const JobsPage = () => {
                                                             : <>Write Intro <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
                                                     </button>
                                                 </>
-                                            ) : state === 'drafted' ? (
+                                            ) : (state === 'drafted' || state === 'sent') ? (
                                                 <button
                                                     onClick={() => navigate('/dashboard/introductions')}
                                                     className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
@@ -454,15 +466,11 @@ const JobsPage = () => {
                                                 </button>
                                             ) : state === 'no_contact' ? (
                                                 <button
-                                                    onClick={() => handleApplyDirect(job)}
+                                                    onClick={() => openApplyModal(job, trackChoice[job.id] !== false)}
                                                     className="w-full inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
                                                 >
                                                     Apply Direct <ExternalLink className="w-4 h-4" />
                                                 </button>
-                                            ) : state === 'sent' ? (
-                                                <span className="w-full inline-flex items-center justify-center gap-2 text-emerald-600 font-semibold rounded-xl px-5 py-2.5 bg-emerald-50 border border-emerald-200/60">
-                                                    <CheckCircle2 className="w-4 h-4" /> Intro sent
-                                                </span>
                                             ) : (
                                                 /* working */
                                                 <span className="w-full inline-flex items-center justify-center gap-2 text-secondary-dark font-semibold rounded-xl px-5 py-2.5 bg-neutral border border-neutral-dark">
@@ -498,6 +506,9 @@ const JobsPage = () => {
                             </button>
                         </div>
                     )}
+
+                    {/* Nothing left to review — every visible card is acted on */}
+                    {reviewCount === 0 && allCaughtUp}
                 </>
             )}
 
@@ -526,6 +537,15 @@ const JobsPage = () => {
                 showActions={drawerJobId != null && !actedIds.has(drawerJobId)}
                 actionPending={updateStatusMutation.isPending && updateStatusMutation.variables?.id === drawerJobId}
             />
+
+            {/* Apply Direct → offer a tailored CV before sending them to the listing */}
+            {applyModal && (
+                <ApplyDirectModal
+                    job={applyModal.job}
+                    onClose={() => setApplyModal(null)}
+                    onApplied={() => trackApplication(applyModal.job)}
+                />
+            )}
         </div>
     );
 };

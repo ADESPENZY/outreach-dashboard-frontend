@@ -273,3 +273,32 @@ export async function getJobCV(jobId) {
     throw new Error(parseApiError(err));
   }
 }
+
+/**
+ * One-shot tailored-CV download for the "Apply Direct" flow. Generates (or
+ * reuses) a job-specific CV and returns the PDF as a Blob. On error the server
+ * sends JSON, so we decode the blob to surface the real message.
+ */
+export async function generateTailoredCV(jobId) {
+  try {
+    const response = await api.post(
+      "/api/outreach/generate-cv/",
+      { job_id: jobId },
+      { responseType: "blob" }
+    );
+    return response.data;
+  } catch (err) {
+    // The error body is a Blob (responseType: blob) — try to read its JSON.
+    const blob = err?.response?.data;
+    if (blob instanceof Blob) {
+      try {
+        const text = await blob.text();
+        const json = JSON.parse(text);
+        throw new Error(json.error || "Could not generate your CV.");
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message) throw parseErr;
+      }
+    }
+    throw new Error(parseApiError(err));
+  }
+}

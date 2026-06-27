@@ -1,9 +1,8 @@
 import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'react-toastify';
 import { CheckCircle2, MapPin, Loader2, ArrowRight, UserX, ExternalLink } from 'lucide-react';
-import { getJob, trackJob } from '../services/apiJobs';
+import { getJob } from '../services/apiJobs';
 
 // ── Acted opportunity card ────────────────────────────────────────────────
 // After the user taps "Write Intro" the card does NOT leave Opportunities — it
@@ -17,11 +16,10 @@ import { getJob, trackJob } from '../services/apiJobs';
 
 const POLL_GIVE_UP_MS = 90000;
 
-const ActedOpportunityCard = ({ job, onOpenDrawer }) => {
+const ActedOpportunityCard = ({ job, onOpenDrawer, onApplyDirect }) => {
   const navigate = useNavigate();
   const startRef = useRef(Date.now());
   const [trackChecked, setTrackChecked] = useState(true);
-  const [tracked, setTracked] = useState(false);
 
   const { data: detail } = useQuery({
     queryKey: ['job-detail', job.id],
@@ -47,18 +45,10 @@ const ActedOpportunityCard = ({ job, onOpenDrawer }) => {
   // longer draft against placeholders.
   const stage = noContact ? 'no_contact' : hasDraft && hasRealContact ? 'drafted' : 'finding';
 
-  const handleApplyDirect = async () => {
-    const url = detail?.apply_url || job.apply_url;
-    if (url) window.open(url, '_blank', 'noopener,noreferrer');
-    if (trackChecked && !tracked) {
-      try {
-        await trackJob(job.id, 'applied');
-        setTracked(true);
-        toast.success('Tracking this application in your Progress board.');
-      } catch (err) {
-        toast.error(err?.message || 'Could not track this application.');
-      }
-    }
+  // Hand off to the shared Apply Direct modal (tailored-CV offer + tracking),
+  // passing the merged job (so it has apply_url) and the tracking choice.
+  const handleApplyDirect = () => {
+    onApplyDirect?.({ ...job, ...detail }, trackChecked);
   };
 
   const contactLine = primary

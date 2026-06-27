@@ -171,18 +171,31 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
                     </div>
                   )}
 
-                  {/* Full description */}
-                  <div className="space-y-2">
-                    <h3 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
-                      About the role
-                    </h3>
-                    <p className="text-sm text-black-light leading-relaxed whitespace-pre-line">
-                      {job.description?.trim() || 'No description was provided for this role.'}
-                    </p>
-                  </div>
+                  {/* Full description — or, when there's none, a link out to the
+                      live listing. If there's neither, the section is omitted. */}
+                  {job.description?.trim() ? (
+                    <div className="space-y-2">
+                      <h3 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
+                        About the role
+                      </h3>
+                      <p className="text-sm text-black-light leading-relaxed whitespace-pre-line">
+                        {job.description.trim()}
+                      </p>
+                    </div>
+                  ) : job.apply_url ? (
+                    <a
+                      href={job.apply_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-dark hover:text-primary-light transition-colors"
+                    >
+                      View full listing <ExternalLink className="w-3.5 h-3.5" />
+                    </a>
+                  ) : null}
 
-                  {/* Apply manually */}
-                  {job.apply_url && (
+                  {/* Apply manually — present whenever there's a link AND we showed
+                      a description above (avoids duplicating the link). */}
+                  {job.apply_url && job.description?.trim() && (
                     <a
                       href={job.apply_url}
                       target="_blank"
