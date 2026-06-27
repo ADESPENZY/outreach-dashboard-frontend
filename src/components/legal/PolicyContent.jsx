@@ -69,6 +69,11 @@ export function PrivacyPolicy() {
       <Policy heading="Your rights">
         <li>View &amp; edit everything in <b>Profile</b>. Export your CV as PDF. Withdraw optional-email consent in <b>Settings → Notifications</b>. <b>Delete your account</b> any time (Settings → Danger Zone) — this permanently erases your data. We retain your data only until you delete your account.</li>
       </Policy>
+      <Policy heading="If you received an email through ApplyDir (recipients)">
+        <li><b>How we found you:</b> business contact details (your work email and title) are discovered through legitimate B2B data providers such as Hunter.io and Apollo — never bought lists. Each email also tells you how to stop.</li>
+        <li><b>Opt out instantly:</b> reply with <b>“stop”</b> (or “unsubscribe”, “remove”, “not interested”) and you are added to a permanent do-not-contact list — no user of ApplyDir can email that address again, and all follow-ups stop.</li>
+        <li><b>Delete your data:</b> reply asking us to delete your data, or email <a href="mailto:support@applydir.com" className="font-semibold text-primary-dark hover:underline">support@applydir.com</a>. We will erase your contact record and every associated message from our systems.</li>
+      </Policy>
       <Policy heading="International transfers, security & changes">
         <li>Your data may be processed outside your country by the processors above, under their standard safeguards.</li>
         <li>We protect data with encryption in transit and at rest, and encrypt inbox credentials at the field level.</li>
