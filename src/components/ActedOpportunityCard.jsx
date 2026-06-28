@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { CheckCircle2, MapPin, Loader2, ArrowRight, UserX, ExternalLink } from 'lucide-react';
 import { getJob } from '../services/apiJobs';
+import GenerateCvButton from './GenerateCvButton';
 
 // ── Acted opportunity card ────────────────────────────────────────────────
 // After the user taps "Write Intro" the card does NOT leave Opportunities — it
@@ -125,6 +126,11 @@ const ActedOpportunityCard = ({ job, onOpenDrawer, onApplyDirect }) => {
             </label>
           </div>
         )}
+      </div>
+
+      {/* Tailored CV — subtle, available here too */}
+      <div className="mt-3">
+        <GenerateCvButton job={{ ...job, ...detail }} hasCv={detail?.has_cv ?? job.has_cv} />
       </div>
 
       {/* Action — pinned to the bottom so heights match the grid */}

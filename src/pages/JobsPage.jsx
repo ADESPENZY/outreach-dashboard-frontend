@@ -13,6 +13,7 @@ import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePer
 import JobDetailDrawer from '../components/JobDetailDrawer';
 import ActedOpportunityCard from '../components/ActedOpportunityCard';
 import ApplyDirectModal from '../components/ApplyDirectModal';
+import GenerateCvButton from '../components/GenerateCvButton';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // A responsive grid of opportunity cards for the roles the headhunter found.
@@ -384,6 +385,11 @@ const JobsPage = () => {
                                         <p className="mt-3 text-sm italic text-secondary-dark leading-relaxed border-l-2 border-neutral-dark bg-neutral/50 rounded-r-lg pl-3 py-2 transition-colors duration-300 group-hover:bg-primary-light/5">
                                             {reason}
                                         </p>
+
+                                        {/* Tailored CV — subtle, available on every card */}
+                                        <div className="mt-2.5">
+                                            <GenerateCvButton job={job} hasCv={job.has_cv} />
+                                        </div>
 
                                         {/* Contact / status line — reflects how far the card has progressed */}
                                         {(state === 'drafted' || state === 'sent') ? (

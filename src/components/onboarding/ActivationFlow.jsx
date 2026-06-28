@@ -22,16 +22,29 @@ import {
 //   locations + hybrid/onsite                    → LinkedIn location filter
 // (see Backend/AutoScout_mapping.md). Source labels are never shown to the user.
 
+// Role CATEGORIES — the `key` is what we store (and what the backend expands
+// into search keywords + gates scoring on); `label` is what the user sees.
+// Users can also type custom keywords, which are stored verbatim.
 const ROLE_OPTIONS = [
-  'Software engineering',
-  'Frontend',
-  'Backend / API',
-  'DevOps / Infra',
-  'Data / ML',
-  'Mobile',
-  'Product',
-  'Design',
+  { key: 'software_engineer',   label: 'Software Engineer' },
+  { key: 'backend',             label: 'Backend' },
+  { key: 'frontend',            label: 'Frontend' },
+  { key: 'devops_cloud',        label: 'DevOps / Cloud' },
+  { key: 'data_engineer',       label: 'Data Engineer' },
+  { key: 'data_analyst',        label: 'Data Analyst' },
+  { key: 'ml_ai',               label: 'ML / AI' },
+  { key: 'product_manager',     label: 'Product Manager' },
+  { key: 'designer',            label: 'Designer' },
+  { key: 'automation',          label: 'Automation' },
+  { key: 'security',            label: 'Security' },
+  { key: 'qa_test',             label: 'QA / Test' },
+  { key: 'engineering_manager', label: 'Engineering Manager' },
+  { key: 'technical_writer',    label: 'Technical Writer' },
+  { key: 'cloud_architect',     label: 'Cloud Architect' },
 ];
+const ROLE_KEYS = new Set(ROLE_OPTIONS.map((o) => o.key));
+// Readable label for a stored role value (preset key → label; custom → verbatim).
+const roleLabel = (val) => ROLE_OPTIONS.find((o) => o.key === val)?.label || val;
 
 const LOCATION_OPTIONS = [
   'Remote anywhere',
@@ -455,13 +468,13 @@ export default function ActivationFlow({ profile = null, onComplete }) {
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {ROLE_OPTIONS.map((role) => {
-                  const active = roleTypes.includes(role);
+                {ROLE_OPTIONS.map(({ key, label }) => {
+                  const active = roleTypes.includes(key);
                   return (
                     <button
-                      key={role}
+                      key={key}
                       type="button"
-                      onClick={() => toggle(setRoleTypes, role)}
+                      onClick={() => toggle(setRoleTypes, key)}
                       className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-all ${
                         active
                           ? 'bg-primary-light text-white border-primary-light'
@@ -469,18 +482,18 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                       }`}
                     >
                       {active && <Check className="w-3.5 h-3.5" />}
-                      {role}
+                      {label}
                     </button>
                   );
                 })}
 
-                {/* Custom roles the user typed in */}
-                {roleTypes.filter((r) => !ROLE_OPTIONS.includes(r)).map((r) => (
+                {/* Custom roles the user typed in (stored verbatim) */}
+                {roleTypes.filter((r) => !ROLE_KEYS.has(r)).map((r) => (
                   <span
                     key={r}
                     className="inline-flex items-center gap-1.5 rounded-full pl-3.5 pr-2 py-2 text-sm font-medium bg-primary-light text-white border border-primary-light"
                   >
-                    {r}
+                    {roleLabel(r)}
                     <button
                       type="button"
                       onClick={() => removeValue(setRoleTypes, r)}

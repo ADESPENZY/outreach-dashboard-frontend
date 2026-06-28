@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { Mail, Send, CheckCircle2, MessageSquare, X, ArrowRight, Users } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
+import GenerateCvButton from '../components/GenerateCvButton';
 import { getDraftEmails, getSentEmails, approveEmail, queueEmail, editEmail } from '../services/apiOutreach';
 import { getGmailAccounts } from '../services/apiGmail';
 
@@ -122,18 +123,24 @@ function DraftCard({ email, canSend, onNeedConnect, onSaveEdit, onApproveSend })
         <p className="text-xs text-secondary-dark/60 mt-1.5">Edits save automatically — make it sound like you.</p>
       </div>
 
-      {/* Action */}
-      <div className="mt-4 flex items-center justify-end gap-3">
-        {saving && <span className="text-xs text-secondary-dark">Saving…</span>}
-        <button
-          onClick={handleApprove}
-          disabled={approving}
-          className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-        >
-          {approving
-            ? <><ApplyDirLoader.Button variant="light" /> Sending…</>
-            : <>Approve &amp; Send <Send className="w-4 h-4" /></>}
-        </button>
+      {/* Action — tailored CV on the left so it's ready if they ask for it */}
+      <div className="mt-4 flex items-center justify-between gap-3 flex-wrap">
+        <GenerateCvButton
+          job={{ id: email.job_id, title: email.job_title, company_name: email.company_name }}
+          hasCv={email.job_has_cv}
+        />
+        <div className="flex items-center gap-3">
+          {saving && <span className="text-xs text-secondary-dark">Saving…</span>}
+          <button
+            onClick={handleApprove}
+            disabled={approving}
+            className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {approving
+              ? <><ApplyDirLoader.Button variant="light" /> Sending…</>
+              : <>Approve &amp; Send <Send className="w-4 h-4" /></>}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -183,14 +190,20 @@ function ReplyCard({ email }) {
           </p>
         </div>
       </div>
-      <a
-        href="https://mail.google.com/"
-        target="_blank"
-        rel="noopener noreferrer"
-        className="shrink-0 inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-emerald-700 hover:text-emerald-900 transition-colors"
-      >
-        Check your Gmail to continue the conversation <ArrowRight className="w-4 h-4" />
-      </a>
+      <div className="shrink-0 flex flex-col items-start sm:items-end gap-1.5">
+        <a
+          href="https://mail.google.com/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center justify-center gap-1.5 text-sm font-semibold text-emerald-700 hover:text-emerald-900 transition-colors"
+        >
+          Check your Gmail to continue the conversation <ArrowRight className="w-4 h-4" />
+        </a>
+        <GenerateCvButton
+          job={{ id: email.job_id, title: email.job_title, company_name: email.company_name }}
+          hasCv={email.job_has_cv}
+        />
+      </div>
     </div>
   );
 }
