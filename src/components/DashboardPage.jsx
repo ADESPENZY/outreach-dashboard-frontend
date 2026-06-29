@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -10,7 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import { getScrapedJobs } from '../services/apiJobs';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getDraftEmails } from '../services/apiOutreach';
-import { getProfile } from '../services/apiProfile';
+import { getProfile, updateProfile } from '../services/apiProfile';
 import ActivationFlow from './onboarding/ActivationFlow';
 
 // The Home page is the returning user's daily briefing (ARCHITECTURE §1,
@@ -80,6 +80,19 @@ const DashboardPage = () => {
     queryFn: getDraftEmails,
     staleTime: 5 * 60 * 1000,
   });
+
+  // One-time timezone backfill for users who onboarded before we captured it —
+  // so their daily scrape lands at ~5 AM local. Only PATCHes when ours differs
+  // from a blank/UTC stored value.
+  useEffect(() => {
+    if (!profile) return;
+    let browserTz = '';
+    try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
+    const stored = profile.timezone || '';
+    if (browserTz && browserTz !== 'UTC' && (!stored || stored === 'UTC') && stored !== browserTz) {
+      updateProfile({ timezone: browserTz }).catch(() => {});
+    }
+  }, [profile]);
 
   const loading = profileLoading || jobsLoading || analyticsLoading;
 

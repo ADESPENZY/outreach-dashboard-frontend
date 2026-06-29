@@ -13,7 +13,6 @@ import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePer
 import JobDetailDrawer from '../components/JobDetailDrawer';
 import ActedOpportunityCard from '../components/ActedOpportunityCard';
 import ApplyDirectModal from '../components/ApplyDirectModal';
-import GenerateCvButton from '../components/GenerateCvButton';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // A responsive grid of opportunity cards for the roles the headhunter found.
@@ -338,7 +337,8 @@ const JobsPage = () => {
                                         variants={CARD_ITEM}
                                         exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
                                         whileHover={{ y: -6, transition: { duration: 0.3, ease: 'easeOut' } }}
-                                        className={`group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 ${state !== 'new' ? 'border-l-4 border-l-primary-light' : ''}`}
+                                        onClick={() => setDrawerJobId(job.id)}
+                                        className={`group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full cursor-pointer transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 ${state !== 'new' ? 'border-l-4 border-l-primary-light' : ''}`}
                                     >
                                         {/* Match-strength top accent — sheer, glanceable hierarchy */}
                                         <span className={`absolute inset-x-0 top-0 h-1 ${match.accent}`} />
@@ -386,11 +386,6 @@ const JobsPage = () => {
                                             {reason}
                                         </p>
 
-                                        {/* Tailored CV — subtle, available on every card */}
-                                        <div className="mt-2.5">
-                                            <GenerateCvButton job={job} hasCv={job.has_cv} />
-                                        </div>
-
                                         {/* Contact / status line — reflects how far the card has progressed */}
                                         {(state === 'drafted' || state === 'sent') ? (
                                             <div className="mt-3 space-y-1.5">
@@ -430,7 +425,7 @@ const JobsPage = () => {
 
                                         {/* No-contact: optional tracking before applying directly */}
                                         {state === 'no_contact' && (
-                                            <label className="mt-3 flex items-center gap-2 text-xs text-secondary-dark cursor-pointer select-none">
+                                            <label className="mt-3 flex items-center gap-2 text-xs text-secondary-dark cursor-pointer select-none" onClick={(e) => e.stopPropagation()}>
                                                 <input
                                                     type="checkbox"
                                                     checked={trackChoice[job.id] !== false}
@@ -441,8 +436,9 @@ const JobsPage = () => {
                                             </label>
                                         )}
 
-                                        {/* Actions — pushed to the bottom so cards in a row match height */}
-                                        <div className="mt-auto pt-5 flex items-center justify-between gap-3">
+                                        {/* Actions — pushed to the bottom so cards in a row match height.
+                                            stopPropagation so button clicks don't also open the drawer. */}
+                                        <div className="mt-auto pt-5 flex items-center justify-between gap-3" onClick={(e) => e.stopPropagation()}>
                                             {state === 'new' ? (
                                                 <>
                                                     <button

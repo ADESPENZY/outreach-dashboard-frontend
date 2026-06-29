@@ -197,6 +197,11 @@ export default function ActivationFlow({ profile = null, onComplete }) {
       setExtracted(data);
       setSkills((data.skills || []).map(skillLabel).filter(Boolean));
       setExperienceLevel(yearsToLevel(data.years_experience));
+      // Pre-select the role categories the AI judged this CV qualifies for, so
+      // step 3 guides users who don't know which titles to search for. Only
+      // when they haven't already chosen (don't override a returning user).
+      const suggested = (data.suggested_role_categories || []).filter((k) => ROLE_KEYS.has(k));
+      if (suggested.length) setRoleTypes((prev) => (prev.length ? prev : suggested));
       setStep(2);
     } catch (err) {
       toast.error(err?.message || 'We couldn’t read that CV. Please try again.');
@@ -231,6 +236,10 @@ export default function ActivationFlow({ profile = null, onComplete }) {
     setSaving(true);
     try {
       const level = EXPERIENCE_LEVELS.find((l) => l.id === experienceLevel);
+      // Capture the user's timezone so their daily scrape runs at ~5 AM THEIR
+      // local time (jobs waiting when they wake up), not a single global time.
+      let browserTz = '';
+      try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
       await updateProfile({
         skills_extracted: {
           ...(extracted || {}),
@@ -245,6 +254,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
           work_arrangement: arrangement,
           remote_only: arrangement === 'remote',
         },
+        ...(browserTz ? { timezone: browserTz } : {}),
         onboarding_complete: true,
       });
 
@@ -259,6 +269,12 @@ export default function ActivationFlow({ profile = null, onComplete }) {
       setSaving(false);
     }
   };
+
+  // Role categories the AI matched to this CV — used to guide (and pre-select)
+  // the user in step 3 so they don't have to guess a title.
+  const suggestedSet = new Set(
+    (extracted?.suggested_role_categories || []).filter((k) => ROLE_KEYS.has(k)),
+  );
 
   // ── Per-step gating ──────────────────────────────────────────────────────
   const canContinue =
@@ -463,13 +479,19 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                   What kind of role are you looking for?
                 </h1>
                 <p className="mt-1.5 text-sm text-secondary-dark leading-relaxed">
-                  Pick as many as fit. We&rsquo;ll prioritise roles that match.
+                  {suggestedSet.size > 0
+                    ? 'Based on your CV, we pre-selected the roles you’re most qualified for. Adjust anything — pick as many as fit.'
+                    : 'Pick as many as fit. We’ll prioritise roles that match.'}
                 </p>
               </div>
 
               <div className="flex flex-wrap gap-2">
-                {ROLE_OPTIONS.map(({ key, label }) => {
+                {/* Suggested roles (matched to the CV) sort to the front. */}
+                {[...ROLE_OPTIONS]
+                  .sort((a, b) => (suggestedSet.has(b.key) ? 1 : 0) - (suggestedSet.has(a.key) ? 1 : 0))
+                  .map(({ key, label }) => {
                   const active = roleTypes.includes(key);
+                  const suggested = suggestedSet.has(key);
                   return (
                     <button
                       key={key}
@@ -478,10 +500,13 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                       className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-all ${
                         active
                           ? 'bg-primary-light text-white border-primary-light'
-                          : 'bg-white text-black-light border-neutral-dark hover:border-primary-light/40'
+                          : suggested
+                            ? 'bg-primary-light/5 text-primary-dark border-primary-light/40'
+                            : 'bg-white text-black-light border-neutral-dark hover:border-primary-light/40'
                       }`}
                     >
-                      {active && <Check className="w-3.5 h-3.5" />}
+                      {active ? <Check className="w-3.5 h-3.5" />
+                        : suggested ? <Sparkles className="w-3.5 h-3.5" /> : null}
                       {label}
                     </button>
                   );

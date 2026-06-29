@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, MapPin, ExternalLink, ArrowRight } from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getJob } from '../services/apiJobs';
+import GenerateCvButton from './GenerateCvButton';
 
 // ── Opportunity detail drawer ─────────────────────────────────────────────
 // Slides in from the right on desktop (rounded-2xl, max-w-lg), full-screen on
@@ -230,6 +231,15 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
                       Apply manually <ExternalLink className="w-3.5 h-3.5" />
                     </a>
                   )}
+
+                  {/* Tailored CV — this is the natural place to offer it: the user
+                      is reading the role in depth. */}
+                  <div className="pt-2 border-t border-neutral-dark">
+                    <p className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60 mb-2">
+                      Tailored CV
+                    </p>
+                    <GenerateCvButton job={job} hasCv={job.has_cv} />
+                  </div>
                 </div>
 
                 {/* Sticky footer actions */}
