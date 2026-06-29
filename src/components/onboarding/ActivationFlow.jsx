@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import {
@@ -56,8 +56,15 @@ const LOCATION_OPTIONS = [
 const ARRANGEMENTS = [
   { id: 'remote', label: 'Remote only',      hint: 'Work from anywhere — no commute.' },
   { id: 'hybrid', label: 'Hybrid',           hint: 'A mix of office and home.' },
+  { id: 'onsite', label: 'Onsite only',      hint: 'In-office roles in your chosen locations.' },
   { id: 'open',   label: 'Open to anything', hint: 'Show me the best roles, wherever they are.' },
 ];
+
+// Onsite/Hybrid are PHYSICAL arrangements — they need a real region to search,
+// so the "Remote anywhere" location is contradictory for them (it would scrape
+// onsite roles "located anywhere-remotely"). The step-4 UI blocks that combo.
+const PHYSICAL_ARRANGEMENTS = new Set(['onsite', 'hybrid']);
+const REMOTE_ANYWHERE = 'Remote anywhere';
 
 // Single-select seniority chips. `years` is the representative number we persist
 // to skills_extracted.years_experience so the backend keeps a numeric value.
@@ -152,6 +159,19 @@ export default function ActivationFlow({ profile = null, onComplete }) {
 
   // Step 4 — final save
   const [saving, setSaving] = useState(false);
+
+  // Defensive self-heal: the step-4 UI prevents a physical arrangement (onsite/
+  // hybrid) from coexisting with the "Remote anywhere" location, but legacy
+  // profiles or edits made outside this wizard could seed that contradiction on
+  // mount. Strip it whenever the arrangement is (or becomes) physical so it can
+  // never be re-saved.
+  useEffect(() => {
+    if (PHYSICAL_ARRANGEMENTS.has(arrangement)) {
+      setLocations((prev) =>
+        prev.includes(REMOTE_ANYWHERE) ? prev.filter((l) => l !== REMOTE_ANYWHERE) : prev
+      );
+    }
+  }, [arrangement]);
 
   // ── Step 1 helpers ───────────────────────────────────────────────────────
   const pickFile = (f) => {
@@ -569,18 +589,24 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                 <div className="flex flex-wrap gap-2">
                   {LOCATION_OPTIONS.map((loc) => {
                     const active = locations.includes(loc);
+                    // "Remote anywhere" is incompatible with onsite/hybrid roles.
+                    const blocked = loc === REMOTE_ANYWHERE && PHYSICAL_ARRANGEMENTS.has(arrangement);
                     return (
                       <button
                         key={loc}
                         type="button"
-                        onClick={() => toggle(setLocations, loc)}
+                        disabled={blocked}
+                        onClick={() => { if (!blocked) toggle(setLocations, loc); }}
+                        title={blocked ? 'Not available for onsite or hybrid roles — pick a region.' : undefined}
                         className={`inline-flex items-center gap-1.5 rounded-full px-3.5 py-2 text-sm font-medium border transition-all ${
-                          active
-                            ? 'bg-primary-light text-white border-primary-light'
-                            : 'bg-white text-black-light border-neutral-dark hover:border-primary-light/40'
+                          blocked
+                            ? 'bg-neutral text-secondary-dark/40 border-neutral-dark cursor-not-allowed line-through'
+                            : active
+                              ? 'bg-primary-light text-white border-primary-light'
+                              : 'bg-white text-black-light border-neutral-dark hover:border-primary-light/40'
                         }`}
                       >
-                        {active && <Check className="w-3.5 h-3.5" />}
+                        {active && !blocked && <Check className="w-3.5 h-3.5" />}
                         {loc}
                       </button>
                     );
@@ -605,6 +631,12 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                   ))}
                 </div>
 
+                {PHYSICAL_ARRANGEMENTS.has(arrangement) && (
+                  <p className="mt-2 text-xs text-secondary-dark">
+                    “Remote anywhere” isn’t available for {arrangement === 'onsite' ? 'onsite' : 'hybrid'} roles — choose a region or country.
+                  </p>
+                )}
+
                 <div className="mt-2.5">
                   <ChipInput
                     value={newLocation}
@@ -627,7 +659,15 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                       <button
                         key={a.id}
                         type="button"
-                        onClick={() => setArrangement(a.id)}
+                        onClick={() => {
+                          setArrangement(a.id);
+                          // Picking a physical arrangement removes the now-invalid
+                          // "Remote anywhere" location (Complete then requires a
+                          // real region, since at least one location is mandatory).
+                          if (PHYSICAL_ARRANGEMENTS.has(a.id)) {
+                            setLocations((prev) => prev.filter((l) => l !== REMOTE_ANYWHERE));
+                          }
+                        }}
                         className={`w-full flex items-center gap-3 text-left rounded-xl border p-4 transition-all ${
                           active
                             ? 'border-primary-light bg-primary-light/5 ring-2 ring-primary-light/20'
