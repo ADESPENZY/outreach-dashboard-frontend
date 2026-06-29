@@ -37,6 +37,30 @@ const SKILL_DICTIONARY = [
   'Product Management', 'Leadership', 'Stakeholder Management',
 ];
 
+// Many job feeds (Remotive, RemoteOK, …) store the description as HTML. Render
+// it as clean, readable text — strip tags, keep paragraph/list breaks, decode
+// entities. Pure string ops, so there's no XSS surface (we never inject HTML).
+const _NAMED_ENTITIES = {
+  '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'",
+  '&nbsp;': ' ', '&mdash;': '—', '&ndash;': '–', '&hellip;': '…', '&bull;': '•',
+  '&rsquo;': '’', '&lsquo;': '‘', '&ldquo;': '“', '&rdquo;': '”', '&copy;': '©',
+  '&reg;': '®', '&trade;': '™', '&deg;': '°', '&euro;': '€', '&pound;': '£',
+};
+
+function htmlToText(html) {
+  if (!html) return '';
+  let s = String(html);
+  s = s.replace(/<\s*br\s*\/?\s*>/gi, '\n');               // <br> → newline
+  s = s.replace(/<\s*li[^>]*>/gi, '\n• ');                 // <li> → bullet
+  s = s.replace(/<\/\s*(p|div|li|ul|ol|h[1-6]|tr|section|blockquote)\s*>/gi, '\n');
+  s = s.replace(/<[^>]+>/g, '');                           // strip remaining tags
+  s = s.replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)));
+  s = s.replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)));
+  s = s.replace(/&[a-z]+;/gi, (m) => _NAMED_ENTITIES[m.toLowerCase()] ?? ' ');
+  s = s.replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n');
+  return s.trim();
+}
+
 function extractSkills(description) {
   if (!description) return [];
   const found = [];
@@ -67,7 +91,8 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
   });
 
   const match = matchBadge(job?.fit_score);
-  const skills = extractSkills(job?.description);
+  const descriptionText = htmlToText(job?.description);
+  const skills = extractSkills(descriptionText);
 
   return (
     <AnimatePresence>
@@ -173,13 +198,13 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
 
                   {/* Full description — or, when there's none, a link out to the
                       live listing. If there's neither, the section is omitted. */}
-                  {job.description?.trim() ? (
+                  {descriptionText ? (
                     <div className="space-y-2">
                       <h3 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
                         About the role
                       </h3>
                       <p className="text-sm text-black-light leading-relaxed whitespace-pre-line">
-                        {job.description.trim()}
+                        {descriptionText}
                       </p>
                     </div>
                   ) : job.apply_url ? (
@@ -195,7 +220,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
 
                   {/* Apply manually — present whenever there's a link AND we showed
                       a description above (avoids duplicating the link). */}
-                  {job.apply_url && job.description?.trim() && (
+                  {job.apply_url && descriptionText && (
                     <a
                       href={job.apply_url}
                       target="_blank"
