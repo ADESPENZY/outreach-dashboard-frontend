@@ -55,7 +55,7 @@ const positiveReason = (text) =>
 
 // A card progresses through visual states on the SAME page instead of
 // disappearing. Derived from server status + contact/draft flags:
-//   new        → scraped, undecided → Skip / Write Intro
+//   new        → scraped, undecided → Skip / Reach Out
 //   working    → approved, draft still being written → "finding…" (muted)
 //   drafted    → real contact + draft ready → "Contact: …" / View on Intros
 //   no_contact → manual_apply (or a legacy placeholder draft) → Apply Direct
