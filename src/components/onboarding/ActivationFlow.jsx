@@ -66,6 +66,21 @@ const ARRANGEMENTS = [
 const PHYSICAL_ARRANGEMENTS = new Set(['onsite', 'hybrid']);
 const REMOTE_ANYWHERE = 'Remote anywhere';
 
+// HOME timezone — where the user LIVES (drives their daily 4 AM scrape schedule),
+// NOT where they want jobs. We ask explicitly instead of trusting the browser's
+// guess (wrong under VPN/travel). Each option maps to an IANA zone stored on
+// UserProfile.timezone. Curated for the current test markets (Nigeria/US/UK);
+// extend this list as you add countries.
+const HOME_TIMEZONES = [
+  { label: 'Nigeria (Lagos)',            tz: 'Africa/Lagos' },
+  { label: 'United Kingdom (London)',    tz: 'Europe/London' },
+  { label: 'US — Eastern (New York)',    tz: 'America/New_York' },
+  { label: 'US — Central (Chicago)',     tz: 'America/Chicago' },
+  { label: 'US — Mountain (Denver)',     tz: 'America/Denver' },
+  { label: 'US — Pacific (Los Angeles)', tz: 'America/Los_Angeles' },
+];
+const HOME_TZ_VALUES = new Set(HOME_TIMEZONES.map((o) => o.tz));
+
 // Single-select seniority chips. `years` is the representative number we persist
 // to skills_extracted.years_experience so the backend keeps a numeric value.
 const EXPERIENCE_LEVELS = [
@@ -156,6 +171,19 @@ export default function ActivationFlow({ profile = null, onComplete }) {
   const [arrangement, setArrangement] = useState(savedPrefs.work_arrangement || '');
   const [newRole, setNewRole] = useState('');
   const [newLocation, setNewLocation] = useState('');
+
+  // Step 4 — HOME timezone (required). Pre-fill from an already-saved profile tz,
+  // else from the browser's guess IF it happens to match a known option (just a
+  // convenience — the user still confirms). Otherwise blank, forcing a choice.
+  const [timezone, setTimezone] = useState(() => {
+    const saved = profile?.timezone;
+    if (saved && HOME_TZ_VALUES.has(saved)) return saved;
+    try {
+      const guess = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (guess && HOME_TZ_VALUES.has(guess)) return guess;
+    } catch { /* noop */ }
+    return '';
+  });
 
   // Step 4 — final save
   const [saving, setSaving] = useState(false);
@@ -256,10 +284,13 @@ export default function ActivationFlow({ profile = null, onComplete }) {
     setSaving(true);
     try {
       const level = EXPERIENCE_LEVELS.find((l) => l.id === experienceLevel);
-      // Capture the user's timezone so their daily scrape runs at ~5 AM THEIR
-      // local time (jobs waiting when they wake up), not a single global time.
-      let browserTz = '';
-      try { browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
+      // The user's HOME timezone — explicitly chosen in step 4 — drives their
+      // daily 4 AM-local scrape. Fall back to the browser guess only if somehow
+      // unset (the step-4 gate requires it, so this is just belt-and-suspenders).
+      let tzToSave = timezone;
+      if (!tzToSave) {
+        try { tzToSave = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { /* noop */ }
+      }
       await updateProfile({
         skills_extracted: {
           ...(extracted || {}),
@@ -274,7 +305,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
           work_arrangement: arrangement,
           remote_only: arrangement === 'remote',
         },
-        ...(browserTz ? { timezone: browserTz } : {}),
+        ...(tzToSave ? { timezone: tzToSave } : {}),
         onboarding_complete: true,
       });
 
@@ -301,7 +332,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
     (step === 1 && !!file && !uploading) ||
     (step === 2) ||
     (step === 3 && roleTypes.length > 0) ||
-    (step === 4 && locations.length > 0 && !!arrangement && !saving);
+    (step === 4 && !!timezone && locations.length > 0 && !!arrangement && !saving);
 
   // ── Shared button classes (light-mode tokens only) ───────────────────────
   const primaryBtn =
@@ -570,7 +601,7 @@ export default function ActivationFlow({ profile = null, onComplete }) {
             </div>
           )}
 
-          {/* ── Screen 4: location + arrangement ────────────────────────── */}
+          {/* ── Screen 4: home timezone + job location + arrangement ─────── */}
           {step === 4 && (
             <div className="space-y-6">
               <div>
@@ -578,7 +609,29 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                   Where do you want to work?
                 </h1>
                 <p className="mt-1.5 text-sm text-secondary-dark leading-relaxed">
-                  Choose your locations and how you&rsquo;d like to work.
+                  Tell us where you&rsquo;re based and the kind of roles you want.
+                </p>
+              </div>
+
+              {/* HOME timezone — required. Drives the daily 4 AM-local scrape. */}
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-2">
+                  Where do you live?
+                </p>
+                <select
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  className={`w-full px-3 py-2.5 rounded-xl border bg-white text-sm outline-none transition-all focus:ring-2 focus:ring-primary-light/20 ${
+                    timezone ? 'border-neutral-dark text-black-light' : 'border-amber-300 text-secondary-dark'
+                  } focus:border-primary-light`}
+                >
+                  <option value="" disabled>Select your location…</option>
+                  {HOME_TIMEZONES.map((o) => (
+                    <option key={o.tz} value={o.tz}>{o.label}</option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs text-secondary-dark">
+                  We run your job search at 4 AM your local time, so jobs are waiting when you wake up.
                 </p>
               </div>
 
