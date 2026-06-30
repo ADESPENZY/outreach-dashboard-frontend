@@ -11,7 +11,6 @@ import { getProfile } from '../services/apiProfile';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePersonalizationModal';
 import JobDetailDrawer from '../components/JobDetailDrawer';
-import ActedOpportunityCard from '../components/ActedOpportunityCard';
 import ApplyDirectModal from '../components/ApplyDirectModal';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
@@ -80,9 +79,6 @@ const JobsPage = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const [pendingJobId, setPendingJobId] = useState(null);
     const [showPersonalization, setShowPersonalization] = useState(false);
-    // Jobs the user tapped "Write Intro" on this session. They DON'T leave the
-    // feed — they stay in place (top of grid) and show the contact/draft result.
-    const [actedJobs, setActedJobs] = useState([]);
     // The job whose detail drawer is open (null = closed).
     const [drawerJobId, setDrawerJobId] = useState(null);
     // Apply-Direct modal context: { job, track } | null.
@@ -107,24 +103,18 @@ const JobsPage = () => {
         queryFn:  () => getOpportunityJobs(60),
         refetchOnWindowFocus: false,
         staleTime: 30000,
-        // While any approved job is still drafting in the background, poll so
-        // its card flips from "finding…" to the contact/draft state on its own.
-        refetchInterval: (query) => {
-            const list = query.state.data?.jobs ?? [];
-            return list.some((j) => j.status === 'approved' && !j.has_draft) ? 5000 : false;
-        },
     });
 
     const jobs = pageData?.jobs ?? [];
 
-    // Acted jobs stay pinned at the top of the feed; exclude them from the
-    // normal scraped grid so a job never renders twice (the refetch that drops
-    // it from `jobs` can lag a beat behind the optimistic acted snapshot).
-    const actedIds = new Set(actedJobs.map((j) => j.id));
-    const normalJobs = jobs.filter((j) => !actedIds.has(j.id));
-    // Only undecided (scraped) cards are "waiting for review" — progressed
-    // cards (drafted / sent / no-contact) stay on the page but aren't pending.
-    const reviewCount = normalJobs.filter((j) => cardState(j) === 'new').length;
+    // Opportunities shows ONLY jobs the user hasn't acted on yet ('new'). The
+    // moment they tap Reach Out, the job advances past 'new' (→ approved) and
+    // leaves this page — the system finds the contact + drafts the intro in the
+    // background, which then surfaces on Introductions. Acted/working/drafted/
+    // sent/no-contact jobs are filtered out here so this page stays a clean
+    // "to review" queue (and the detail modal can only ever open on a 'new' job).
+    const normalJobs = jobs.filter((j) => cardState(j) === 'new');
+    const reviewCount = normalJobs.length;
 
     // ── Client-side pagination (over the normal, not-yet-acted jobs) ──────────
     const totalPages = Math.max(1, Math.ceil(normalJobs.length / ITEMS_PER_PAGE));
@@ -141,7 +131,7 @@ const JobsPage = () => {
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
         onSuccess: (_, { newStatus }) => {
             if (newStatus === 'approved') {
-                toast.success('Writing your intro — it’ll appear on this card in a moment.');
+                toast.success('Finding the hiring manager — we’ll draft your intro. Track it on Introductions.');
             } else {
                 toast.success('Skipped. Your headhunter will keep looking.');
             }
@@ -153,14 +143,10 @@ const JobsPage = () => {
 
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
 
-    // Write Intro → approve, but keep the card on the feed. We snapshot it into
-    // actedJobs so it stays rendered (and polls for the contact/draft result)
-    // even after the refetch drops it from the scraped list.
+    // Reach Out → approve. The card then leaves the feed (it's no longer 'new'),
+    // and the system finds the contact + drafts the intro in the background —
+    // the user does NOT wait on this page for the result.
     const approveJob = (jobId) => {
-        const snapshot = jobs.find((j) => j.id === jobId);
-        if (snapshot) {
-            setActedJobs((prev) => (prev.some((j) => j.id === jobId) ? prev : [snapshot, ...prev]));
-        }
         setDrawerJobId(null); // close the drawer if the action came from there
         handleUpdateStatus(jobId, 'approved');
     };
@@ -271,20 +257,6 @@ const JobsPage = () => {
                     </motion.span>
                 )}
             </div>
-
-            {/* ── Acted cards — stay pinned here after Write Intro ─────────── */}
-            {actedJobs.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {actedJobs.map((job) => (
-                        <ActedOpportunityCard
-                            key={job.id}
-                            job={job}
-                            onOpenDrawer={setDrawerJobId}
-                            onApplyDirect={openApplyModal}
-                        />
-                    ))}
-                </div>
-            )}
 
             {/* ── The feed ────────────────────────────────────────────────── */}
             {loading ? (
@@ -508,9 +480,6 @@ const JobsPage = () => {
                             </button>
                         </div>
                     )}
-
-                    {/* Nothing left to review — every visible card is acted on */}
-                    {reviewCount === 0 && allCaughtUp}
                 </>
             )}
 
@@ -528,15 +497,16 @@ const JobsPage = () => {
                 />
             )}
 
-            {/* Opportunity detail drawer — opens on title tap. Skip / Write Intro
-                are hidden once the job has been acted on (it's already drafting). */}
+            {/* Opportunity detail drawer — opens on card tap. The feed only ever
+                shows un-acted ('new') jobs, so the drawer always opens on a job
+                that still has Skip / Reach Out as its valid actions. */}
             <JobDetailDrawer
                 jobId={drawerJobId}
                 isOpen={drawerJobId != null}
                 onClose={() => setDrawerJobId(null)}
                 onSkip={handleDrawerSkip}
                 onWriteIntro={() => drawerJobId != null && handleReachOut(drawerJobId)}
-                showActions={drawerJobId != null && !actedIds.has(drawerJobId)}
+                showActions={drawerJobId != null}
                 actionPending={updateStatusMutation.isPending && updateStatusMutation.variables?.id === drawerJobId}
             />
 
