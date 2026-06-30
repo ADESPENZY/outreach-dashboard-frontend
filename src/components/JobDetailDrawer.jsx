@@ -10,7 +10,7 @@ import GenerateCvButton from './GenerateCvButton';
 // Slides in from the right on desktop (rounded-2xl, max-w-lg), full-screen on
 // mobile with a top close bar. Closes on X, outside click, or Escape. The card
 // in the grid behind stays untouched — this is a read-mostly detail view with
-// the same two actions (Skip / Write Intro) repeated at the bottom.
+// the same two actions (Skip / Reach Out) repeated at the bottom.
 
 // Match-strength badge — mirrors the Opportunities card so the signal reads the
 // same in both places. No numbers ever reach the user.
@@ -258,8 +258,8 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
                       className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {actionPending
-                        ? <><ApplyDirLoader.Button variant="light" /> Writing…</>
-                        : <>Write Intro <ArrowRight className="w-4 h-4" /></>}
+                        ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
+                        : <>Reach Out <ArrowRight className="w-4 h-4" /></>}
                     </button>
                   </div>
                 )}

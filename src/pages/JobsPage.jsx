@@ -427,8 +427,8 @@ const JobsPage = () => {
                                                         className="group/btn inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                                                     >
                                                         {approvePending
-                                                            ? <><ApplyDirLoader.Button variant="light" /> Writing…</>
-                                                            : <>Write Intro <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
+                                                            ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
+                                                            : <>Reach Out <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
                                                     </button>
                                                 </>
                                             ) : (state === 'drafted' || state === 'sent') ? (
