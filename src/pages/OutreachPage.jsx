@@ -89,32 +89,35 @@ const linkedinPost = (reached) => {
 // ═══════════════════════════════════════════════════════════════════════════
 // Tab button
 // ═══════════════════════════════════════════════════════════════════════════
-const TAB_TONE = {
-  pending: { active: 'bg-primary-light/10 text-primary-dark border-primary-light/40', badge: 'bg-primary-light text-white' },
-  sent:    { active: 'bg-blue-50 text-blue-700 border-blue-200',                       badge: 'bg-blue-500 text-white' },
-  replies: { active: 'bg-emerald-50 text-emerald-700 border-emerald-200',              badge: 'bg-emerald-500 text-white' },
+// Badge colour per tab (always coloured, per the spec): pending orange, sent
+// blue, replies green (with a pulse when > 0).
+const TAB_BADGE = {
+  pending: 'bg-primary-light text-white',
+  sent:    'bg-blue-500 text-white',
+  replies: 'bg-emerald-500 text-white',
 };
 
 function TabButton({ id, label, count, active, pulse, onClick }) {
-  const tone = TAB_TONE[id];
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`relative inline-flex items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-semibold font-montserrat transition-all min-w-0 flex-1 ${
-        active ? tone.active : 'bg-white text-secondary-dark border-neutral-dark hover:text-black-light hover:border-primary-light/30'
+      className={`relative -mb-px inline-flex items-center gap-2 border-b-2 pb-3 pt-1 text-sm font-bold font-montserrat transition-colors ${
+        active ? 'text-primary-light border-primary-light' : 'text-secondary-dark border-transparent hover:text-black-light'
       }`}
     >
-      {pulse && count > 0 && (
-        <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-        </span>
-      )}
-      <span className="truncate">{label}</span>
+      <span className="whitespace-nowrap">{label}</span>
       {count > 0 && (
-        <span className={`inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold ${active ? tone.badge : 'bg-neutral text-secondary-dark'}`}>
-          {count}
+        <span className="relative">
+          <span className={`inline-flex items-center justify-center min-w-5 h-5 px-1.5 rounded-full text-[11px] font-bold ${TAB_BADGE[id]}`}>
+            {count}
+          </span>
+          {pulse && (
+            <span className="absolute -top-1 -right-1 flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-70" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            </span>
+          )}
         </span>
       )}
     </button>
@@ -490,6 +493,220 @@ function EmptyState({ icon, title, action, onAction }) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// DESKTOP master–detail (lg:) — list on the left, live preview on the right
+// ═══════════════════════════════════════════════════════════════════════════
+
+// One compact row in the left list. Active row gets the orange rail + tint.
+function PreviewListItem({ email, tab, active, onClick }) {
+  const initial = (email.company_name || '?').trim().charAt(0).toUpperCase();
+  const match = matchPill(email.job_fit_score);
+  const st = tab === 'pending'
+    ? { label: 'Pending review', cls: 'text-primary-dark', dot: 'bg-primary-light' }
+    : tab === 'replies'
+      ? { label: 'Replied', cls: 'text-emerald-600', dot: 'bg-emerald-500' }
+      : (() => { const s = sentStatus(email); return { label: s.label, cls: s.cls, dot: 'bg-neutral-dark' }; })();
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left px-4 py-3.5 border-b border-neutral-dark border-l-4 transition-colors ${
+        active ? 'border-l-primary-light bg-primary-light/5' : 'border-l-transparent hover:bg-neutral/50'
+      }`}
+    >
+      <div className="flex items-start gap-3">
+        <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-primary-light/20 to-primary-light/5 text-primary-dark border border-primary-light/20 flex items-center justify-center font-montserrat font-bold text-sm">
+          {initial}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-black-light truncate">{email.company_name || 'Company'}</p>
+          {email.job_title && <p className="text-xs text-secondary-dark truncate">{email.job_title}</p>}
+          {(email.job_location || email.job_salary_info) && (
+            <p className="text-xs text-secondary-dark/80 truncate mt-0.5">
+              {[email.job_location, email.job_salary_info].filter(Boolean).join(' · ')}
+            </p>
+          )}
+          {match && (
+            <span className={`mt-1.5 inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-semibold ${match.cls}`}>
+              {match.label}
+            </span>
+          )}
+          <p className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium ${st.cls}`}>
+            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} /> {st.label}
+          </p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+// Right-panel empty state (nothing selected).
+function EmptyPreview() {
+  return (
+    <div className="h-full flex flex-col items-center justify-center text-center px-8">
+      <span className="w-14 h-14 rounded-2xl bg-neutral border border-neutral-dark flex items-center justify-center mb-3">
+        <Mail className="w-7 h-7 text-secondary-dark" />
+      </span>
+      <p className="text-sm text-secondary-dark max-w-xs">Select an introduction from the left to preview it.</p>
+    </div>
+  );
+}
+
+// The right preview panel — full letter with a sticky footer of actions. Keyed
+// by email id in the parent so its edit state resets when the selection changes.
+function PreviewPane({ email, tab, canSend, onApprove, onDiscard, onSaveEdit, onConnect, reachedCount }) {
+  const [editing, setEditing] = useState(false);
+  const [subject, setSubject] = useState(email.subject || '');
+  const [body, setBody] = useState(email.body || '');
+  const [saving, setSaving] = useState(false);
+  const [acting, setActing] = useState(false);
+
+  const r = recipientOf(email);
+  const match = matchPill(email.job_fit_score);
+  const strategy = STRATEGY_LABELS[email.strategy] || '';
+
+  const cancelEdit = () => { setSubject(email.subject || ''); setBody(email.body || ''); setEditing(false); };
+  const saveEdit = async () => {
+    setSaving(true);
+    try { await onSaveEdit(email.id, subject, body); setEditing(false); }
+    catch { toast.error('Could not save your edit. Please try again.'); }
+    finally { setSaving(false); }
+  };
+  const approve = async () => { setActing(true); try { await onApprove(email); } finally { setActing(false); } };
+  const copyPost = async () => {
+    try { await navigator.clipboard.writeText(linkedinPost(reachedCount)); toast.success('Post copied — paste it on LinkedIn 🎉'); }
+    catch { toast.error('Could not copy. Long-press to copy it manually.'); }
+  };
+  const st = tab === 'sent' ? sentStatus(email) : null;
+
+  return (
+    <div className="flex flex-col h-full bg-white">
+      {/* 1. Job context bar */}
+      <div className="shrink-0 border-b border-neutral-dark bg-neutral/40 px-6 lg:px-8 py-4">
+        <h3 className="font-montserrat text-base font-bold text-black-light leading-snug">
+          {email.company_name || 'Company'}
+          {email.job_title && <span className="text-secondary-dark font-semibold"> · {email.job_title}</span>}
+        </h3>
+        <div className="mt-1.5 flex items-center gap-3 flex-wrap text-xs text-secondary-dark">
+          {email.job_location && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{email.job_location}</span>}
+          {email.job_salary_info && <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold"><Wallet className="w-3.5 h-3.5" />{email.job_salary_info}</span>}
+          {match && <span className={`inline-flex items-center rounded border px-2 py-0.5 font-semibold ${match.cls}`}>{match.label}</span>}
+        </div>
+      </div>
+
+      {/* 2 + 3. Recipient + letter (scrollable) */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="max-w-2xl px-6 lg:px-8 py-6">
+          <div className="mb-5">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1 font-montserrat">To</p>
+            {r.name ? (
+              <>
+                <p className="text-base font-bold text-black-light">{r.name}</p>
+                {r.title && <p className="text-sm text-secondary-dark">{r.title}</p>}
+                {r.email && <p className="text-sm text-secondary-dark/80 break-all">{r.email}</p>}
+              </>
+            ) : (
+              <p className="text-base font-semibold text-black-light break-all">{r.email || 'the team'}</p>
+            )}
+          </div>
+
+          {editing ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">Subject</label>
+                <input value={subject} onChange={(e) => setSubject(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all" />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">Message</label>
+                <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={14}
+                  className="w-full px-3.5 py-3 rounded-xl border border-neutral-dark bg-white text-sm text-black leading-relaxed outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all resize-y" />
+                <p className="text-xs text-secondary-dark/60 mt-1.5">Edits save automatically — make it sound like you.</p>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button onClick={cancelEdit} disabled={saving} className="text-secondary-dark hover:text-black-light hover:bg-neutral font-semibold rounded-xl px-4 py-2 text-sm transition-colors disabled:opacity-60">Cancel</button>
+                <button onClick={saveEdit} disabled={saving} className="inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-4 py-2 text-sm transition-all disabled:opacity-60">
+                  {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : <>Save</>}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {email.subject && <p className="text-lg font-bold font-montserrat text-black-light leading-snug mb-3">{email.subject}</p>}
+              <p className="text-sm text-black-light leading-relaxed whitespace-pre-line font-roboto">{email.body}</p>
+            </>
+          )}
+
+          {/* Reply celebration */}
+          {tab === 'replies' && (
+            <div className="mt-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+              <p className="text-sm font-bold text-emerald-900 flex items-center gap-2"><PartyPopper className="w-4 h-4" /> They replied!</p>
+              <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                <a href="https://mail.google.com/" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
+                  Open in Gmail <ExternalLink className="w-4 h-4" />
+                </a>
+                <button onClick={copyPost}
+                  className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all">
+                  <Linkedin className="w-4 h-4" /> Post on LinkedIn 🎉
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Sent status */}
+          {tab === 'sent' && st && (
+            <div className="mt-6 flex items-center gap-3 flex-wrap text-xs">
+              <span className={`inline-flex items-center gap-1.5 font-semibold ${st.cls}`}><st.Icon className="w-3.5 h-3.5" /> {st.label}</span>
+              {email.sent_at && <span className="text-secondary-dark">Sent {timeAgo(email.sent_at)}</span>}
+              {email.next_followup_at && new Date(email.next_followup_at) > new Date() && (
+                <span className="text-secondary-dark">Next follow-up: {timeAgo(email.next_followup_at)}</span>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 5 + 6. Sticky footer */}
+      <div className="shrink-0 border-t border-neutral-dark bg-white px-6 lg:px-8 py-4">
+        {tab === 'pending' && !canSend && (
+          <button onClick={onConnect}
+            className="mb-3 w-full flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 hover:bg-amber-100 transition-colors">
+            <span className="inline-flex items-center gap-1.5"><Mail className="w-4 h-4" /> Connect your Gmail to start sending</span>
+            <ArrowRight className="w-3.5 h-3.5 shrink-0" />
+          </button>
+        )}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3 text-xs text-secondary-dark min-w-0">
+            {strategy && <span className="hidden xl:inline">Strategy: <span className="font-semibold text-black-light">{strategy}</span></span>}
+            <GenerateCvButton job={{ id: email.job_id, title: email.job_title, company_name: email.company_name }} hasCv={email.job_has_cv} />
+          </div>
+          {tab === 'pending' && !editing && (
+            <div className="flex items-center gap-2">
+              <button onClick={() => onDiscard(email)} disabled={acting}
+                className="inline-flex items-center gap-1.5 text-secondary-dark hover:text-red-600 hover:bg-red-50 font-semibold rounded-xl px-3 py-2 text-sm transition-colors disabled:opacity-50">
+                <Trash2 className="w-4 h-4" /> Discard
+              </button>
+              <button onClick={() => setEditing(true)} disabled={acting}
+                className="inline-flex items-center gap-1.5 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-3.5 py-2 text-sm transition-all disabled:opacity-50">
+                <Pencil className="w-4 h-4" /> Edit
+              </button>
+              <button onClick={approve} disabled={acting}
+                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
+                {acting
+                  ? <><ApplyDirLoader.Button variant="light" /> {canSend ? 'Sending…' : 'Approving…'}</>
+                  : canSend ? <>Approve &amp; Send <Send className="w-4 h-4" /></> : <>Approve <CheckCircle2 className="w-4 h-4" /></>}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // MAIN
 // ═══════════════════════════════════════════════════════════════════════════
 const OutreachPage = () => {
@@ -497,6 +714,8 @@ const OutreachPage = () => {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState('pending');
   const [bulking, setBulking] = useState(false);
+  const [selectedId, setSelectedId] = useState(null);   // desktop master–detail selection
+  const selectTab = (id) => { setTab(id); setSelectedId(null); };
 
   // ── Data (preserved API layer) ────────────────────────────────────────────
   const { data: drafts = [], isLoading: loadingDrafts } = useQuery({
@@ -521,6 +740,10 @@ const OutreachPage = () => {
     .filter((e) => e.status !== 'replied')
     .sort((a, b) => new Date(b.sent_at || b.scheduled_send_at || 0) - new Date(a.sent_at || a.scheduled_send_at || 0));
   const reachedCount = sentList.length + replies.length;
+
+  // Active tab's list + the selected email for the desktop preview panel.
+  const activeList = tab === 'pending' ? pending : tab === 'sent' ? sentList : replies;
+  const selectedEmail = activeList.find((e) => e.id === selectedId) || null;
 
   // ── Mutations (preserved) ─────────────────────────────────────────────────
   const editMutation = useMutation({ mutationFn: ({ id, subject, body }) => editEmail(id, { subject, body }) });
@@ -577,8 +800,17 @@ const OutreachPage = () => {
     }
   };
 
+  // Full-width empty state for the active tab (shared by mobile + desktop).
+  const emptyStateFor = (t) => (
+    t === 'pending'
+      ? <EmptyState icon={<Mail className="w-6 h-6" />} title="No introductions waiting. Head to Opportunities to reach out to more roles." action="Go to Opportunities" onAction={() => navigate('/dashboard/opportunities')} />
+      : t === 'sent'
+        ? <EmptyState icon={<Send className="w-6 h-6" />} title="No introductions sent yet. Approve a pending introduction to get started." />
+        : <EmptyState icon={<PartyPopper className="w-6 h-6" />} title="No replies yet. They’re coming — most replies arrive within 3–7 days of sending." />
+  );
+
   return (
-    <div className="w-full max-w-4xl mx-auto p-4 md:p-8 space-y-6 animate-fade-in font-roboto">
+    <div className="w-full max-w-4xl lg:max-w-6xl mx-auto p-4 md:p-8 space-y-6 animate-fade-in font-roboto">
 
       {/* Header */}
       <header>
@@ -588,25 +820,12 @@ const OutreachPage = () => {
         </p>
       </header>
 
-      {/* Tabs */}
-      <div className="flex items-stretch gap-2">
-        <TabButton id="pending" label="Pending Review" count={pending.length} active={tab === 'pending'} onClick={() => setTab('pending')} />
-        <TabButton id="sent"    label="Sent"           count={sentList.length} active={tab === 'sent'}    onClick={() => setTab('sent')} />
-        <TabButton id="replies" label="Got Replies"    count={replies.length}  active={tab === 'replies'} pulse onClick={() => setTab('replies')} />
+      {/* Tabs — bottom-border style */}
+      <div className="flex items-center gap-6 border-b border-neutral-dark overflow-x-auto">
+        <TabButton id="pending" label="Pending Review" count={pending.length} active={tab === 'pending'} onClick={() => selectTab('pending')} />
+        <TabButton id="sent"    label="Sent"           count={sentList.length} active={tab === 'sent'}    onClick={() => selectTab('sent')} />
+        <TabButton id="replies" label="Got Replies"    count={replies.length}  active={tab === 'replies'} pulse onClick={() => selectTab('replies')} />
       </div>
-
-      {/* Connect-inbox nudge — approving works without it, but sending needs it */}
-      {!canSend && pending.length > 0 && tab === 'pending' && (
-        <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <Mail className="w-5 h-5 text-amber-600 shrink-0" />
-          <p className="text-xs text-amber-800 flex-1 min-w-0">
-            You can approve now, but introductions send from your own inbox. Connect it to start sending.
-          </p>
-          <button onClick={() => navigate('/dashboard/settings')} className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-900">
-            Connect <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
 
       {loading ? (
         <div className="space-y-4">
@@ -619,64 +838,93 @@ const OutreachPage = () => {
             </div>
           ))}
         </div>
-      ) : tab === 'pending' ? (
-        pending.length === 0 ? (
-          <EmptyState
-            icon={<Mail className="w-6 h-6" />}
-            title="No introductions waiting. Head to Opportunities to reach out to more roles."
-            action="Go to Opportunities"
-            onAction={() => navigate('/dashboard/opportunities')}
-          />
-        ) : (
-          <div className="space-y-4">
-            {pending.length >= 3 && (
-              <div className="rounded-2xl border border-neutral-dark bg-white shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <button
-                    onClick={approveAll}
-                    disabled={bulking}
-                    className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all disabled:opacity-60"
-                  >
-                    {bulking ? <><Loader2 className="w-4 h-4 animate-spin" /> Approving…</> : <>Approve all {pending.length} introductions</>}
-                  </button>
-                </div>
-                <p className="text-xs text-secondary-dark flex items-center gap-1.5 min-w-0">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
-                  Review each one first — your headhunter recommends a quick scan.
+      ) : (
+        <>
+          {/* ── MOBILE + TABLET (< lg): stacked cards ─────────────────────── */}
+          <div className="lg:hidden space-y-6">
+            {!canSend && pending.length > 0 && tab === 'pending' && (
+              <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <Mail className="w-5 h-5 text-amber-600 shrink-0" />
+                <p className="text-xs text-amber-800 flex-1 min-w-0">
+                  You can approve now, but introductions send from your own inbox. Connect it to start sending.
                 </p>
+                <button onClick={() => navigate('/dashboard/settings')} className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-900">
+                  Connect <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
-            <motion.div variants={LIST_STAGGER} initial="hidden" animate="show" className="space-y-4">
-              {pending.map((email) => (
-                <IntroCard
-                  key={email.id}
-                  email={email}
-                  canSend={canSend}
-                  busy={bulking}
-                  onApprove={approveOne}
-                  onDiscard={discardOne}
-                  onSaveEdit={handleSaveEdit}
-                />
-              ))}
-            </motion.div>
+            {tab === 'pending' ? (
+              pending.length === 0 ? emptyStateFor('pending') : (
+                <div className="space-y-4">
+                  {pending.length >= 3 && (
+                    <div className="rounded-2xl border border-neutral-dark bg-white shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
+                      <button onClick={approveAll} disabled={bulking} className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all disabled:opacity-60">
+                        {bulking ? <><Loader2 className="w-4 h-4 animate-spin" /> Approving…</> : <>Approve all {pending.length} introductions</>}
+                      </button>
+                      <p className="text-xs text-secondary-dark flex items-center gap-1.5 min-w-0">
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
+                        Review each one first — your headhunter recommends a quick scan.
+                      </p>
+                    </div>
+                  )}
+                  <motion.div variants={LIST_STAGGER} initial="hidden" animate="show" className="space-y-4">
+                    {pending.map((email) => (
+                      <IntroCard key={email.id} email={email} canSend={canSend} busy={bulking} onApprove={approveOne} onDiscard={discardOne} onSaveEdit={handleSaveEdit} />
+                    ))}
+                  </motion.div>
+                </div>
+              )
+            ) : tab === 'sent' ? (
+              sentList.length === 0 ? emptyStateFor('sent') : (
+                <div className="space-y-4">{sentList.map((email) => <SentCard key={email.id} email={email} />)}</div>
+              )
+            ) : (
+              replies.length === 0 ? emptyStateFor('replies') : (
+                <div className="space-y-4">{replies.map((email) => <ReplyCard key={email.id} email={email} reachedCount={reachedCount} />)}</div>
+              )
+            )}
           </div>
-        )
-      ) : tab === 'sent' ? (
-        sentList.length === 0 ? (
-          <EmptyState icon={<Send className="w-6 h-6" />} title="No introductions sent yet. Approve a pending introduction to get started." />
-        ) : (
-          <div className="space-y-4">
-            {sentList.map((email) => <SentCard key={email.id} email={email} />)}
+
+          {/* ── DESKTOP (>= lg): master–detail ────────────────────────────── */}
+          <div className="hidden lg:block">
+            {activeList.length === 0 ? emptyStateFor(tab) : (
+              <div className="flex rounded-2xl border border-neutral-dark overflow-hidden bg-white shadow-sm h-[calc(100vh-15rem)] min-h-[540px] max-h-[860px]">
+                {/* LEFT — scrollable list */}
+                <div className="w-[38%] shrink-0 border-r border-neutral-dark overflow-y-auto bg-white">
+                  {tab === 'pending' && pending.length >= 2 && (
+                    <div className="px-4 py-3 border-b border-neutral-dark">
+                      <button onClick={approveAll} disabled={bulking} className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-dark hover:text-primary-light transition-colors disabled:opacity-60">
+                        {bulking ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Approving…</> : `Approve all (${pending.length})`}
+                      </button>
+                    </div>
+                  )}
+                  {activeList.map((email) => (
+                    <PreviewListItem key={email.id} email={email} tab={tab} active={selectedEmail?.id === email.id} onClick={() => setSelectedId(email.id)} />
+                  ))}
+                </div>
+                {/* RIGHT — fixed preview */}
+                <div className="flex-1 min-w-0">
+                  {selectedEmail ? (
+                    <div key={selectedEmail.id} className="h-full animate-in fade-in duration-200">
+                      <PreviewPane
+                        email={selectedEmail}
+                        tab={tab}
+                        canSend={canSend}
+                        onApprove={approveOne}
+                        onDiscard={discardOne}
+                        onSaveEdit={handleSaveEdit}
+                        onConnect={() => navigate('/dashboard/settings')}
+                        reachedCount={reachedCount}
+                      />
+                    </div>
+                  ) : (
+                    <EmptyPreview />
+                  )}
+                </div>
+              </div>
+            )}
           </div>
-        )
-      ) : (
-        replies.length === 0 ? (
-          <EmptyState icon={<PartyPopper className="w-6 h-6" />} title="No replies yet. They’re coming — most replies arrive within 3–7 days of sending." />
-        ) : (
-          <div className="space-y-4">
-            {replies.map((email) => <ReplyCard key={email.id} email={email} reachedCount={reachedCount} />)}
-          </div>
-        )
+        </>
       )}
     </div>
   );
