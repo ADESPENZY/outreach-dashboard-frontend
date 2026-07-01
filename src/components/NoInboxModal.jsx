@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { AlertTriangle, Mail, X } from 'lucide-react';
+import { Mail, X } from 'lucide-react';
 import OnboardingModal from './OnboardingModal';
 import { createGmailAccount } from '../services/apiGmail';
 
@@ -41,8 +41,8 @@ function NoInboxModal({ onClose }) {
         </button>
 
         <div className="text-center mb-7">
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mb-5 shadow-lg shadow-orange-200">
-            <AlertTriangle className="w-8 h-8 text-white" />
+          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center mb-5 shadow-lg shadow-primary-light/30">
+            <Mail className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-xl font-bold text-black font-montserrat leading-snug">
             Connect Your Email First
@@ -55,7 +55,7 @@ function NoInboxModal({ onClose }) {
         <div className="flex flex-col gap-3">
           <button
             onClick={() => setShowConnect(true)}
-            className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-md shadow-orange-200 transition-all active:scale-95"
+            className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-gradient-to-r from-primary-light to-primary-dark hover:opacity-90 text-white font-bold font-montserrat rounded-xl shadow-md shadow-primary-light/30 transition-all active:scale-95"
           >
             <Mail className="w-4 h-4" />
             Connect Gmail Now

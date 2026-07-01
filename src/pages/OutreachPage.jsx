@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import GenerateCvButton from '../components/GenerateCvButton';
+import NoInboxModal from '../components/NoInboxModal';
 import {
   getDraftEmails, getSentEmails, approveEmail, queueEmail, editEmail, deleteEmail,
 } from '../services/apiOutreach';
@@ -155,7 +156,7 @@ function BodyPreview({ body }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 — Pending Review card
 // ═══════════════════════════════════════════════════════════════════════════
-function IntroCard({ email, canSend, onApprove, onDiscard, onSaveEdit, busy }) {
+function IntroCard({ email, onApprove, onDiscard, onSaveEdit, busy }) {
   const [editing, setEditing] = useState(false);
   const [subject, setSubject] = useState(email.subject || '');
   const [body, setBody] = useState(email.body || '');
@@ -329,10 +330,8 @@ function IntroCard({ email, canSend, onApprove, onDiscard, onSaveEdit, busy }) {
                     className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 hover:shadow-lg hover:shadow-primary-dark/30 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     {acting
-                      ? <><ApplyDirLoader.Button variant="light" /> {canSend ? 'Sending…' : 'Approving…'}</>
-                      : canSend
-                        ? <>Approve &amp; Send <Send className="w-4 h-4" /></>
-                        : <>Approve <CheckCircle2 className="w-4 h-4" /></>}
+                      ? <><ApplyDirLoader.Button variant="light" /> Sending…</>
+                      : <>Approve &amp; Send <Send className="w-4 h-4" /></>}
                   </button>
                 </div>
               </div>
@@ -556,7 +555,7 @@ function EmptyPreview() {
 
 // The right preview panel — full letter with a sticky footer of actions. Keyed
 // by email id in the parent so its edit state resets when the selection changes.
-function PreviewPane({ email, tab, canSend, onApprove, onDiscard, onSaveEdit, onConnect, reachedCount }) {
+function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCount }) {
   const [editing, setEditing] = useState(false);
   const [subject, setSubject] = useState(email.subject || '');
   const [body, setBody] = useState(email.body || '');
@@ -694,13 +693,6 @@ function PreviewPane({ email, tab, canSend, onApprove, onDiscard, onSaveEdit, on
 
       {/* Sticky footer — actions always in reach */}
       <div className="shrink-0 border-t border-neutral-dark bg-white px-5 lg:px-6 py-4">
-        {tab === 'pending' && !canSend && (
-          <button onClick={onConnect}
-            className="mb-3 w-full flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 hover:bg-amber-100 transition-colors">
-            <span className="inline-flex items-center gap-1.5"><Mail className="w-4 h-4" /> Connect your Gmail to start sending</span>
-            <ArrowRight className="w-3.5 h-3.5 shrink-0" />
-          </button>
-        )}
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-3 text-xs text-secondary-dark min-w-0">
             {strategy && <span className="hidden xl:inline">Strategy: <span className="font-semibold text-black-light">{strategy}</span></span>}
@@ -719,8 +711,8 @@ function PreviewPane({ email, tab, canSend, onApprove, onDiscard, onSaveEdit, on
               <button onClick={approve} disabled={acting}
                 className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
                 {acting
-                  ? <><ApplyDirLoader.Button variant="light" /> {canSend ? 'Sending…' : 'Approving…'}</>
-                  : canSend ? <>Approve &amp; Send <Send className="w-4 h-4" /></> : <>Approve <CheckCircle2 className="w-4 h-4" /></>}
+                  ? <><ApplyDirLoader.Button variant="light" /> Sending…</>
+                  : <>Approve &amp; Send <Send className="w-4 h-4" /></>}
               </button>
             </div>
           )}
@@ -739,6 +731,7 @@ const OutreachPage = () => {
   const [tab, setTab] = useState('pending');
   const [bulking, setBulking] = useState(false);
   const [selectedId, setSelectedId] = useState(null);   // desktop master–detail selection
+  const [showConnect, setShowConnect] = useState(false); // Gmail-connect gate modal
   const selectTab = (id) => { setTab(id); setSelectedId(null); };
 
   // ── Data (preserved API layer) ────────────────────────────────────────────
@@ -779,16 +772,16 @@ const OutreachPage = () => {
     queryClient.invalidateQueries({ queryKey: ['analytics'] });
   };
 
-  // Approve one intro. With an inbox → approve + queue (sends). Without → just
-  // approve; it sends from the queue once an inbox is connected.
+  // Approve one intro → approve + queue (it sends from your inbox). PRINCIPLE:
+  // you can't send without a connected Gmail, so if none is connected we open
+  // the connect gate instead of approving (nothing moves to "sent").
   const approveOne = async (email) => {
+    if (!canSend) { setShowConnect(true); return; }
     try {
       await approveEmail(email.id);
-      if (canSend) await queueEmail(email.id);
+      await queueEmail(email.id);
       refresh();
-      toast.success(canSend
-        ? 'Introduction approved — it’s on its way from your inbox.'
-        : 'Approved. Connect your inbox to send it.');
+      toast.success('Introduction approved — it’s on its way from your inbox.');
     } catch (err) {
       toast.error(err?.message || 'Could not approve. Please try again.');
       throw err;
@@ -808,14 +801,15 @@ const OutreachPage = () => {
   const handleSaveEdit = (id, subject, body) => editMutation.mutateAsync({ id, subject, body });
 
   const approveAll = async () => {
+    if (!canSend) { setShowConnect(true); return; }   // gate: no inbox = no send
     setBulking(true);
     try {
       for (const email of pending) {
         await approveEmail(email.id);
-        if (canSend) await queueEmail(email.id);
+        await queueEmail(email.id);
       }
       refresh();
-      toast.success(`${pending.length} introductions approved${canSend ? ' — sending now.' : '.'}`);
+      toast.success(`${pending.length} introductions approved — sending now.`);
     } catch (err) {
       toast.error(err?.message || 'Some introductions could not be approved.');
       refresh();
@@ -851,6 +845,27 @@ const OutreachPage = () => {
         <TabButton id="replies" label="Got Replies"    count={replies.length}  active={tab === 'replies'} pulse onClick={() => selectTab('replies')} />
       </div>
 
+      {/* Prominent connect gate — introductions can't send without a Gmail. */}
+      {!loading && !canSend && pending.length > 0 && tab === 'pending' && (
+        <div className="flex items-center gap-4 rounded-2xl border border-primary-light/30 bg-primary-light/5 p-4 md:p-5">
+          <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center shrink-0 shadow-sm shadow-primary-light/30">
+            <Mail className="w-5 h-5 text-white" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold font-montserrat text-black-light">Connect your inbox to start sending</p>
+            <p className="text-xs text-secondary-dark mt-0.5 leading-relaxed">
+              Introductions send from your own Gmail — that’s why hiring managers reply. Takes under a minute.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowConnect(true)}
+            className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2.5 text-sm shadow-sm hover:opacity-90 transition-all"
+          >
+            Connect Gmail <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-4">
           {[0, 1].map((i) => (
@@ -866,17 +881,6 @@ const OutreachPage = () => {
         <>
           {/* ── MOBILE + TABLET (< lg): stacked cards ─────────────────────── */}
           <div className="lg:hidden space-y-6">
-            {!canSend && pending.length > 0 && tab === 'pending' && (
-              <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3">
-                <Mail className="w-5 h-5 text-amber-600 shrink-0" />
-                <p className="text-xs text-amber-800 flex-1 min-w-0">
-                  You can approve now, but introductions send from your own inbox. Connect it to start sending.
-                </p>
-                <button onClick={() => navigate('/dashboard/settings')} className="shrink-0 inline-flex items-center gap-1 text-xs font-semibold text-amber-800 hover:text-amber-900">
-                  Connect <ArrowRight className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            )}
             {tab === 'pending' ? (
               pending.length === 0 ? emptyStateFor('pending') : (
                 <div className="space-y-4">
@@ -893,7 +897,7 @@ const OutreachPage = () => {
                   )}
                   <motion.div variants={LIST_STAGGER} initial="hidden" animate="show" className="space-y-4">
                     {pending.map((email) => (
-                      <IntroCard key={email.id} email={email} canSend={canSend} busy={bulking} onApprove={approveOne} onDiscard={discardOne} onSaveEdit={handleSaveEdit} />
+                      <IntroCard key={email.id} email={email} busy={bulking} onApprove={approveOne} onDiscard={discardOne} onSaveEdit={handleSaveEdit} />
                     ))}
                   </motion.div>
                 </div>
@@ -934,11 +938,9 @@ const OutreachPage = () => {
                       <PreviewPane
                         email={selectedEmail}
                         tab={tab}
-                        canSend={canSend}
                         onApprove={approveOne}
                         onDiscard={discardOne}
                         onSaveEdit={handleSaveEdit}
-                        onConnect={() => navigate('/dashboard/settings')}
                         reachedCount={reachedCount}
                       />
                     </div>
@@ -951,6 +953,10 @@ const OutreachPage = () => {
           </div>
         </>
       )}
+
+      {/* Gmail-connect gate — opens the branded connect flow. On success the
+          gmailAccounts query refetches, canSend flips true, and Approve sends. */}
+      {showConnect && <NoInboxModal onClose={() => setShowConnect(false)} />}
     </div>
   );
 };
