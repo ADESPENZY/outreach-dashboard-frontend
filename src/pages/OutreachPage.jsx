@@ -510,30 +510,32 @@ function PreviewListItem({ email, tab, active, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`w-full text-left px-4 py-3.5 border-b border-neutral-dark border-l-4 transition-colors ${
-        active ? 'border-l-primary-light bg-primary-light/5' : 'border-l-transparent hover:bg-neutral/50'
+      className={`w-full text-left rounded-xl border p-4 bg-white transition-all ${
+        active
+          ? 'border-primary-light ring-1 ring-primary-light/40 bg-primary-light/[0.04] shadow-sm'
+          : 'border-neutral-dark hover:border-primary-light/30 hover:shadow-sm'
       }`}
     >
       <div className="flex items-start gap-3">
-        <span className="w-9 h-9 shrink-0 rounded-lg bg-gradient-to-br from-primary-light/20 to-primary-light/5 text-primary-dark border border-primary-light/20 flex items-center justify-center font-montserrat font-bold text-sm">
+        <span className="w-10 h-10 shrink-0 rounded-lg bg-gradient-to-br from-primary-light/20 to-primary-light/5 text-primary-dark border border-primary-light/20 flex items-center justify-center font-montserrat font-bold text-base">
           {initial}
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-black-light truncate">{email.company_name || 'Company'}</p>
-          {email.job_title && <p className="text-xs text-secondary-dark truncate">{email.job_title}</p>}
+          {email.job_title && <p className="text-xs text-secondary-dark truncate mt-0.5">{email.job_title}</p>}
           {(email.job_location || email.job_salary_info) && (
-            <p className="text-xs text-secondary-dark/80 truncate mt-0.5">
+            <p className="text-xs text-secondary-dark/80 truncate mt-1">
               {[email.job_location, email.job_salary_info].filter(Boolean).join(' · ')}
             </p>
           )}
-          {match && (
-            <span className={`mt-1.5 inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-semibold ${match.cls}`}>
-              {match.label}
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            {match && (
+              <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-semibold ${match.cls}`}>{match.label}</span>
+            )}
+            <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${st.cls}`}>
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} /> {st.label}
             </span>
-          )}
-          <p className={`mt-1.5 flex items-center gap-1.5 text-xs font-medium ${st.cls}`}>
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${st.dot}`} /> {st.label}
-          </p>
+          </div>
         </div>
       </div>
     </button>
@@ -580,36 +582,55 @@ function PreviewPane({ email, tab, canSend, onApprove, onDiscard, onSaveEdit, on
   const st = tab === 'sent' ? sentStatus(email) : null;
 
   return (
-    <div className="flex flex-col h-full bg-white">
-      {/* 1. Job context bar */}
-      <div className="shrink-0 border-b border-neutral-dark bg-neutral/40 px-6 lg:px-8 py-4">
-        <h3 className="font-montserrat text-base font-bold text-black-light leading-snug">
-          {email.company_name || 'Company'}
-          {email.job_title && <span className="text-secondary-dark font-semibold"> · {email.job_title}</span>}
-        </h3>
-        <div className="mt-1.5 flex items-center gap-3 flex-wrap text-xs text-secondary-dark">
-          {email.job_location && <span className="inline-flex items-center gap-1"><MapPin className="w-3.5 h-3.5" />{email.job_location}</span>}
-          {email.job_salary_info && <span className="inline-flex items-center gap-1 text-emerald-600 font-semibold"><Wallet className="w-3.5 h-3.5" />{email.job_salary_info}</span>}
-          {match && <span className={`inline-flex items-center rounded border px-2 py-0.5 font-semibold ${match.cls}`}>{match.label}</span>}
-        </div>
-      </div>
+    <div className="flex flex-col h-full bg-neutral/50">
+      {/* Stacked cards on a light canvas — airy, sectioned, intentional */}
+      <div className="flex-1 overflow-y-auto p-4 lg:p-5 space-y-4">
 
-      {/* 2 + 3. Recipient + letter (scrollable) */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-2xl px-6 lg:px-8 py-6">
-          <div className="mb-5">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1 font-montserrat">To</p>
-            {r.name ? (
-              <>
-                <p className="text-base font-bold text-black-light">{r.name}</p>
-                {r.title && <p className="text-sm text-secondary-dark">{r.title}</p>}
-                {r.email && <p className="text-sm text-secondary-dark/80 break-all">{r.email}</p>}
-              </>
-            ) : (
-              <p className="text-base font-semibold text-black-light break-all">{r.email || 'the team'}</p>
+        {/* ── Card 1 — company, role, chips, recipient ─────────────────── */}
+        <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 lg:p-6">
+          <div className="flex items-start gap-3">
+            <span className="w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br from-primary-light/20 to-primary-light/5 text-primary-dark border border-primary-light/20 flex items-center justify-center font-montserrat font-bold text-lg">
+              {(email.company_name || '?').trim().charAt(0).toUpperCase()}
+            </span>
+            <div className="min-w-0">
+              <h2 className="font-montserrat text-xl font-bold text-black-light leading-snug">{email.company_name || 'Company'}</h2>
+              {email.job_title && <p className="text-sm text-secondary-dark">{email.job_title}</p>}
+            </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            {email.job_location && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-neutral border border-neutral-dark px-2.5 py-1 text-xs font-medium text-secondary-dark">
+                <MapPin className="w-3.5 h-3.5" /> {email.job_location}
+              </span>
+            )}
+            {email.job_salary_info && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 border border-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                <Wallet className="w-3.5 h-3.5" /> {email.job_salary_info}
+              </span>
+            )}
+            {match && (
+              <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${match.cls}`}>{match.label}</span>
             )}
           </div>
 
+          <div className="my-5 border-t border-neutral-dark" />
+
+          <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1.5 font-montserrat">To</p>
+          {r.name ? (
+            <>
+              <p className="text-base font-bold text-black-light">{r.name}</p>
+              {r.title && <p className="text-sm text-secondary-dark">{r.title}</p>}
+              {r.email && <p className="text-sm text-secondary-dark/80 break-all">{r.email}</p>}
+            </>
+          ) : (
+            <p className="text-base font-semibold text-black-light break-all">{r.email || 'the team'}</p>
+          )}
+        </div>
+
+        {/* ── Card 2 — the letter ──────────────────────────────────────── */}
+        <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 lg:p-6">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-3 font-montserrat">The introduction</p>
           {editing ? (
             <div className="space-y-3">
               <div>
@@ -636,40 +657,43 @@ function PreviewPane({ email, tab, canSend, onApprove, onDiscard, onSaveEdit, on
               <p className="text-sm text-black-light leading-relaxed whitespace-pre-line font-roboto">{email.body}</p>
             </>
           )}
+        </div>
 
-          {/* Reply celebration */}
-          {tab === 'replies' && (
-            <div className="mt-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4">
-              <p className="text-sm font-bold text-emerald-900 flex items-center gap-2"><PartyPopper className="w-4 h-4" /> They replied!</p>
-              <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <a href="https://mail.google.com/" target="_blank" rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
-                  Open in Gmail <ExternalLink className="w-4 h-4" />
-                </a>
-                <button onClick={copyPost}
-                  className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all">
-                  <Linkedin className="w-4 h-4" /> Post on LinkedIn 🎉
-                </button>
-              </div>
+        {/* ── Card 3 — reply celebration ───────────────────────────────── */}
+        {tab === 'replies' && (
+          <div className="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-5 lg:p-6">
+            <p className="text-sm font-bold text-emerald-900 flex items-center gap-2"><PartyPopper className="w-4 h-4" /> They replied!</p>
+            <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
+            <div className="mt-4 flex items-center gap-2 flex-wrap">
+              <a href="https://mail.google.com/" target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
+                Open in Gmail <ExternalLink className="w-4 h-4" />
+              </a>
+              <button onClick={copyPost}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all">
+                <Linkedin className="w-4 h-4" /> Post on LinkedIn 🎉
+              </button>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Sent status */}
-          {tab === 'sent' && st && (
-            <div className="mt-6 flex items-center gap-3 flex-wrap text-xs">
-              <span className={`inline-flex items-center gap-1.5 font-semibold ${st.cls}`}><st.Icon className="w-3.5 h-3.5" /> {st.label}</span>
-              {email.sent_at && <span className="text-secondary-dark">Sent {timeAgo(email.sent_at)}</span>}
+        {/* ── Card 3 — sent status ─────────────────────────────────────── */}
+        {tab === 'sent' && st && (
+          <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 lg:p-6">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-2 font-montserrat">Status</p>
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${st.cls}`}><st.Icon className="w-4 h-4" /> {st.label}</span>
+              {email.sent_at && <span className="text-xs text-secondary-dark">Sent {timeAgo(email.sent_at)}</span>}
               {email.next_followup_at && new Date(email.next_followup_at) > new Date() && (
-                <span className="text-secondary-dark">Next follow-up: {timeAgo(email.next_followup_at)}</span>
+                <span className="text-xs text-secondary-dark">Next follow-up: {timeAgo(email.next_followup_at)}</span>
               )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
-      {/* 5 + 6. Sticky footer */}
-      <div className="shrink-0 border-t border-neutral-dark bg-white px-6 lg:px-8 py-4">
+      {/* Sticky footer — actions always in reach */}
+      <div className="shrink-0 border-t border-neutral-dark bg-white px-5 lg:px-6 py-4">
         {tab === 'pending' && !canSend && (
           <button onClick={onConnect}
             className="mb-3 w-full flex items-center justify-between gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 hover:bg-amber-100 transition-colors">
@@ -889,11 +913,12 @@ const OutreachPage = () => {
           <div className="hidden lg:block">
             {activeList.length === 0 ? emptyStateFor(tab) : (
               <div className="flex rounded-2xl border border-neutral-dark overflow-hidden bg-white shadow-sm h-[calc(100vh-15rem)] min-h-[540px] max-h-[860px]">
-                {/* LEFT — scrollable list */}
-                <div className="w-[38%] shrink-0 border-r border-neutral-dark overflow-y-auto bg-white">
+                {/* LEFT — scrollable list of spaced cards on a light canvas */}
+                <div className="w-[38%] shrink-0 border-r border-neutral-dark overflow-y-auto bg-neutral/50 p-3 space-y-3">
                   {tab === 'pending' && pending.length >= 2 && (
-                    <div className="px-4 py-3 border-b border-neutral-dark">
-                      <button onClick={approveAll} disabled={bulking} className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-dark hover:text-primary-light transition-colors disabled:opacity-60">
+                    <div className="flex items-center justify-between px-1 pb-1">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 font-montserrat">Pending</span>
+                      <button onClick={approveAll} disabled={bulking} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors disabled:opacity-60">
                         {bulking ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Approving…</> : `Approve all (${pending.length})`}
                       </button>
                     </div>
