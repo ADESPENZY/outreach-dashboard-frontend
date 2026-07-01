@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
+import { motion } from 'framer-motion';
 import {
   Mail, Send, CheckCircle2, ArrowRight, ChevronDown, ChevronUp,
   Pencil, Trash2, Eye, Clock, PartyPopper, Linkedin, ExternalLink, Loader2,
-  AlertTriangle,
+  AlertTriangle, MapPin, Wallet,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import GenerateCvButton from '../components/GenerateCvButton';
@@ -43,6 +44,20 @@ const recipientOf = (email) => {
     email: c.email || '',
   };
 };
+
+// Match strength pill from the job's fit score — carries the Opportunities
+// signal into Introductions so the two pages feel like one continuous story.
+const matchPill = (score) => {
+  if (score == null) return null;
+  if (score >= 80) return { label: 'Strong match', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+  if (score >= 60) return { label: 'Good match',   cls: 'bg-blue-50 text-blue-700 border-blue-200' };
+  if (score >= 45) return { label: 'Fair match',   cls: 'bg-amber-50 text-amber-700 border-amber-200' };
+  return null;
+};
+
+// Staggered entrance for the pending grid (mirrors the Opportunities feed).
+const LIST_STAGGER = { hidden: {}, show: { transition: { staggerChildren: 0.06, delayChildren: 0.03 } } };
+const CARD_ITEM = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.22, 1, 0.36, 1] } } };
 
 // Relative time that also reads the future ("in 3 days", "tomorrow").
 const timeAgo = (iso) => {
@@ -151,6 +166,8 @@ function IntroCard({ email, canSend, onApprove, onDiscard, onSaveEdit, busy }) {
 
   const r = recipientOf(email);
   const strategy = STRATEGY_LABELS[email.strategy] || '';
+  const match = matchPill(email.job_fit_score);
+  const initial = (email.company_name || '?').trim().charAt(0).toUpperCase();
 
   const cancelEdit = () => {
     setSubject(email.subject || '');
@@ -174,122 +191,153 @@ function IntroCard({ email, canSend, onApprove, onDiscard, onSaveEdit, busy }) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm hover:shadow-md transition-all p-5 sm:p-6">
+    <motion.div
+      variants={CARD_ITEM}
+      whileHover={{ y: -4 }}
+      transition={{ duration: 0.3, ease: 'easeOut' }}
+      className="group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 transition-all"
+    >
+      {/* Warm signature stripe down the left edge — the envelope feel */}
+      <span aria-hidden="true" className="absolute left-0 inset-y-0 w-1.5 bg-gradient-to-b from-primary-light via-primary-light/50 to-primary-dark/30" />
 
-      {/* HEADER — which job this intro is for */}
-      <div>
-        <h3 className="font-montserrat text-base font-bold text-black-light leading-snug">
-          <span>{email.company_name || 'Company'}</span>
-          {email.job_title && <span className="text-secondary-dark font-semibold"> · {email.job_title}</span>}
-        </h3>
-        {(email.job_location || email.job_salary_info) && (
-          <p className="text-xs text-secondary-dark mt-0.5">
-            {[email.job_location, email.job_salary_info].filter(Boolean).join(' · ')}
-          </p>
-        )}
-      </div>
-
-      {/* RECIPIENT */}
-      <div className="mt-4">
-        {r.name ? (
-          <>
-            <p className="text-sm text-secondary-dark">
-              To: <span className="text-base font-bold text-black-light">{r.name}</span>
-            </p>
-            {r.title && <p className="text-sm text-secondary-dark">{r.title}</p>}
-            {r.email && <p className="text-xs text-secondary-dark/80 truncate">{r.email}</p>}
-          </>
-        ) : (
-          <p className="text-sm text-secondary-dark">
-            To: <span className="font-semibold text-black-light break-all">{r.email || 'the team'}</span>
-          </p>
-        )}
-      </div>
-
-      <div className="my-4 border-t border-neutral-dark" />
-
-      {/* EMAIL — preview, or editable in edit mode */}
-      {editing ? (
-        <div className="space-y-3">
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">Subject</label>
-            <input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all"
-            />
-          </div>
-          <div>
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">Message</label>
-            <textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              rows={9}
-              className="w-full px-3.5 py-3 rounded-xl border border-neutral-dark bg-white text-sm text-black leading-relaxed outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all resize-y"
-            />
-            <p className="text-xs text-secondary-dark/60 mt-1.5">Edits save automatically — make it sound like you.</p>
-          </div>
-          <div className="flex items-center justify-end gap-2">
-            <button onClick={cancelEdit} disabled={saving} className="text-secondary-dark hover:text-black-light hover:bg-neutral font-semibold rounded-xl px-4 py-2 text-sm transition-colors disabled:opacity-60">
-              Cancel
-            </button>
-            <button onClick={saveEdit} disabled={saving} className="inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-4 py-2 text-sm transition-all disabled:opacity-60">
-              {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : <>Save</>}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {email.subject && <p className="text-sm font-bold text-black-light leading-snug">Subject: {email.subject}</p>}
-          <BodyPreview body={email.body} />
-        </div>
-      )}
-
-      <div className="my-4 border-t border-neutral-dark" />
-
-      {/* FOOTER */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3 flex-wrap text-xs text-secondary-dark">
-          {strategy ? <span>Strategy: <span className="font-semibold text-black-light">{strategy}</span></span> : <span />}
-          <GenerateCvButton
-            job={{ id: email.job_id, title: email.job_title, company_name: email.company_name }}
-            hasCv={email.job_has_cv}
-          />
-        </div>
-
-        {!editing && (
-          <div className="flex items-center justify-between gap-2">
-            <button
-              onClick={() => onDiscard(email)}
-              disabled={busy || acting}
-              className="inline-flex items-center gap-1.5 text-secondary-dark hover:text-red-600 hover:bg-red-50 font-semibold rounded-xl px-3 py-2 text-sm transition-colors disabled:opacity-50"
-            >
-              <Trash2 className="w-4 h-4" /> Discard
-            </button>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setEditing(true)}
-                disabled={busy || acting}
-                className="inline-flex items-center gap-1.5 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-3.5 py-2 text-sm transition-all disabled:opacity-50"
-              >
-                <Pencil className="w-4 h-4" /> Edit
-              </button>
-              <button
-                onClick={approve}
-                disabled={busy || acting}
-                className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-              >
-                {acting
-                  ? <><ApplyDirLoader.Button variant="light" /> {canSend ? 'Sending…' : 'Approving…'}</>
-                  : canSend
-                    ? <>Approve &amp; Send <Send className="w-4 h-4" /></>
-                    : <>Approve <CheckCircle2 className="w-4 h-4" /></>}
-              </button>
+      <div className="md:flex">
+        {/* ── LEFT RAIL — the address panel (the "who") ─────────────────── */}
+        <div className="md:w-60 lg:w-64 shrink-0 bg-neutral/40 border-b md:border-b-0 md:border-r border-neutral-dark p-5 pl-6">
+          <div className="flex items-start gap-3">
+            <span className="w-11 h-11 shrink-0 rounded-xl bg-gradient-to-br from-primary-light/20 to-primary-light/5 text-primary-dark border border-primary-light/20 flex items-center justify-center font-montserrat font-bold text-lg">
+              {initial}
+            </span>
+            <div className="min-w-0">
+              <h3 className="font-montserrat text-base font-bold text-black-light leading-snug truncate">
+                {email.company_name || 'Company'}
+              </h3>
+              {email.job_title && <p className="text-xs text-secondary-dark leading-snug line-clamp-2">{email.job_title}</p>}
             </div>
           </div>
-        )}
+
+          {(email.job_location || email.job_salary_info) && (
+            <div className="mt-3 space-y-1">
+              {email.job_location && (
+                <p className="flex items-center gap-1.5 text-xs text-secondary-dark min-w-0">
+                  <MapPin className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{email.job_location}</span>
+                </p>
+              )}
+              {email.job_salary_info && (
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 min-w-0">
+                  <Wallet className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{email.job_salary_info}</span>
+                </p>
+              )}
+            </div>
+          )}
+
+          {match && (
+            <span className={`mt-3 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${match.cls}`}>
+              {match.label}
+            </span>
+          )}
+
+          <div className="my-4 border-t border-neutral-dark" />
+
+          {/* Recipient */}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">To</p>
+          {r.name ? (
+            <>
+              <p className="text-base font-bold text-black-light leading-snug">{r.name}</p>
+              {r.title && <p className="text-sm text-secondary-dark leading-snug">{r.title}</p>}
+              {r.email && <p className="text-xs text-secondary-dark/80 truncate mt-0.5">{r.email}</p>}
+            </>
+          ) : (
+            <p className="text-sm font-semibold text-black-light break-all">{r.email || 'the team'}</p>
+          )}
+
+          {strategy && (
+            <span className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-white border border-neutral-dark px-2.5 py-1 text-[11px] font-medium text-secondary-dark">
+              {strategy}
+            </span>
+          )}
+        </div>
+
+        {/* ── RIGHT — the letter ───────────────────────────────────────── */}
+        <div className="flex-1 min-w-0 p-5 sm:p-6">
+          {editing ? (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">Subject</label>
+                <input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1">Message</label>
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  rows={9}
+                  className="w-full px-3.5 py-3 rounded-xl border border-neutral-dark bg-white text-sm text-black leading-relaxed outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all resize-y"
+                />
+                <p className="text-xs text-secondary-dark/60 mt-1.5">Edits save automatically — make it sound like you.</p>
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button onClick={cancelEdit} disabled={saving} className="text-secondary-dark hover:text-black-light hover:bg-neutral font-semibold rounded-xl px-4 py-2 text-sm transition-colors disabled:opacity-60">
+                  Cancel
+                </button>
+                <button onClick={saveEdit} disabled={saving} className="inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-4 py-2 text-sm transition-all disabled:opacity-60">
+                  {saving ? <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</> : <>Save</>}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {email.subject && <p className="text-sm font-bold text-black-light leading-snug">Subject: {email.subject}</p>}
+              <BodyPreview body={email.body} />
+            </div>
+          )}
+
+          <div className="my-4 border-t border-neutral-dark" />
+
+          {/* Footer — CV on the left, actions on the right */}
+          <div className="space-y-3">
+            <GenerateCvButton
+              job={{ id: email.job_id, title: email.job_title, company_name: email.company_name }}
+              hasCv={email.job_has_cv}
+            />
+            {!editing && (
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  onClick={() => onDiscard(email)}
+                  disabled={busy || acting}
+                  className="inline-flex items-center gap-1.5 text-secondary-dark hover:text-red-600 hover:bg-red-50 font-semibold rounded-xl px-3 py-2 text-sm transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" /> Discard
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setEditing(true)}
+                    disabled={busy || acting}
+                    className="inline-flex items-center gap-1.5 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-3.5 py-2 text-sm transition-all disabled:opacity-50"
+                  >
+                    <Pencil className="w-4 h-4" /> Edit
+                  </button>
+                  <button
+                    onClick={approve}
+                    disabled={busy || acting}
+                    className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 hover:shadow-lg hover:shadow-primary-dark/30 disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    {acting
+                      ? <><ApplyDirLoader.Button variant="light" /> {canSend ? 'Sending…' : 'Approving…'}</>
+                      : canSend
+                        ? <>Approve &amp; Send <Send className="w-4 h-4" /></>
+                        : <>Approve <CheckCircle2 className="w-4 h-4" /></>}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -530,7 +578,7 @@ const OutreachPage = () => {
   };
 
   return (
-    <div className="w-full max-w-3xl mx-auto p-4 md:p-8 space-y-6 animate-fade-in font-roboto">
+    <div className="w-full max-w-4xl mx-auto p-4 md:p-8 space-y-6 animate-fade-in font-roboto">
 
       {/* Header */}
       <header>
@@ -598,17 +646,19 @@ const OutreachPage = () => {
                 </p>
               </div>
             )}
-            {pending.map((email) => (
-              <IntroCard
-                key={email.id}
-                email={email}
-                canSend={canSend}
-                busy={bulking}
-                onApprove={approveOne}
-                onDiscard={discardOne}
-                onSaveEdit={handleSaveEdit}
-              />
-            ))}
+            <motion.div variants={LIST_STAGGER} initial="hidden" animate="show" className="space-y-4">
+              {pending.map((email) => (
+                <IntroCard
+                  key={email.id}
+                  email={email}
+                  canSend={canSend}
+                  busy={bulking}
+                  onApprove={approveOne}
+                  onDiscard={discardOne}
+                  onSaveEdit={handleSaveEdit}
+                />
+              ))}
+            </motion.div>
           </div>
         )
       ) : tab === 'sent' ? (
