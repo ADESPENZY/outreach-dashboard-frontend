@@ -1,21 +1,31 @@
 import { useState } from 'react';
 import {
   Shield, Mail, ChevronRight, ChevronLeft, X, ExternalLink,
-  Lock, Rocket, AlertTriangle, Zap, Globe, Inbox,
+  Lock, Rocket, Send, MessageSquare, Inbox, CheckCircle2,
 } from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 
 // ── Connect-Gmail flow (light, on-brand) ──────────────────────────────────
-// A 3-step modal: the mission → connect Gmail via App Password → warm-up ask.
-// Styled with the ApplyDir light palette (white surfaces, orange accents) so it
-// matches the rest of the app. onComplete({ email, app_password, warmup_enabled }).
+// A 3-step modal that explains WHY we need your inbox → how to connect it →
+// how we keep it safe. Styled with the ApplyDir light palette. Copy is
+// deliberately honest: it describes only what actually happens.
+// onComplete({ email, app_password, warmup_enabled }).
 
-const STEPS = ['Your Mission', 'Connect Gmail', 'Protect Your Domain'];
+const STEPS = ['Why your inbox', 'Connect Gmail', 'Staying safe'];
 
+// The three reasons a job seeker actually needs to connect their own Gmail.
 const VALUE_PROPS = [
-  { icon: Zap,   title: 'Zero-Effort Matching', body: 'AI instantly flags the roles most likely to land you an interview.' },
-  { icon: Globe, title: 'Source From Anywhere', body: 'Roles from LinkedIn, remote boards, ATS listings — each scored against your CV.' },
-  { icon: Inbox, title: '100% Personal Delivery', body: "Sent from your own inbox, so it lands in the recruiter's primary folder." },
+  { icon: Send,          title: "It's how your introductions get sent", body: 'ApplyDir writes each introduction — but it sends from your inbox. Without a connected Gmail, there is nothing to send it from.' },
+  { icon: Inbox,         title: 'They arrive like a real person wrote them', body: "Coming from your own Gmail, each email reaches the hiring manager's normal inbox — personal and one-to-one, never bulk mail." },
+  { icon: MessageSquare, title: 'Replies come straight back to you', body: 'Every reply lands in your own inbox, so you own the conversation from the very first hello.' },
+];
+
+// What we actually do to protect a freshly-connected inbox (all automatic).
+const PROTECTIONS = [
+  'Starts slow — a new inbox sends only ~5 emails a day at first, then eases up as it settles in.',
+  'Spaced out — emails go one at a time with natural gaps, never in a burst.',
+  'Right hours — sent Mon–Fri during business hours, like a real person would.',
+  'Stops on a reply — the moment someone replies, the follow-ups stop.',
 ];
 
 export default function OnboardingModal({ onClose, onComplete, onShowGuide }) {
@@ -88,9 +98,9 @@ export default function OnboardingModal({ onClose, onComplete, onShowGuide }) {
 
               <div className="text-center space-y-1.5">
                 <h2 className="text-xl font-bold text-black-light leading-snug font-montserrat">
-                  You are here to land your next big role.
+                  Connect your inbox to start reaching hiring managers.
                 </h2>
-                <p className="text-sm font-semibold text-primary-dark">And we are going to make that happen.</p>
+                <p className="text-sm font-semibold text-primary-dark">It&rsquo;s the one thing we need from you — here&rsquo;s why.</p>
               </div>
 
               <div className="space-y-3">
@@ -233,7 +243,7 @@ export default function OnboardingModal({ onClose, onComplete, onShowGuide }) {
             </>
           )}
 
-          {/* ══ STEP 3: Warmup Ask ══ */}
+          {/* ══ STEP 3: How we keep the inbox safe ══ */}
           {step === 3 && (
             <>
               <div className="flex items-center justify-center w-14 h-14 rounded-2xl mx-auto bg-emerald-50 border border-emerald-200">
@@ -241,48 +251,33 @@ export default function OnboardingModal({ onClose, onComplete, onShowGuide }) {
               </div>
 
               <div className="text-center">
-                <h2 className="text-xl font-bold text-black-light font-montserrat">One last thing.</h2>
-                <p className="text-sm mt-1 text-secondary-dark">Protect your path to the primary inbox.</p>
+                <h2 className="text-xl font-bold text-black-light font-montserrat">One last thing — we keep your inbox safe.</h2>
+                <p className="text-sm mt-1 text-secondary-dark">So your emails keep landing instead of getting flagged.</p>
               </div>
 
               <div className="rounded-xl p-5 space-y-3 bg-neutral border border-neutral-dark">
-                <p className="text-sm leading-relaxed text-secondary-dark">
-                  Because this email hasn&rsquo;t sent high-volume outreach before, Google&rsquo;s filters
-                  might flag it as suspicious the moment you ramp up.
-                </p>
-                <p className="text-sm font-medium leading-relaxed text-black-light">
-                  Do you want us to <strong>gently warm up this account</strong> in the background —
-                  so your emails land directly in the hiring manager&rsquo;s primary inbox?
-                </p>
-                <p className="text-xs leading-relaxed text-secondary-dark/80">
-                  The Warmup Engine gradually increases your sending volume over 2–4 weeks, mimicking natural
-                  human activity. It runs silently and stops once your domain reputation is established.
+                {PROTECTIONS.map((p) => (
+                  <div key={p} className="flex items-start gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                    <p className="text-sm leading-relaxed text-secondary-dark">{p}</p>
+                  </div>
+                ))}
+                <p className="text-xs leading-relaxed text-secondary-dark/80 pt-1">
+                  It all happens automatically — you don&rsquo;t need to change a thing.
                 </p>
               </div>
 
               {error && <p className="text-xs font-medium text-red-500">{error}</p>}
 
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => handleFinish(true)}
-                  disabled={submitting}
-                  className="flex flex-col items-center gap-2 py-5 px-3 rounded-xl text-white bg-gradient-to-br from-emerald-500 to-emerald-600 shadow-sm hover:opacity-90 disabled:opacity-60 transition-all active:scale-[0.98]"
-                >
-                  {submitting ? <ApplyDirLoader.Button variant="light" /> : <Shield className="w-5 h-5 text-white" />}
-                  <span className="text-sm font-bold leading-tight text-center">Yes, protect my domain</span>
-                  <span className="text-xs text-emerald-50/80">Recommended</span>
-                </button>
-
-                <button
-                  onClick={() => handleFinish(false)}
-                  disabled={submitting}
-                  className="flex flex-col items-center gap-2 py-5 px-3 rounded-xl bg-white border border-neutral-dark text-secondary-dark hover:text-black-light hover:border-primary-light/40 disabled:opacity-60 transition-all"
-                >
-                  <AlertTriangle className="w-5 h-5" />
-                  <span className="text-sm font-bold leading-tight text-center">No, risk it</span>
-                  <span className="text-xs opacity-70">Skip warmup</span>
-                </button>
-              </div>
+              <button
+                onClick={() => handleFinish(true)}
+                disabled={submitting}
+                className="group w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-montserrat font-semibold text-sm bg-gradient-to-r from-primary-light to-primary-dark shadow-sm hover:opacity-90 transition-all active:scale-[0.98] disabled:opacity-60"
+              >
+                {submitting ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />}
+                Finish — connect my inbox
+                <ChevronRight className="w-3.5 h-3.5 transition-transform duration-200 group-hover:translate-x-1" />
+              </button>
 
               <button
                 onClick={() => setStep(2)}
