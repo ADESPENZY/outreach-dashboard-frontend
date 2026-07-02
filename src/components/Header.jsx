@@ -141,7 +141,7 @@ const Header = ({ onMenuClick }) => {
                     <p className="text-xs text-secondary-dark truncate">{me?.email || "No email linked"}</p>
                 </div>
                 <NavLink
-                    to="/dashboard/profile"
+                    to="/dashboard/settings?tab=profile"
                     onClick={closeMenus}
                     className="flex items-center px-4 py-3 text-sm text-secondary-dark hover:text-primary-dark hover:bg-primary-light/5 transition-colors"
                 >

@@ -16,6 +16,7 @@ import { getInboxStats } from '@/services/apiInboxes';
 import { createGmailAccount, deleteGmailAccount, toggleGmailAccount } from '@/services/apiGmail';
 import { useAuth } from '@/context/AuthContext';
 import { LegalSections } from '@/components/legal/PolicyContent';
+import api from '@/api';
 import OnboardingModal from './OnboardingModal';
 import InboxSafetyGuide from './InboxSafetyGuide';
 
@@ -221,11 +222,13 @@ function ProfileTab() {
   const [projects, setProjects] = useState([]);
   const [savingVoice, setSavingVoice] = useState(false);
   const [cvBusy, setCvBusy] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
     setIdForm({
       full_name: profile.full_name || '', location: profile.location || '',
+      phone: profile.phone || '', github_url: profile.github_url || '',
       linkedin_url: profile.linkedin_url || '', portfolio_url: profile.portfolio_url || '',
       calendly_url: profile.calendly_url || '', contact_email: profile.contact_email || '',
     });
@@ -276,6 +279,17 @@ function ProfileTab() {
   const toggleDiff = (d) => setDiffs(prev => prev.includes(d) ? prev.filter(x => x !== d) : (prev.length >= 2 ? prev : [...prev, d]));
   const setProject = (i, v) => setProjects(p => { const n = [...p]; n[i] = v; return n; });
 
+  const downloadResumePdf = async () => {
+    setDownloadingPdf(true);
+    try {
+      const res = await api.get('/api/accounts/profile/resume-pdf/', { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url; a.download = `${(profile?.full_name || 'resume').replace(/\s+/g, '_')}_resume.pdf`;
+      document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    } catch { toast.error('Could not generate the PDF.'); } finally { setDownloadingPdf(false); }
+  };
+
   if (isLoading || !idForm) return <ApplyDirLoader.Inline />;
   const skills = profile?.skills_extracted?.skills || [];
   const strongest = profile?.skills_extracted?.strongest_areas || [];
@@ -299,8 +313,10 @@ function ProfileTab() {
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div><Label>Location / mailing address</Label><Input value={idForm.location} onChange={e => setIdForm(f => ({ ...f, location: e.target.value }))} placeholder="Lagos, Nigeria" /></div>
+          <div><Label>Phone</Label><Input value={idForm.phone} onChange={e => setIdForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" /></div>
           <div><Label>Sign-off email</Label><Input value={idForm.contact_email} onChange={e => setIdForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="Defaults to account email" /></div>
           <div><Label>LinkedIn URL</Label><Input value={idForm.linkedin_url} onChange={e => setIdForm(f => ({ ...f, linkedin_url: e.target.value }))} placeholder="linkedin.com/in/…" /></div>
+          <div><Label>GitHub URL</Label><Input value={idForm.github_url} onChange={e => setIdForm(f => ({ ...f, github_url: e.target.value }))} placeholder="github.com/…" /></div>
           <div><Label>Portfolio / website</Label><Input value={idForm.portfolio_url} onChange={e => setIdForm(f => ({ ...f, portfolio_url: e.target.value }))} placeholder="yoursite.com" /></div>
           <div className="sm:col-span-2"><Label>Calendly link (optional)</Label><Input value={idForm.calendly_url} onChange={e => setIdForm(f => ({ ...f, calendly_url: e.target.value }))} placeholder="calendly.com/you/30min" /></div>
         </div>
@@ -317,6 +333,9 @@ function ProfileTab() {
             <label htmlFor="settings-cv" className={`ml-auto inline-flex items-center gap-1.5 text-xs font-semibold ${cvBusy ? 'text-secondary-dark/50' : 'text-primary-dark hover:text-primary-light cursor-pointer'}`}>
               {cvBusy ? <ApplyDirLoader.Button variant="dark" /> : <Upload className="w-3.5 h-3.5" />} {cvBusy ? 'Processing…' : 'Replace CV'}
             </label>
+            <button onClick={downloadResumePdf} disabled={downloadingPdf} className="inline-flex items-center gap-1.5 text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
+              {downloadingPdf ? <ApplyDirLoader.Button variant="dark" /> : <Download className="w-3.5 h-3.5" />} Résumé PDF
+            </button>
           </div>
         ) : (
           <label htmlFor="settings-cv" className="block cursor-pointer">

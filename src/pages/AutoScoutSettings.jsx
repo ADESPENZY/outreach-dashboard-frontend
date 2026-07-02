@@ -233,7 +233,7 @@ export default function AutoScoutSettings() {
             </p>
             <button
               type="button"
-              onClick={() => navigate('/dashboard/profile')}
+              onClick={() => navigate('/dashboard/settings?tab=profile')}
               className="inline-flex items-center gap-1.5 mt-2.5 text-xs font-bold text-amber-900 hover:text-amber-700 transition-colors"
             >
               Go to Profile & upload CV <ArrowRight className="w-3.5 h-3.5" />

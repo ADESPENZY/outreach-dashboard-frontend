@@ -15,9 +15,9 @@ const ProtectedRoute = ({ requireOnboarding = false }) => {
   }
 
   // Onboarding is progressive now — there's no standalone wizard. Any caller
-  // that still asks for it is sent to the Profile page (the setup home).
+  // that still asks for it is sent to the Settings → Profile tab (the setup home).
   if (requireOnboarding && currentUser && !currentUser.onboarding_complete) {
-    return <Navigate to="/dashboard/profile" replace />;
+    return <Navigate to="/dashboard/settings?tab=profile" replace />;
   }
 
   return <Outlet />;

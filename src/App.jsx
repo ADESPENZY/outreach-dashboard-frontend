@@ -8,7 +8,6 @@ import ProtectedRoute from './components/ProtectedRoute';
 import JobsPage from './pages/JobsPage';
 import OutreachPage from './pages/OutreachPage';
 import ProgressPage from './pages/ProgressPage';
-import ProfilePage from './pages/ProfilePage';
 import RegisterPage from './pages/RegisterPage';
 import LegalPage from './pages/LegalPage';
 import { AuthProvider } from './context/AuthContext';
@@ -47,7 +46,7 @@ function App() {
           {/* Onboarding wizard removed — setup is progressive (Profile page,
               CV drawer, Auto-Scout, Inboxes). Old links redirect to Profile. */}
           <Route element={<ProtectedRoute requireOnboarding={false} />}>
-            <Route path="/onboarding" element={<Navigate to="/dashboard/profile" replace />} />
+            <Route path="/onboarding" element={<Navigate to="/dashboard/settings?tab=profile" replace />} />
           </Route>
 
           {/* Dashboard — JWT only; onboarding is now optional (progressive disclosure) */}
@@ -59,8 +58,9 @@ function App() {
               <Route path="introductions"     element={<OutreachPage />} />    {/* was Outreach */}
               <Route path="progress"          element={<ProgressPage />} />    {/* new: merges Analytics + JobTracker + Inboxes later */}
               <Route path="settings"          element={<Settings />} />
-              {/* Profile is reached via the avatar/settings, not the sidebar */}
-              <Route path="profile"           element={<ProfilePage />} />
+              {/* Old standalone Profile page retired — it now lives as the
+                  Profile tab inside Settings. */}
+              <Route path="profile"           element={<Navigate to="/dashboard/settings?tab=profile" replace />} />
 
               {/* ── Redirects: old paths → new homes ─────────────────── */}
               <Route path="jobs"              element={<Navigate to="/dashboard/opportunities" replace />} />
