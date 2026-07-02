@@ -18,7 +18,7 @@ const VALUE_PROPS = [
   { icon: Inbox, title: '100% Personal Delivery', body: "Sent from your own inbox, so it lands in the recruiter's primary folder." },
 ];
 
-export default function OnboardingModal({ onClose, onComplete }) {
+export default function OnboardingModal({ onClose, onComplete, onShowGuide }) {
   const [step, setStep]               = useState(1);
   const [email, setEmail]             = useState('');
   const [appPassword, setAppPassword] = useState('');
@@ -122,6 +122,15 @@ export default function OnboardingModal({ onClose, onComplete }) {
                 Continue
                 <ChevronRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-1" />
               </button>
+
+              {onShowGuide && (
+                <button
+                  onClick={onShowGuide}
+                  className="w-full text-center text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors"
+                >
+                  New to this? See the 2-min guide to setting up inboxes safely →
+                </button>
+              )}
             </>
           )}
 

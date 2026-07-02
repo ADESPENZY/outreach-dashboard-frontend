@@ -4,11 +4,13 @@ import { toast } from 'react-toastify';
 import {
   Mail, Send, MailOpen, MessageSquare, ChevronDown, ChevronUp,
   Search, Pause, Play, RefreshCw, AlertCircle, Users, Plus, Trash2,
+  Sparkles, ArrowRight,
 } from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getInboxStats } from '../services/apiInboxes';
 import { toggleGmailAccount, createGmailAccount, deleteGmailAccount } from '../services/apiGmail';
 import OnboardingModal from './OnboardingModal';
+import InboxSafetyGuide from './InboxSafetyGuide';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -62,6 +64,7 @@ const Inboxes = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [expandedRows, setExpandedRows] = useState([]);
   const [showConnect, setShowConnect]     = useState(false);
+  const [showGuide, setShowGuide]         = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
 
   const { data, isLoading: loading, isFetching, refetch: fetchData } = useQuery({
@@ -155,6 +158,46 @@ const Inboxes = () => {
         </div>
       </div>
 
+      {/* Strategy banner — motivates connecting a few inboxes, opens the guide */}
+      {(() => {
+        const n = accounts.length;
+        const headline =
+          n === 0 ? 'Connect your first inbox to start reaching hiring managers'
+          : n < 4  ? `You're sending from ${n} inbox${n > 1 ? 'es' : ''} — add a few more to reach more managers`
+          :          "Nice — you've got strong reach across your inboxes";
+        const sub =
+          n < 4
+            ? 'Each free Gmail sends a calm ~6/day. Connect 2–4 and they open far more doors together — no domain to buy, no cost.'
+            : 'Everything below is spaced, rotated and warmed automatically. Add more anytime.';
+        return (
+          <div className="rounded-2xl border border-primary-light/20 bg-gradient-to-r from-primary-light/[0.07] to-transparent p-5 flex flex-col md:flex-row md:items-center gap-4">
+            <div className="flex items-start gap-3 flex-1 min-w-0">
+              <div className="w-10 h-10 rounded-xl bg-primary-light/10 border border-primary-light/20 flex items-center justify-center shrink-0">
+                <Sparkles className="w-5 h-5 text-primary-dark" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm md:text-base font-bold text-black-light font-montserrat leading-snug">{headline}</h3>
+                <p className="text-xs text-secondary-dark mt-0.5 leading-relaxed">{sub}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => setShowGuide(true)}
+                className="px-4 py-2 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap"
+              >
+                See the 2-min guide
+              </button>
+              <button
+                onClick={() => setShowConnect(true)}
+                className="group flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold hover:opacity-90 transition-all shadow-sm whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" /> Add inbox
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Summary cards */}
       <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <StatCard label="Connected Inboxes" value={summary.total_accounts  ?? '—'} icon={Mail}         color="bg-blue-50 text-blue-500"    />
@@ -212,6 +255,12 @@ const Inboxes = () => {
                   className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm"
                 >
                   <Plus className="w-4 h-4" /> Connect your first Gmail
+                </button>
+                <button
+                  onClick={() => setShowGuide(true)}
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors"
+                >
+                  New to this? See the 2-min safe-setup guide <ArrowRight className="w-3 h-3" />
                 </button>
               </div>
             ) : 'No accounts match your filter.'}
@@ -418,6 +467,15 @@ const Inboxes = () => {
         <OnboardingModal
           onClose={() => setShowConnect(false)}
           onComplete={handleConnect}
+          onShowGuide={() => setShowGuide(true)}
+        />
+      )}
+
+      {/* Safe-setup guide */}
+      {showGuide && (
+        <InboxSafetyGuide
+          onClose={() => setShowGuide(false)}
+          onConnect={() => { setShowGuide(false); setShowConnect(true); }}
         />
       )}
 
