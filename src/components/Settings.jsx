@@ -13,7 +13,7 @@ import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } fro
 import { getProfile, updateProfile, uploadCV } from '@/services/apiProfile';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSettings';
 import { getInboxStats } from '@/services/apiInboxes';
-import { createGmailAccount, deleteGmailAccount, toggleGmailAccount } from '@/services/apiGmail';
+import { createGmailAccount, deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl } from '@/services/apiGmail';
 import { useAuth } from '@/context/AuthContext';
 import { LegalSections } from '@/components/legal/PolicyContent';
 import api from '@/api';
@@ -156,37 +156,48 @@ const Settings = () => {
   const selectTab = (key) => { setActiveTab(key); setParams(key === 'profile' ? {} : { tab: key }, { replace: true }); };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 md:px-6 pt-4 md:pt-6 pb-12 animate-fade-in font-roboto">
-      <div className="mb-5 md:mb-6">
+    // Same page frame as Opportunities so the padding + edges line up across
+    // the app: p-4 md:p-8, max-w-[1400px] mx-auto, space-y-6.
+    <div className="relative isolate p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-6 animate-fade-in font-roboto">
+      <div>
         <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">Settings</h1>
         <p className="text-sm text-secondary-dark mt-1">Everything about your account — profile, sending, job search, and login.</p>
       </div>
 
-      {/* Tabs — horizontal scroll on mobile, wrap on desktop */}
-      <div className="flex gap-1.5 overflow-x-auto no-scrollbar mb-6 -mx-1 px-1 pb-1">
-        {TABS.map(tab => {
-          const isActive = activeTab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              onClick={() => selectTab(tab.key)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold whitespace-nowrap transition-all shrink-0 ${
-                isActive
-                  ? 'bg-gradient-to-r from-primary-light to-primary-dark text-white shadow-sm'
-                  : 'bg-white border border-neutral-dark text-secondary-dark hover:text-black-light hover:border-primary-light/40'
-              }`}
-            >
-              <tab.icon className="w-4 h-4" /> {tab.label}
-            </button>
-          );
-        })}
-      </div>
+      {/* Sub-nav rail (screenshot inspo): horizontal scroll on mobile, a sticky
+          vertical rail on desktop, with the wide content panel beside it. */}
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+        <aside className="w-full md:w-60 shrink-0 md:sticky md:top-6">
+          <nav className="flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 md:pb-0 md:mx-0 md:px-0">
+            {TABS.map(tab => {
+              const isActive = activeTab === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => selectTab(tab.key)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-semibold whitespace-nowrap transition-all shrink-0 md:w-full ${
+                    isActive
+                      ? 'bg-gradient-to-r from-primary-light to-primary-dark text-white shadow-sm'
+                      : 'bg-white border border-neutral-dark text-secondary-dark hover:text-black-light hover:border-primary-light/40'
+                  }`}
+                >
+                  <tab.icon className="w-4 h-4 shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate">{tab.label}</span>
+                    <span className={`hidden md:block text-[11px] font-normal ${isActive ? 'text-white/80' : 'text-secondary-dark/60'}`}>{tab.desc}</span>
+                  </span>
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
 
-      <div className="space-y-5">
-        {activeTab === 'profile' && <ProfileTab />}
-        {activeTab === 'sending' && <SendingTab />}
-        {activeTab === 'jobs'    && <JobsTab />}
-        {activeTab === 'account' && <AccountTab navigate={navigate} />}
+        <div className="flex-1 min-w-0 space-y-5 md:max-w-3xl">
+          {activeTab === 'profile' && <ProfileTab />}
+          {activeTab === 'sending' && <SendingTab />}
+          {activeTab === 'jobs'    && <JobsTab />}
+          {activeTab === 'account' && <AccountTab navigate={navigate} />}
+        </div>
       </div>
     </div>
   );
@@ -294,9 +305,22 @@ function ProfileTab() {
   const skills = profile?.skills_extracted?.skills || [];
   const strongest = profile?.skills_extracted?.strongest_areas || [];
   const fitTitles = profile?.skills_extracted?.job_titles_fit || [];
+  const displayName = idForm.full_name || me?.first_name || me?.username || 'You';
+  const initials = displayName.trim().slice(0, 2).toUpperCase();
 
   return (
     <>
+      {/* Identity header (screenshot inspo) — avatar + name + email */}
+      <div className="flex items-center gap-4 bg-white rounded-2xl border border-neutral-dark shadow-sm px-5 md:px-6 py-5">
+        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center text-white text-xl font-bold font-montserrat shadow-lg shadow-primary-light/30 shrink-0">
+          {initials}
+        </div>
+        <div className="min-w-0">
+          <p className="text-lg font-bold text-black font-montserrat truncate">{displayName}</p>
+          <p className="text-sm text-secondary-dark truncate">{me?.email}</p>
+        </div>
+      </div>
+
       {/* Section A — Identity */}
       <Collapsible title="Your Identity" description="Name, location, and the links in your email sign-off." icon={User} defaultOpen>
         <div>
@@ -460,12 +484,38 @@ function SendingTab() {
   const [togglingId, setTogglingId] = useState(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [savingAF, setSavingAF] = useState(false);
+  const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [params, setParams] = useSearchParams();
 
   useEffect(() => {
     if (profile) setAutoFollow(profile.job_preferences?.auto_followups ?? true);
   }, [profile]);
 
   const refresh = () => { qc.invalidateQueries({ queryKey: ['inboxes'] }); qc.invalidateQueries({ queryKey: ['gmailAccounts'] }); };
+
+  // Toast the result when Google bounces the user back here after consent.
+  useEffect(() => {
+    if (params.get('gmail_connected')) {
+      toast.success('Gmail connected — you can send now.');
+      refresh();
+      params.delete('gmail_connected'); setParams(params, { replace: true });
+    } else if (params.get('gmail_error')) {
+      toast.error('Could not connect Gmail. Please try again.');
+      params.delete('gmail_error'); setParams(params, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleGoogleConnect = async () => {
+    setConnectingGoogle(true);
+    try {
+      const url = await getGmailOAuthUrl();
+      window.location.href = url;   // leave to Google; it returns to the callback
+    } catch (e) {
+      toast.error(e.message);
+      setConnectingGoogle(false);
+    }
+  };
 
   const handleConnect = async (form) => { await createGmailAccount(form); refresh(); setShowConnect(false); toast.success('Inbox connected!'); };
   const handleToggle = async (id) => { setTogglingId(id); try { await toggleGmailAccount(id); refresh(); } catch (e) { toast.error(e.message); } finally { setTogglingId(null); } };
@@ -552,9 +602,13 @@ function SendingTab() {
             )}
 
             <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              <button onClick={() => setShowConnect(true)} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm"><Plus className="w-4 h-4" /> Add Gmail</button>
-              <button onClick={() => setShowGuide(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all">See the 2-min guide</button>
+              <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                {connectingGoogle ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />} Connect Gmail with Google
+              </button>
+              <button onClick={() => setShowConnect(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Use App Password</button>
+              <button onClick={() => setShowGuide(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Guide</button>
             </div>
+            <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> "Connect with Google" is the easy, secure way — one click, no password to paste, and your emails always send.</p>
             <p className="text-xs text-secondary-dark leading-relaxed">
               Each inbox sends up to 20–25 emails/day once warmed. Add more inboxes to increase your daily sending capacity
               {totalCapacity > 0 && <> — you can currently send about <span className="font-semibold text-black">{totalCapacity} emails/day</span> across active inboxes.</>}

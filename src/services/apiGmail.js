@@ -40,3 +40,15 @@ export async function toggleGmailAccount(id) {
     throw new Error(parseApiError(err));
   }
 }
+
+// Gmail API (OAuth) — returns the Google consent URL to send the user to.
+// The caller redirects the browser there; Google returns to the backend
+// callback, which stores the refresh token and bounces back to Settings.
+export async function getGmailOAuthUrl() {
+  try {
+    const response = await api.get("/api/integrations/gmail/oauth/authorize/");
+    return response.data.authorize_url;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
