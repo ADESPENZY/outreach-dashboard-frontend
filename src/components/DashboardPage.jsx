@@ -28,11 +28,13 @@ function greetingForNow() {
 // Human, jargon-free names for the cold-email strategies (the model labels are
 // technical: "Value-Upfront", "Problem-First"). The user hears plain language.
 const STRATEGY_LABELS = {
-  problem_first:   'Lead with their problem',
-  proof_first:     'Lead with proof',
-  their_work:      'Reference their work',
+  story:           'Make them feel seen',
+  problem_first:   'Diagnose their problem',
+  proof_first:     'Lead with the receipts',
+  their_work:      'Call back their work',
+  value_upfront:   'Give them the blueprint',
+  // Retired strategies — still shown on old emails.
   direct:          'Keep it short and direct',
-  value_upfront:   'Lead with the offer',
   question_opener: 'Open with a question',
 };
 

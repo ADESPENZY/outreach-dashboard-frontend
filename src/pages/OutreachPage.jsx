@@ -23,11 +23,13 @@ import { getGmailAccounts } from '../services/apiGmail';
 
 // Friendly names for the cold-email strategies (model keys → human label).
 const STRATEGY_LABELS = {
-  problem_first:   'Problem first',
-  proof_first:     'Proof first',
-  their_work:      'Their world first',
+  story:           'The Mirror',
+  problem_first:   'The Diagnosis',
+  proof_first:     'The Receipts',
+  their_work:      'The Callback',
+  value_upfront:   'The Blueprint',
+  // Retired strategies — still shown on old emails.
   direct:          'Short & direct',
-  value_upfront:   'Value upfront',
   question_opener: 'Question opener',
 };
 
