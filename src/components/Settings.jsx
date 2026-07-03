@@ -530,7 +530,8 @@ function SendingTab() {
   };
 
   const accounts = data?.accounts || [];
-  const totalCapacity = accounts.filter(a => a.status !== 'Paused').reduce((s, a) => s + (a.daily_send_limit || 0), 0);
+  // Capacity = the ENFORCED (age-ramped) limit, not the raw ceiling — honest.
+  const totalCapacity = accounts.filter(a => a.status !== 'Paused').reduce((s, a) => s + (a.effective_daily_limit ?? a.daily_send_limit ?? 0), 0);
 
   // Signature preview values
   const name = profile?.full_name || me?.first_name || 'Your Name';
@@ -555,7 +556,10 @@ function SendingTab() {
               <div className="space-y-3">
                 {accounts.map(acc => {
                   const st = INBOX_STATUS[acc.status] || INBOX_STATUS.Active;
-                  const quotaPct = acc.daily_send_limit ? (acc.sent_today / acc.daily_send_limit) * 100 : 0;
+                  // Show the ENFORCED limit (age-ramped), not the raw ceiling.
+                  const enforced = acc.effective_daily_limit ?? acc.daily_send_limit ?? 0;
+                  const warming = acc.warmup_stage && acc.warmup_stage !== 'fully_warmed';
+                  const quotaPct = enforced ? (acc.sent_today / enforced) * 100 : 0;
                   const wp = acc.warmup;
                   return (
                     <div key={acc.id} className="rounded-2xl border border-neutral-dark p-4 space-y-3">
@@ -571,11 +575,19 @@ function SendingTab() {
 
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                         <span className="text-secondary-dark">Daily limit</span>
-                        <span className="text-black-light font-semibold text-right">{acc.daily_send_limit} / day</span>
+                        <span className="text-black-light font-semibold text-right">
+                          {enforced} / day{warming && <span className="text-amber-600 font-normal"> · warming up</span>}
+                        </span>
                         <span className="text-secondary-dark">Sent today</span>
-                        <span className="text-black-light font-semibold text-right">{acc.sent_today}/{acc.daily_send_limit}</span>
+                        <span className="text-black-light font-semibold text-right">{acc.sent_today}/{enforced}</span>
                         {wp?.days_running != null && (<><span className="text-secondary-dark">Account age</span><span className="text-black-light font-semibold text-right">{wp.days_running} days</span></>)}
                       </div>
+
+                      {warming && (
+                        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 leading-snug">
+                          New inbox warming up — its daily limit ramps <strong>5 → 10 → 20</strong> over ~2 weeks so Gmail trusts it. This is the number actually enforced today.
+                        </p>
+                      )}
 
                       <div className="w-full h-1.5 bg-neutral-dark rounded-full overflow-hidden">
                         <div className={`h-full rounded-full ${acc.status === 'Paused' ? 'bg-neutral-dark' : 'bg-primary-light'}`} style={{ width: `${Math.min(quotaPct, 100)}%` }} />
