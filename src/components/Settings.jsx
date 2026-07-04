@@ -472,6 +472,9 @@ const INBOX_STATUS = {
   Paused:  { cls: 'bg-red-50 text-red-600 border-red-200',             dot: 'bg-red-400',     icon: AlertTriangle },
 };
 
+// Mirrors backend MAX_INBOXES_PER_USER (integrations/serializers.py).
+const MAX_INBOXES = 3;
+
 function SendingTab() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['inboxes'], queryFn: getInboxStats });
@@ -500,7 +503,9 @@ function SendingTab() {
       refresh();
       params.delete('gmail_connected'); setParams(params, { replace: true });
     } else if (params.get('gmail_error')) {
-      toast.error('Could not connect Gmail. Please try again.');
+      toast.error(params.get('gmail_error') === 'limit'
+        ? `You can connect up to ${MAX_INBOXES} inboxes. Disconnect one to add another.`
+        : 'Could not connect Gmail. Please try again.');
       params.delete('gmail_error'); setParams(params, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -531,7 +536,10 @@ function SendingTab() {
 
   const accounts = data?.accounts || [];
   // Capacity = the ENFORCED (age-ramped) limit, not the raw ceiling — honest.
-  const totalCapacity = accounts.filter(a => a.status !== 'Paused').reduce((s, a) => s + (a.effective_daily_limit ?? a.daily_send_limit ?? 0), 0);
+  const activeAccounts = accounts.filter(a => a.status !== 'Paused');
+  const totalCapacity = activeAccounts.reduce((s, a) => s + (a.effective_daily_limit ?? a.daily_send_limit ?? 0), 0);
+  // New-introductions budget across active inboxes (limit // 4 each, from the API).
+  const totalNewPerDay = activeAccounts.reduce((s, a) => s + (a.new_budget ?? Math.max(1, Math.floor((a.effective_daily_limit ?? 0) / 4))), 0);
 
   // Signature preview values
   const name = profile?.full_name || me?.first_name || 'Your Name';
@@ -580,6 +588,15 @@ function SendingTab() {
                         </span>
                         <span className="text-secondary-dark">Sent today</span>
                         <span className="text-black-light font-semibold text-right">{acc.sent_today}/{enforced}</span>
+                        {acc.new_budget != null && (
+                          <>
+                            <span className="text-secondary-dark">New intros today</span>
+                            <span className="text-black-light font-semibold text-right">
+                              {acc.new_sent_today ?? 0}/{acc.new_budget}
+                              <span className="text-secondary-dark font-normal"> · follow-ups take the rest</span>
+                            </span>
+                          </>
+                        )}
                         {wp?.days_running != null && (<><span className="text-secondary-dark">Account age</span><span className="text-black-light font-semibold text-right">{wp.days_running} days</span></>)}
                       </div>
 
@@ -613,17 +630,23 @@ function SendingTab() {
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-2 pt-1">
-              <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
-                {connectingGoogle ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />} Connect Gmail with Google
-              </button>
-              <button onClick={() => setShowConnect(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Use App Password</button>
-              <button onClick={() => setShowGuide(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Guide</button>
-            </div>
+            {accounts.length >= MAX_INBOXES ? (
+              <p className="text-xs font-semibold text-secondary-dark bg-neutral-light border border-neutral-dark rounded-xl px-3 py-2.5">
+                {MAX_INBOXES} of {MAX_INBOXES} inboxes connected — that's the maximum. Remove one to connect a different Gmail.
+              </p>
+            ) : (
+              <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                  {connectingGoogle ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />} Connect Gmail with Google
+                </button>
+                <button onClick={() => setShowConnect(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Use App Password</button>
+                <button onClick={() => setShowGuide(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Guide</button>
+              </div>
+            )}
             <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> "Connect with Google" is the easy, secure way — one click, no password to paste, and your emails always send.</p>
             <p className="text-xs text-secondary-dark leading-relaxed">
-              Each inbox sends up to 20–25 emails/day once warmed. Add more inboxes to increase your daily sending capacity
-              {totalCapacity > 0 && <> — you can currently send about <span className="font-semibold text-black">{totalCapacity} emails/day</span> across active inboxes.</>}
+              Each warmed inbox sends about <span className="font-semibold text-black">5 new introductions a day</span>, with the rest of its daily limit reserved for follow-ups (where most replies come from). Connect up to {MAX_INBOXES} inboxes to raise your capacity
+              {totalCapacity > 0 && <> — right now that's about <span className="font-semibold text-black">{totalNewPerDay} new contacts</span> and <span className="font-semibold text-black">{totalCapacity} total emails</span> per day.</>}
             </p>
           </>
         )}
