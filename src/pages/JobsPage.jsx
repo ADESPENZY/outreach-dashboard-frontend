@@ -84,6 +84,10 @@ const JobsPage = () => {
     const [drawerJobId, setDrawerJobId] = useState(null);
     // Apply-Direct modal context: { job, track } | null.
     const [applyModal, setApplyModal] = useState(null);
+    // Ids the user just reached out to, most-recent first — orders the in-progress
+    // bucket so a freshly-picked job sits on top. Per-job (not one shared flag), so
+    // concurrent reach-outs never clobber each other's loading state.
+    const [actedOrder, setActedOrder] = useState([]);
 
     const [searchParams] = useSearchParams();
     const isActivateRequested = searchParams.get('activate') === '1';
@@ -104,6 +108,10 @@ const JobsPage = () => {
         queryFn:  () => getOpportunityJobs(60),
         refetchOnWindowFocus: false,
         staleTime: 30000,
+        // Poll ONLY while a card is still resolving (finding contact / drafting) so
+        // it flips to "View on Intros" or "Apply Direct" on its own. Idle otherwise.
+        refetchInterval: (query) =>
+            (query.state.data?.jobs || []).some((j) => cardState(j) === 'working') ? 4000 : false,
     });
 
     const jobs = pageData?.jobs ?? [];
@@ -114,32 +122,88 @@ const JobsPage = () => {
     // background, which then surfaces on Introductions. Acted/working/drafted/
     // sent/no-contact jobs are filtered out here so this page stays a clean
     // "to review" queue (and the detail modal can only ever open on a 'new' job).
-    const normalJobs = jobs.filter((j) => cardState(j) === 'new');
-    const reviewCount = normalJobs.length;
+    // In-progress bucket — jobs the user just acted on, pinned to the TOP and kept
+    // visible so they can watch it resolve. 'working' = finding contact + drafting
+    // (spinner); 'no_contact' = failed → Apply Direct. Ordered working-first, then
+    // by most-recent reach-out. Once a job finds its contact ('drafted'/'sent') it
+    // leaves this queue and lives on Introductions (option A).
+    const inProgressJobs = jobs
+        .filter((j) => { const s = cardState(j); return s === 'working' || s === 'no_contact'; })
+        .sort((a, b) => {
+            const rank = (j) => (cardState(j) === 'working' ? 0 : 1);
+            if (rank(a) !== rank(b)) return rank(a) - rank(b);
+            const ia = actedOrder.indexOf(a.id), ib = actedOrder.indexOf(b.id);
+            return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
+        });
 
-    // ── Client-side pagination (over the normal, not-yet-acted jobs) ──────────
-    const totalPages = Math.max(1, Math.ceil(normalJobs.length / ITEMS_PER_PAGE));
-    // When jobs are removed (skip/reach out), the list shrinks. Pull the next
-    // jobs onto the current page automatically, and clamp if the current page
-    // no longer exists.
+    const newJobs = jobs.filter((j) => cardState(j) === 'new');
+    const reviewCount = newJobs.length;
+
+    // ── Pagination (over the not-yet-acted review queue only) ─────────────────
+    const totalPages = Math.max(1, Math.ceil(newJobs.length / ITEMS_PER_PAGE));
     useEffect(() => {
         if (currentPage > totalPages) setCurrentPage(totalPages);
     }, [currentPage, totalPages]);
-    const pageJobs = normalJobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const pageNewJobs = newJobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    // In-progress cards always render (unpaginated) above the review queue.
+    const pageJobs = [...inProgressJobs, ...pageNewJobs];
+
+    // As reached-out jobs resolve: contact found → toast + it moves to Introductions
+    // (drops off here); no contact → it stays as an Apply Direct card. Either way,
+    // prune resolved ids from actedOrder.
+    useEffect(() => {
+        if (actedOrder.length === 0) return;
+        const byId = Object.fromEntries(jobs.map((j) => [j.id, j]));
+        const stillWorking = [];
+        const foundContact = [];
+        actedOrder.forEach((id) => {
+            const j = byId[id];
+            if (!j) return;
+            const s = cardState(j);
+            if (s === 'working') stillWorking.push(id);
+            else if (s === 'drafted' || s === 'sent') foundContact.push(j);
+        });
+        foundContact.forEach((j) => toast.success(`Found the hiring manager for ${j.company_name} — see Introductions.`));
+        if (stillWorking.length !== actedOrder.length) setActedOrder(stillWorking);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pageData]);
 
     // ── Mutation: approve (Reach Out) / reject (Skip) ─────────────────────────
     const updateStatusMutation = useMutation({
         mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
+        // Optimistic + per-job: flip the clicked job in the cache immediately so it
+        // moves to the in-progress bucket at the top (approve → 'working' spinner)
+        // or vanishes (reject). Because state lives per-job in the cache, clicking a
+        // second job never disturbs the first that's already resolving.
+        onMutate: async ({ id, newStatus }) => {
+            await queryClient.cancelQueries({ queryKey: ['jobs-page', 'opportunities'] });
+            const prev = queryClient.getQueryData(['jobs-page', 'opportunities']);
+            queryClient.setQueryData(['jobs-page', 'opportunities'], (old) => {
+                if (!old?.jobs) return old;
+                let list = old.jobs;
+                if (newStatus === 'approved') {
+                    list = list.map((j) => j.id === id ? { ...j, status: 'approved', has_draft: false } : j);
+                } else if (newStatus === 'rejected') {
+                    list = list.filter((j) => j.id !== id);
+                }
+                return { ...old, jobs: list };
+            });
+            return { prev };
+        },
         onSuccess: (_, { newStatus }) => {
             if (newStatus === 'approved') {
-                toast.success('Finding the hiring manager — we’ll draft your intro. Track it on Introductions.');
+                toast.success('Finding the hiring manager — drafting your intro…');
             } else {
                 toast.success('Skipped. Your headhunter will keep looking.');
             }
-            queryClient.invalidateQueries({ queryKey: ['jobs-page'] });
             queryClient.invalidateQueries({ queryKey: ['analytics'] });
         },
-        onError: (err) => toast.error(err.message || 'Something went wrong. Please try again.'),
+        onError: (err, _vars, ctx) => {
+            if (ctx?.prev) queryClient.setQueryData(['jobs-page', 'opportunities'], ctx.prev);
+            toast.error(err.message || 'Something went wrong. Please try again.');
+        },
+        // Reconcile with the server after either outcome (keeps optimistic + truth in sync).
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ['jobs-page'] }),
     });
 
     const handleUpdateStatus = (id, newStatus) => updateStatusMutation.mutate({ id, newStatus });
@@ -149,6 +213,7 @@ const JobsPage = () => {
     // the user does NOT wait on this page for the result.
     const approveJob = (jobId) => {
         setDrawerJobId(null); // close the drawer if the action came from there
+        setActedOrder((prev) => [jobId, ...prev.filter((x) => x !== jobId)]); // pin to top of in-progress
         handleUpdateStatus(jobId, 'approved');
     };
 
@@ -286,7 +351,7 @@ const JobsPage = () => {
                         </div>
                     ))}
                 </div>
-            ) : normalJobs.length === 0 ? (
+            ) : pageJobs.length === 0 ? (
                 allCaughtUp
             ) : (
                 <>
