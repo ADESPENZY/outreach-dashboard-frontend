@@ -105,7 +105,7 @@ const JobsPage = () => {
     // Visual state is derived per card from status + contact/draft flags.
     const { data: pageData, isLoading: loading } = useQuery({
         queryKey: ['jobs-page', 'opportunities'],
-        queryFn:  () => getOpportunityJobs(60),
+        queryFn:  () => getOpportunityJobs(),
         refetchOnWindowFocus: false,
         staleTime: 30000,
         // Poll ONLY while a card is still resolving (finding contact / drafting) so

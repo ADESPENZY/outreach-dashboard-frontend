@@ -71,17 +71,40 @@ export async function getJobsStream(cursor = null, filterTab = 'All') {
  * progress" span so a card never disappears when its status advances —
  * scraped → approved → contacted all stay on the page (and manual_apply for
  * the "Apply Direct" branch). Visual state per card is derived client-side.
+ *
+ * The server paginates at ≤100/page, but a user's review queue can exceed that
+ * (Testimony had 104 scraped). Fetching a single 60-page silently HID the rest —
+ * the "52 waiting" badge undercounted vs Home's 104, and those jobs were
+ * unreachable. So we page THROUGH the whole queue (up to `maxJobs`) and return
+ * the full array plus the server's true `total_count`, so the page shows and
+ * counts everything.
  */
-export async function getOpportunityJobs(limit = 60) {
+const OPPORTUNITY_STATUSES = "scraped,approved,outreach_automated,contacted,manual_apply";
+const _OPP_PAGE_SIZE = 100;   // server hard-caps `limit` at 100
+
+export async function getOpportunityJobs(maxJobs = 400) {
   try {
-    const response = await api.get("/api/jobs/", {
-      params: {
-        page: 1,
-        limit,
-        status: "scraped,approved,outreach_automated,contacted,manual_apply",
-      },
+    const first = await api.get("/api/jobs/", {
+      params: { page: 1, limit: _OPP_PAGE_SIZE, status: OPPORTUNITY_STATUSES },
     });
-    return response.data;
+    const data = first.data || {};
+    let jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    const totalCount = data.total_count ?? jobs.length;
+    const totalPages = data.total_pages ?? 1;
+
+    // Pull the remaining pages (bounded by maxJobs so a huge backlog can't stall
+    // the page). Sequential to stay gentle on the API.
+    const lastPage = Math.min(totalPages, Math.ceil(maxJobs / _OPP_PAGE_SIZE));
+    for (let page = 2; page <= lastPage; page += 1) {
+      const resp = await api.get("/api/jobs/", {
+        params: { page, limit: _OPP_PAGE_SIZE, status: OPPORTUNITY_STATUSES },
+      });
+      const more = Array.isArray(resp.data?.jobs) ? resp.data.jobs : [];
+      jobs = jobs.concat(more);
+      if (!more.length) break;
+    }
+
+    return { jobs, total_count: totalCount, total_pages: totalPages };
   } catch (err) {
     throw new Error(parseApiError(err));
   }
