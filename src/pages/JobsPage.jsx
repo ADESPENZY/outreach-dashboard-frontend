@@ -12,6 +12,7 @@ import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePersonalizationModal';
 import JobDetailDrawer from '../components/JobDetailDrawer';
 import ApplyDirectModal from '../components/ApplyDirectModal';
+import BroadenSearchNudge from '../components/BroadenSearchNudge';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // A responsive grid of opportunity cards for the roles the headhunter found.
@@ -257,6 +258,9 @@ const JobsPage = () => {
                     </motion.span>
                 )}
             </div>
+
+            {/* Thin scrape yield → CV-informed "broaden your search" nudge */}
+            <BroadenSearchNudge />
 
             {/* ── The feed ────────────────────────────────────────────────── */}
             {loading ? (
