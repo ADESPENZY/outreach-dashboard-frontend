@@ -537,7 +537,7 @@ function SendingTab() {
   const name = profile?.full_name || me?.first_name || 'Your Name';
   const email = profile?.contact_email || me?.email || 'you@gmail.com';
   const link = profile?.calendly_url || profile?.portfolio_url || '';
-  const addr = profile?.location || 'Lagos, Nigeria';
+  const addr = profile?.location || 'Texas, United States';
 
   return (
     <>
