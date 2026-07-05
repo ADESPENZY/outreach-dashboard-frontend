@@ -26,6 +26,19 @@ import {
 // into search keywords + gates scoring on); `label` is what the user sees.
 // Users can also type custom keywords, which are stored verbatim.
 const ROLE_OPTIONS = [
+  // ApplyDir serves EVERY profession — general fields first, tech after. The
+  // CV-suggested categories sort to the front at render time regardless, so a
+  // developer still sees dev chips first and a nurse sees nursing first.
+  { key: 'nursing',             label: 'Nursing' },
+  { key: 'caregiving',          label: 'Caregiver / Home Care' },
+  { key: 'healthcare_admin',    label: 'Healthcare Admin' },
+  { key: 'sales',               label: 'Sales' },
+  { key: 'marketing',           label: 'Marketing' },
+  { key: 'customer_support',    label: 'Customer Support' },
+  { key: 'finance_accounting',  label: 'Finance / Accounting' },
+  { key: 'hr_recruiting',       label: 'HR / Recruiting' },
+  { key: 'education',           label: 'Education / Teaching' },
+  { key: 'operations_admin',    label: 'Operations / Admin' },
   { key: 'software_engineer',   label: 'Software Engineer' },
   { key: 'backend',             label: 'Backend' },
   { key: 'frontend',            label: 'Frontend' },
