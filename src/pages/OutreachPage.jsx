@@ -5,7 +5,7 @@ import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import {
   Mail, Send, CheckCircle2, ArrowRight, ChevronDown, ChevronUp,
-  Pencil, Trash2, Eye, Clock, PartyPopper, Linkedin, ExternalLink, Loader2,
+  Pencil, Trash2, Clock, PartyPopper, Linkedin, ExternalLink, Loader2,
   AlertTriangle, MapPin, Wallet,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
@@ -353,8 +353,10 @@ function sentStatus(email) {
   if (email.status === 'bounced') return { label: "Couldn't deliver", cls: 'text-red-600', Icon: AlertTriangle };
   if (email.status === 'failed')  return { label: 'Send failed', cls: 'text-red-600', Icon: AlertTriangle };
   if ((email.followup_count || 0) > 0) return { label: `Follow-up #${email.followup_count} sent`, cls: 'text-blue-600', Icon: Send };
-  if (email.status === 'opened' || email.opened_at) return { label: 'Opened', cls: 'text-purple-600', Icon: Eye };
-  if (email.status === 'sent') return { label: 'Delivered', cls: 'text-emerald-600', Icon: CheckCircle2 };
+  // Open tracking is off — a legacy 'opened' email was still delivered, so show
+  // Delivered (never surface opens anymore).
+  if (email.status === 'opened' || email.opened_at || email.status === 'sent')
+    return { label: 'Delivered', cls: 'text-emerald-600', Icon: CheckCircle2 };
   return { label: 'No response yet', cls: 'text-secondary-dark', Icon: Send };
 }
 

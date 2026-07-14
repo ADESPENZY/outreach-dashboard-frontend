@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Sparkles, MessageSquare, Send, Eye, MailOpen,
+  Sparkles, MessageSquare, Send, MailCheck,
   ArrowRight, Flame, Trophy,
 } from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
@@ -126,7 +126,6 @@ const DashboardPage = () => {
 
   const summary       = analytics?.summary || {};
   const dailyActivity = analytics?.daily_activity || [];
-  const recentEmails  = analytics?.recent_emails || [];
   const strategyPerf  = analytics?.strategy_performance || [];
 
   // ── Derived briefing data ────────────────────────────────────────────────
@@ -136,27 +135,19 @@ const DashboardPage = () => {
   const draftList  = Array.isArray(drafts) ? drafts : [];
   const draftCount = draftList.length || (summary.total_drafts || 0);
 
-  // The "someone opened your email" delight signal — the most recently opened
-  // introduction, shown only if it was opened recently (last 48h).
-  const lastOpened = recentEmails
-    .filter((e) => e.status === 'opened' && e.opened_at)
-    .sort((a, b) => new Date(b.opened_at) - new Date(a.opened_at))[0];
-  const openedRecently =
-    lastOpened && Date.now() - new Date(lastOpened.opened_at).getTime() < 48 * 60 * 60 * 1000
-      ? lastOpened
-      : null;
-
-  const hasAnyCard = newOppsCount > 0 || draftCount > 0 || !!openedRecently;
+  const hasAnyCard = newOppsCount > 0 || draftCount > 0;
 
   // ── This-week activity (windowed summary) ────────────────────────────────
-  const weekSent    = summary.total_sent    || 0;
-  const weekOpened  = summary.total_opened  || 0;
-  const weekReplied = summary.total_replied || 0;
-  const barMax = Math.max(weekSent, weekOpened, weekReplied, 1);
+  // Open tracking is off (the pixel hurt deliverability), so we show "Delivered"
+  // — a real, pixel-free signal: emails that left the outbox and didn't bounce.
+  const weekSent      = summary.total_sent      || 0;
+  const weekDelivered = summary.total_delivered || 0;
+  const weekReplied   = summary.total_replied   || 0;
+  const barMax = Math.max(weekSent, weekDelivered, weekReplied, 1);
   const bars = [
-    { label: 'Sent',    value: weekSent,    color: 'bg-blue-500' },
-    { label: 'Opened',  value: weekOpened,  color: 'bg-purple-500' },
-    { label: 'Replied', value: weekReplied, color: 'bg-emerald-500' },
+    { label: 'Sent',      value: weekSent,      color: 'bg-blue-500' },
+    { label: 'Delivered', value: weekDelivered, color: 'bg-teal-500' },
+    { label: 'Replied',   value: weekReplied,   color: 'bg-emerald-500' },
   ];
 
   // ── Streak: consecutive recent days with any activity. Today counting 0
@@ -164,7 +155,7 @@ const DashboardPage = () => {
   let streak = 0;
   for (let i = dailyActivity.length - 1; i >= 0; i--) {
     const d = dailyActivity[i];
-    const active = (d.sent || 0) + (d.opened || 0) + (d.replied || 0) > 0;
+    const active = (d.sent || 0) + (d.delivered || 0) + (d.replied || 0) > 0;
     if (active) {
       streak += 1;
     } else if (i === dailyActivity.length - 1) {
@@ -184,9 +175,9 @@ const DashboardPage = () => {
 
   // ── Status-bar chips (this week) ─────────────────────────────────────────
   const statChips = [
-    { label: 'Replies this week',       value: weekReplied,           Icon: MessageSquare, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Introductions this week', value: weekSent,              Icon: Send,          color: 'bg-blue-50 text-blue-500' },
-    { label: 'Open rate this week',     value: `${summary.open_rate ?? 0}%`, Icon: Eye,    color: 'bg-purple-50 text-purple-500' },
+    { label: 'Replies this week',       value: weekReplied,    Icon: MessageSquare, color: 'bg-emerald-50 text-emerald-600' },
+    { label: 'Introductions this week', value: weekSent,       Icon: Send,          color: 'bg-blue-50 text-blue-500' },
+    { label: 'Delivered this week',     value: weekDelivered,  Icon: MailCheck,     color: 'bg-teal-50 text-teal-600' },
   ];
 
   const cardBase =
@@ -281,24 +272,6 @@ const DashboardPage = () => {
         )}
 
         {/* C) Someone opened your email (delight / social-proof signal) */}
-        {openedRecently && (
-          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-purple-500 shadow-sm p-5 flex items-start gap-3">
-            <span className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center shrink-0">
-              <MailOpen className="w-5 h-5 text-purple-500" />
-            </span>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
-                Someone opened your email
-              </h2>
-              <p className="text-sm text-secondary-dark mt-1">
-                <span className="font-semibold text-black-light">{openedRecently.recipient}</span>
-                {openedRecently.company ? <> at {openedRecently.company}</> : null}{' '}
-                opened your email {timeAgo(openedRecently.opened_at)}.
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Nothing needs attention */}
         {!hasAnyCard && (
           <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-6 flex items-center gap-4 md:col-span-2">

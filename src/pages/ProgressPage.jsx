@@ -4,7 +4,7 @@ import { Link } from 'react-router';
 import { toast } from 'react-toastify';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Send, Eye, MessageSquare, TrendingUp, ChevronDown, ExternalLink,
+  Send, MailCheck, MessageSquare, TrendingUp, ChevronDown, ExternalLink,
   ArrowRight, ArrowUp, ArrowDown, Flame, RefreshCw, Zap, XCircle,
   PartyPopper, Loader2, AlertCircle, Sparkles, Trophy, CalendarCheck,
 } from 'lucide-react';
@@ -165,9 +165,9 @@ function HeroMetrics({ hero, weeks }) {
         delta={weeks.has_last ? pctChange(weeks.this.sent, weeks.last.sent) : null}
       />
       <HeroTile
-        icon={Eye} label="Opened" value={hero.opened_week} sub="this week"
-        accent="bg-purple-400/40" chip="bg-purple-50 text-purple-500"
-        delta={weeks.has_last ? pctChange(weeks.this.opened, weeks.last.opened) : null}
+        icon={MailCheck} label="Delivered" value={hero.delivered_week} sub="landed, no bounce"
+        accent="bg-teal-400/40" chip="bg-teal-50 text-teal-600"
+        delta={weeks.has_last ? pctChange(weeks.this.delivered, weeks.last.delivered) : null}
       />
       <HeroTile
         icon={PartyPopper} label="Replied" value={hero.replied_week} sub="this week" hero
@@ -200,7 +200,6 @@ function HeroMetrics({ hero, weeks }) {
 
 const STAGE_STYLE = {
   reached_out: { fill: 'bg-gradient-to-r from-secondary-dark/40 to-secondary-dark/60', dot: 'bg-secondary-dark' },
-  opened:      { fill: 'bg-gradient-to-r from-blue-400 to-blue-500',       dot: 'bg-blue-500' },
   replied:     { fill: 'bg-gradient-to-r from-emerald-400 to-emerald-500', dot: 'bg-emerald-500' },
   interview:   { fill: 'bg-gradient-to-r from-primary-light to-primary-dark', dot: 'bg-primary-light' },
   offer:       { fill: 'bg-gradient-to-r from-amber-400 to-amber-500',     dot: 'bg-amber-500' },
@@ -381,7 +380,6 @@ function PipelineFunnel({ stages }) {
 
 const EVENT_META = {
   sent:          { icon: Send,        chip: 'bg-blue-50 text-blue-500 ring-blue-100' },
-  opened:        { icon: Eye,         chip: 'bg-purple-50 text-purple-500 ring-purple-100' },
   followup:      { icon: RefreshCw,   chip: 'bg-amber-50 text-amber-600 ring-amber-100' },
   replied:       { icon: PartyPopper, chip: 'bg-emerald-500 text-white ring-emerald-100' },
   opportunities: { icon: Zap,         chip: 'bg-primary-light/10 text-primary-dark ring-primary-light/20' },
@@ -392,8 +390,6 @@ function EventHeadline({ ev }) {
   switch (ev.type) {
     case 'sent':
       return <>Introduction sent to <strong className="font-semibold">{ev.contact}</strong></>;
-    case 'opened':
-      return <><strong className="font-semibold">{ev.contact}</strong> opened your email</>;
     case 'followup':
       return <>Follow-up #{ev.followup_number} sent to <strong className="font-semibold">{ev.contact}</strong></>;
     case 'replied':
@@ -722,9 +718,9 @@ function StreakMomentum({ streak, weeks, community }) {
           </p>
           {weeks.has_last ? (
             <div className="divide-y divide-neutral-dark">
-              <WeekRow label="Sent"    thisVal={weeks.this.sent}    lastVal={weeks.last.sent} />
-              <WeekRow label="Opened"  thisVal={weeks.this.opened}  lastVal={weeks.last.opened} />
-              <WeekRow label="Replied" thisVal={weeks.this.replied} lastVal={weeks.last.replied} />
+              <WeekRow label="Sent"      thisVal={weeks.this.sent}      lastVal={weeks.last.sent} />
+              <WeekRow label="Delivered" thisVal={weeks.this.delivered} lastVal={weeks.last.delivered} />
+              <WeekRow label="Replied"   thisVal={weeks.this.replied}   lastVal={weeks.last.replied} />
             </div>
           ) : (
             <p className="text-sm text-secondary-dark py-1.5">Your first week — let's set the baseline!</p>
@@ -775,7 +771,7 @@ function EmptyProgress() {
         Head to Opportunities to find roles your headhunter matched for you, then approve an introduction.
       </p>
       <p className="text-sm text-secondary-dark mt-2 max-w-md leading-relaxed">
-        Once sent, this page tracks every open, reply, and interview — so you can see exactly what's working.
+        Once sent, this page tracks every delivery, reply, and interview — so you can see exactly what's working.
       </p>
       <Link
         to="/dashboard/opportunities"
@@ -880,7 +876,7 @@ export default function ProgressPage() {
             Your Progress
           </h1>
           <p className="text-sm text-secondary-dark mt-1">
-            Is it working? Here's your outreach story — opens, replies, interviews.
+            Is it working? Here's your outreach story — delivered, replies, interviews.
           </p>
         </div>
         {streakDays > 0 && (
