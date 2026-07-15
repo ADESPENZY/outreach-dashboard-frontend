@@ -13,6 +13,7 @@ import LegalPage from './pages/LegalPage';
 import { AuthProvider } from './context/AuthContext';
 import AppBootLoader from './components/AppBootLoader';
 import VersionCheck from './components/VersionCheck';
+import InstallPrompt from './components/InstallPrompt';
 import { useEffect, useState } from 'react';
 import { ApplyDirLoader } from './components/ui/ApplyDirLoader';
 
@@ -92,6 +93,9 @@ function App() {
 
         {/* Graceful "new version available" prompt (Vercel free-tier safe) */}
         <VersionCheck />
+
+        {/* PWA install nudge — one-tap on Android, "Add to Home Screen" on iOS */}
+        <InstallPrompt />
       </BrowserRouter>
     </AuthProvider>
   );
