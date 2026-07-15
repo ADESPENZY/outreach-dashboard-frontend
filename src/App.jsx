@@ -20,7 +20,8 @@ import { ApplyDirLoader } from './components/ui/ApplyDirLoader';
 // TEMP — visual verification of the branded Screen loader. Flip to false (or
 // delete this block + the <ApplyDirLoader.Screen> below) once verified. It just
 // shows the loading identity for 2s on initial load.
-const SHOW_BOOT_DEMO = true;
+// OFF for production — it was adding a flat 2s delay to every page load.
+const SHOW_BOOT_DEMO = false;
 
 function App() {
   const [bootDemo, setBootDemo] = useState(SHOW_BOOT_DEMO);
