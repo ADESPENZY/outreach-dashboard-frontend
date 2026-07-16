@@ -45,6 +45,9 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Pull our push/notificationclick handlers into the generated SW without
+        // disturbing its precache logic.
+        importScripts: ["/push-sw.js"],
         // Precache the built app shell for offline load + installability.
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         // NEVER precache version.json — VersionCheck.jsx must always read the

@@ -15,6 +15,7 @@ import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSet
 import { getInboxStats } from '@/services/apiInboxes';
 import { createGmailAccount, deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl } from '@/services/apiGmail';
 import { useAuth } from '@/context/AuthContext';
+import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush, isIOS, isStandalone } from '@/services/push';
 import { LegalSections } from '@/components/legal/PolicyContent';
 import api from '@/api';
 import OnboardingModal from './OnboardingModal';
@@ -831,6 +832,11 @@ function AccountTab({ navigate }) {
   const [scout, setScout] = useState(true); const [nudge, setNudge] = useState(true);
   const [replyNotif, setReplyNotif] = useState(true); const [weekly, setWeekly] = useState(false);
   const [tz, setTz] = useState('UTC'); const [savingPref, setSavingPref] = useState(false);
+  // Push notifications (this device) + per-type prefs
+  const [pushOn, setPushOn] = useState(false); const [pushBusy, setPushBusy] = useState(false);
+  const [pushHere] = useState(() => pushAvailableHere());
+  const [pReply, setPReply] = useState(true); const [pInbox, setPInbox] = useState(true);
+  const [pOpps, setPOpps] = useState(true); const [pSends, setPSends] = useState(true);
   // Delete
   const [confirmText, setConfirmText] = useState(''); const [delPw, setDelPw] = useState(''); const [deleting, setDeleting] = useState(false);
 
@@ -842,7 +848,30 @@ function AccountTab({ navigate }) {
     setReplyNotif(profile.job_preferences?.notify_replies ?? true);
     setWeekly(profile.job_preferences?.notify_weekly ?? false);
     setTz(profile.timezone || 'UTC');
+    setPReply(profile.push_notify_reply ?? true);
+    setPInbox(profile.push_notify_inbox_issue ?? true);
+    setPOpps(profile.push_notify_opportunities ?? true);
+    setPSends(profile.push_notify_sends ?? true);
   }, [profile]);
+
+  // Reflect whether THIS device is currently subscribed.
+  useEffect(() => { isPushEnabled().then(setPushOn).catch(() => {}); }, []);
+
+  const toggleMasterPush = async (v) => {
+    setPushBusy(true);
+    try {
+      if (v) {
+        const ok = await enablePush();
+        setPushOn(ok);
+        if (ok) toast.success('Notifications on for this device.');
+        else toast.error('Could not enable — permission was blocked or unsupported here.');
+      } else {
+        await disablePush();
+        setPushOn(false);
+        toast.success('Notifications off for this device.');
+      }
+    } finally { setPushBusy(false); }
+  };
 
   const usernameValid = /^[a-zA-Z0-9_]{3,20}$/.test(username.trim());
   const usernameChanged = username.trim() !== (me?.username || '');
@@ -958,6 +987,45 @@ function AccountTab({ navigate }) {
           </div>
           {browserTz && tz !== browserTz && <button onClick={() => saveTz(browserTz)} className="text-xs font-semibold text-primary-dark hover:underline mt-1.5">Use my device timezone ({browserTz.replace(/_/g, ' ')})</button>}
         </div>
+      </Collapsible>
+
+      {/* Push notifications (this device) */}
+      <Collapsible title="Push notifications" description="Get pinged on your phone or desktop." icon={Bell}>
+        {!pushHere ? (
+          <div className="text-sm text-secondary-dark bg-neutral/50 rounded-xl border border-neutral-dark p-4">
+            {isIOS() && !isStandalone()
+              ? "On iPhone, add ApplyDir to your home screen first (Share → Add to Home Screen), then open it from there to turn on notifications."
+              : "This browser doesn't support push notifications. Try Chrome, or install the app to your home screen."}
+          </div>
+        ) : (
+          <>
+            <ToggleRow icon={Bell} title="Enable on this device"
+              desc="Show notifications on this phone/computer. You can turn on each device separately."
+              checked={pushOn} saving={pushBusy} onChange={toggleMasterPush} />
+            <div className="h-px bg-neutral-dark/60" />
+            <ToggleRow icon={HeartHandshake} title="Replies" desc="The moment a hiring manager replies to your intro."
+              checked={pReply} saving={savingPref}
+              onChange={v => { setPReply(v); saveProfilePref({ push_notify_reply: v }, () => setPReply(!v)); }} />
+            <div className="h-px bg-neutral-dark/60" />
+            <ToggleRow icon={Bell} title="Inbox issues" desc="If a connected Gmail disconnects and sending pauses."
+              checked={pInbox} saving={savingPref}
+              onChange={v => { setPInbox(v); saveProfilePref({ push_notify_inbox_issue: v }, () => setPInbox(!v)); }} />
+            <div className="h-px bg-neutral-dark/60" />
+            <ToggleRow icon={ArrowRight} title="New opportunities" desc="A morning ping when fresh roles are matched."
+              checked={pOpps} saving={savingPref}
+              onChange={v => { setPOpps(v); saveProfilePref({ push_notify_opportunities: v }, () => setPOpps(!v)); }} />
+            <div className="h-px bg-neutral-dark/60" />
+            <ToggleRow icon={FileText} title="Daily send summary" desc="A recap of the intros sent for you today."
+              checked={pSends} saving={savingPref}
+              onChange={v => { setPSends(v); saveProfilePref({ push_notify_sends: v }, () => setPSends(!v)); }} />
+            {pushOn && (
+              <div className="pt-2">
+                <button onClick={async () => { const n = await sendTestPush(); toast[n ? 'success' : 'error'](n ? 'Test sent — check your notifications.' : 'No devices to send to yet.'); }}
+                  className="text-xs font-semibold text-primary-dark hover:underline">Send a test notification</button>
+              </div>
+            )}
+          </>
+        )}
       </Collapsible>
 
       {/* Data & privacy */}

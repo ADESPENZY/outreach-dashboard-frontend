@@ -750,6 +750,15 @@ const OutreachPage = () => {
     queryFn: getSentEmails,
   });
   const { data: inboxData } = useQuery({ queryKey: ['gmailAccounts'], queryFn: getGmailAccounts });
+
+  // Once they've sent an intro, they're "in the game" — flag the win so the
+  // gentle push opt-in (PushPrompt) can offer reply alerts.
+  useEffect(() => {
+    if (sentEmails.length > 0) {
+      try { localStorage.setItem('applydirPushWin', '1'); } catch { /* ignore */ }
+    }
+  }, [sentEmails.length]);
+
   const connectedInboxes = Array.isArray(inboxData) ? inboxData : (inboxData?.results ?? []);
   const canSend = connectedInboxes.length > 0;
   const loading = loadingDrafts || loadingSent;

@@ -14,6 +14,7 @@ import { AuthProvider } from './context/AuthContext';
 import AppBootLoader from './components/AppBootLoader';
 import VersionCheck from './components/VersionCheck';
 import InstallPrompt from './components/InstallPrompt';
+import PushPrompt from './components/PushPrompt';
 import { useEffect, useState } from 'react';
 import { ApplyDirLoader } from './components/ui/ApplyDirLoader';
 
@@ -97,6 +98,9 @@ function App() {
 
         {/* PWA install nudge — one-tap on Android, "Add to Home Screen" on iOS */}
         <InstallPrompt />
+
+        {/* Gentle push opt-in, shown after the user's first sent intro */}
+        <PushPrompt />
       </BrowserRouter>
     </AuthProvider>
   );
