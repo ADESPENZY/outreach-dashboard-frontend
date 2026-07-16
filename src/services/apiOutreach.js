@@ -87,7 +87,7 @@ export async function findContactManual(jobId) {
 export async function getDraftEmails() {
   try {
     const response = await api.get("/api/outreach/emails/", {
-      params: { status: "draft" },
+      params: { status: "draft", limit: 150 },
     });
     return response.data;
   } catch (err) {
@@ -102,7 +102,9 @@ export async function getDraftEmails() {
 export async function getSentEmails() {
   try {
     const response = await api.get("/api/outreach/emails/", {
-      params: { status: "approved,sent,opened,replied,bounced,failed" },
+      // Most recent 150 is plenty for the list view; the full history was
+      // needless weight for accounts with a lot of sends.
+      params: { status: "approved,sent,opened,replied,bounced,failed", limit: 150 },
     });
     return response.data;
   } catch (err) {

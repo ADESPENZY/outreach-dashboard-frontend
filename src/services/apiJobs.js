@@ -98,9 +98,9 @@ export async function getJobsStream(cursor = null, filterTab = 'All') {
  * counts everything.
  */
 const OPPORTUNITY_STATUSES = "scraped,approved,outreach_automated,contacted,manual_apply";
-const _OPP_PAGE_SIZE = 100;   // server hard-caps `limit` at 100
+const _OPP_PAGE_SIZE = 50;   // smaller pages serialize + transfer faster; server caps at 100
 
-export async function getOpportunityJobs(maxJobs = 400) {
+export async function getOpportunityJobs(maxJobs = 200) {
   try {
     const first = await api.get("/api/jobs/", {
       params: { page: 1, limit: _OPP_PAGE_SIZE, status: OPPORTUNITY_STATUSES },
@@ -110,16 +110,24 @@ export async function getOpportunityJobs(maxJobs = 400) {
     const totalCount = data.total_count ?? jobs.length;
     const totalPages = data.total_pages ?? 1;
 
-    // Pull the remaining pages (bounded by maxJobs so a huge backlog can't stall
-    // the page). Sequential to stay gentle on the API.
+    // Fetch the remaining pages (bounded by maxJobs) IN PARALLEL. The old
+    // sequential loop waited for each page in turn — the main reason the
+    // Opportunities page took many seconds to appear.
     const lastPage = Math.min(totalPages, Math.ceil(maxJobs / _OPP_PAGE_SIZE));
-    for (let page = 2; page <= lastPage; page += 1) {
-      const resp = await api.get("/api/jobs/", {
-        params: { page, limit: _OPP_PAGE_SIZE, status: OPPORTUNITY_STATUSES },
-      });
-      const more = Array.isArray(resp.data?.jobs) ? resp.data.jobs : [];
-      jobs = jobs.concat(more);
-      if (!more.length) break;
+    if (lastPage >= 2) {
+      const requests = [];
+      for (let page = 2; page <= lastPage; page += 1) {
+        requests.push(
+          api.get("/api/jobs/", {
+            params: { page, limit: _OPP_PAGE_SIZE, status: OPPORTUNITY_STATUSES },
+          }),
+        );
+      }
+      const results = await Promise.all(requests);
+      for (const resp of results) {
+        const more = Array.isArray(resp.data?.jobs) ? resp.data.jobs : [];
+        jobs = jobs.concat(more);
+      }
     }
 
     return { jobs, total_count: totalCount, total_pages: totalPages };
