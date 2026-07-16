@@ -20,6 +20,26 @@ const queryClient = new QueryClient({
   },
 })
 
+// Keep the installed PWA fresh. vite-plugin-pwa (registerType: 'autoUpdate')
+// already registers the service worker and reloads when a new one activates —
+// but by default it only checks for a new version on a cold launch, which on
+// iOS can lag for hours. We nudge the check on every focus + once a minute, so
+// a deploy reaches the installed app within ~a minute of it being open instead
+// of whenever iOS decides to look.
+if ('serviceWorker' in navigator) {
+  const checkForUpdate = () => {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg && reg.update())
+      .catch(() => {})
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkForUpdate()
+  })
+  window.addEventListener('focus', checkForUpdate)
+  setInterval(checkForUpdate, 60 * 1000)
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <GoogleOAuthProvider clientId={import.meta.env.VITE_GOOGLE_CLIENT_ID}>
