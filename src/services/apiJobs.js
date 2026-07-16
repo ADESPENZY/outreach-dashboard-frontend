@@ -15,6 +15,24 @@ export async function getScrapedJobs() {
 }
 
 /**
+ * Count of jobs at a given status, WITHOUT downloading the list.
+ * The Home dashboard only needs "how many opportunities are waiting" — pulling
+ * the entire (fully-serialised) jobs list just to call .length on it is what
+ * made the dashboard hang for accounts with lots of data. This asks the
+ * paginated endpoint for a single row and reads total_count.
+ */
+export async function getJobCount(status = 'scraped') {
+  try {
+    const response = await api.get("/api/jobs/", {
+      params: { status, page: 1, limit: 1 },
+    });
+    return response.data?.total_count ?? 0;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/**
  * Full detail for ONE job — includes the description, extracted contacts
  * (ranked), and post-approval state (has_real_contact / has_draft /
  * primary_contact). Powers the Opportunities detail drawer and the

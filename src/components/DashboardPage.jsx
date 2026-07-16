@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { useAuth } from '../context/AuthContext';
-import { getScrapedJobs } from '../services/apiJobs';
+import { getJobCount } from '../services/apiJobs';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getDraftEmails } from '../services/apiOutreach';
 import { getProfile, updateProfile } from '../services/apiProfile';
@@ -63,9 +63,12 @@ const DashboardPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { data: jobs = [], isLoading: jobsLoading } = useQuery({
-    queryKey: ['jobs'],
-    queryFn: getScrapedJobs,
+  // Only the COUNT of unreviewed opportunities — not the whole jobs list. The
+  // full list is what jammed the dashboard for data-heavy accounts.
+  const { data: newOppsCount = 0, isLoading: jobsLoading } = useQuery({
+    queryKey: ['jobCount', 'scraped'],
+    queryFn: () => getJobCount('scraped'),
+    staleTime: 60 * 1000,
   });
 
   // This-week briefing: analytics windowed to 7 days. summary metrics +
@@ -130,7 +133,7 @@ const DashboardPage = () => {
 
   // ── Derived briefing data ────────────────────────────────────────────────
   // Opportunities waiting = scored roles the user hasn't reviewed yet.
-  const newOppsCount = jobs.filter((j) => j.status === 'scraped').length;
+  // (newOppsCount now comes straight from the count query above.)
 
   const draftList  = Array.isArray(drafts) ? drafts : [];
   const draftCount = draftList.length || (summary.total_drafts || 0);
