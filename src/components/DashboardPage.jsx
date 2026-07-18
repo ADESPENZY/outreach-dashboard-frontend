@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { useAuth } from '../context/AuthContext';
-import { getJobCount } from '../services/apiJobs';
+import { getJobCount, getScrapeStatus } from '../services/apiJobs';
+import HeadhuntingState from './HeadhuntingState';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getDraftEmails } from '../services/apiOutreach';
 import { getProfile, updateProfile } from '../services/apiProfile';
@@ -63,12 +64,24 @@ const DashboardPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Is the background scrape running (e.g. right after onboarding)? Drives the
+  // "AI headhunter searching" card so the user knows something is happening.
+  const { data: scrapeStatus } = useQuery({
+    queryKey: ['scrape-status'],
+    queryFn: getScrapeStatus,
+    refetchInterval: (query) => (query.state.data?.is_active ? 3000 : false),
+    staleTime: 0,
+  });
+  const scrapeActive = scrapeStatus?.is_active === true;
+
   // Only the COUNT of unreviewed opportunities — not the whole jobs list. The
   // full list is what jammed the dashboard for data-heavy accounts.
   const { data: newOppsCount = 0, isLoading: jobsLoading } = useQuery({
     queryKey: ['jobCount', 'scraped'],
     queryFn: () => getJobCount('scraped'),
     staleTime: 60 * 1000,
+    // Poll while a scrape is running so the count ticks up as matches surface.
+    refetchInterval: scrapeActive ? 4000 : false,
   });
 
   // This-week briefing: analytics windowed to 7 days. summary metrics +
@@ -201,6 +214,14 @@ const DashboardPage = () => {
             Here's what's happened since you were last here.
           </p>
         </div>
+
+        {/* AI headhunter working — shown while the background scrape runs (esp.
+            right after onboarding) so the user sees something is happening. */}
+        {scrapeActive && newOppsCount === 0 && (
+          <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm">
+            <HeadhuntingState compact />
+          </div>
+        )}
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {statChips.map((s) => {

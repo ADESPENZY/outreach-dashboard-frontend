@@ -11,7 +11,8 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { useNavigate } from 'react-router-dom';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
-import { getOpportunityJobs, updateJobStatus, trackJob } from '../services/apiJobs';
+import { getOpportunityJobs, updateJobStatus, trackJob, getScrapeStatus } from '../services/apiJobs';
+import HeadhuntingState from '../components/HeadhuntingState';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getProfile } from '../services/apiProfile';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
@@ -109,15 +110,25 @@ const JobsPage = () => {
         staleTime: 5 * 60 * 1000,
     });
 
+    // Is the background scrape running right now? Poll it so we can show the
+    // "AI headhunter searching" screen after onboarding instead of a blank page.
+    const { data: scrapeStatus } = useQuery({
+        queryKey: ['scrape-status'],
+        queryFn: getScrapeStatus,
+        refetchInterval: (query) => (query.state.data?.is_active ? 3000 : false),
+        staleTime: 0,
+    });
+    const isSearching = scrapeStatus?.is_active === true;
+
     const { data: pageData, isLoading: loading } = useQuery({
         queryKey: ['jobs-page', 'opportunities'],
         queryFn:  () => getOpportunityJobs(),
         refetchOnWindowFocus: false,
         staleTime: 30000,
-        // Poll while anything is still resolving (finding contact / drafting) or
-        // waiting in the queue, so cards flip on their own. Idle otherwise.
+        // Poll while a scrape is active (results stream in), or while anything is
+        // still resolving (finding contact / drafting) or queued. Idle otherwise.
         refetchInterval: (query) =>
-            (query.state.data?.jobs || []).some((j) => ['working', 'queued'].includes(cardState(j))) ? 4000 : false,
+            (isSearching || (query.state.data?.jobs || []).some((j) => ['working', 'queued'].includes(cardState(j)))) ? 4000 : false,
     });
 
     const jobs = pageData?.jobs ?? [];
@@ -641,7 +652,9 @@ const JobsPage = () => {
                     ))}
                 </div>
             ) : nothingAtAll ? (
-                allCaughtUp
+                // A scrape is running (e.g. just after onboarding) → show the
+                // "AI headhunter searching" screen instead of "all caught up".
+                isSearching ? <HeadhuntingState /> : allCaughtUp
             ) : (
                 <>
                     {/* ── Summary bar — curated-from-a-larger-pool framing ────────── */}
