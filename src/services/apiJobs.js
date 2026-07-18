@@ -275,3 +275,16 @@ export async function saveJobDescription(jobId, description) {
     throw new Error(parseApiError(err));
   }
 }
+
+/**
+ * "Your headhunter will also look for…" — same-niche job titles for a
+ * custom-typed keyword. Backend caches cross-user, so repeats are instant.
+ */
+export async function expandKeyword(keyword) {
+  try {
+    const response = await api.post("/api/jobs/keywords/expand/", { keyword });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

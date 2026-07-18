@@ -6,6 +6,7 @@ import {
   Sparkles, Check, Plus,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../ui/ApplyDirLoader';
+import KeywordSuggestions from '../KeywordSuggestions';
 import {
   createProfile, updateProfile, uploadCV, extractSkills,
 } from '../../services/apiProfile';
@@ -184,6 +185,9 @@ export default function ActivationFlow({ profile = null, onComplete }) {
   const [arrangement, setArrangement] = useState(savedPrefs.work_arrangement || '');
   const [newRole, setNewRole] = useState('');
   const [newLocation, setNewLocation] = useState('');
+  // The custom keyword most recently typed — drives the "your headhunter will
+  // also look for…" suggestion chips under the role input.
+  const [lastCustomRole, setLastCustomRole] = useState('');
 
   // Step 4 — HOME timezone (required). Pre-fill from an already-saved profile tz,
   // else from the browser's guess IF it happens to match a known option (just a
@@ -284,7 +288,11 @@ export default function ActivationFlow({ profile = null, onComplete }) {
     clear('');
   };
   const addSkill    = () => addCustom(setSkills,    newSkill,    setNewSkill);
-  const addRole     = () => addCustom(setRoleTypes, newRole,     setNewRole);
+  const addRole     = () => {
+    const v = newRole.trim();
+    if (v) setLastCustomRole(v);   // fire the same-niche suggestion chips
+    addCustom(setRoleTypes, newRole, setNewRole);
+  };
   const addLocation = () => addCustom(setLocations, newLocation, setNewLocation);
 
   // ── Step 3 / 4 toggles ───────────────────────────────────────────────────
@@ -601,6 +609,18 @@ export default function ActivationFlow({ profile = null, onComplete }) {
                 onAdd={addRole}
                 placeholder="Looking for a specific niche?"
                 addLabel="Add Role"
+              />
+
+              {/* "Your headhunter will also look for…" — same-niche titles for
+                  the custom keyword they just typed; tap to include. */}
+              <KeywordSuggestions
+                keyword={lastCustomRole}
+                existing={roleTypes}
+                onAdd={(t) =>
+                  setRoleTypes((prev) =>
+                    prev.some((x) => x.toLowerCase() === t.toLowerCase()) ? prev : [...prev, t]
+                  )
+                }
               />
 
               <div className="flex items-center justify-between pt-1">

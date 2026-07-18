@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -20,6 +20,7 @@ import { LegalSections } from '@/components/legal/PolicyContent';
 import api from '@/api';
 import OnboardingModal from './OnboardingModal';
 import InboxSafetyGuide from './InboxSafetyGuide';
+import KeywordSuggestions from './KeywordSuggestions';
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tabs
@@ -732,6 +733,19 @@ function JobsTab() {
   useEffect(() => {
     if (scout) { setRoles(scout.target_job_titles || []); setLocations(scout.target_locations || []); }
   }, [scout]);
+
+  // Detect a role the user just ADDED (vs the initial load, which arrives as a
+  // batch) so the "your headhunter will also look for…" chips fire for it.
+  const prevRolesRef = useRef(null);
+  const [suggestKw, setSuggestKw] = useState('');
+  useEffect(() => {
+    const prev = prevRolesRef.current;
+    if (prev !== null && roles.length === prev.length + 1) {
+      const added = roles.find((r) => !prev.includes(r));
+      if (added) setSuggestKw(added);
+    }
+    prevRolesRef.current = roles;
+  }, [roles]);
   useEffect(() => {
     if (profile) {
       const jp = profile.job_preferences || {};
@@ -792,6 +806,12 @@ function JobsTab() {
           <Label>Target roles</Label>
           <Chips value={roles} onChange={setRoles} placeholder="Backend Engineer, Django Developer…" />
           <p className="text-[11px] text-secondary-dark/70 mt-1.5">Press Enter or comma to add each. Your headhunter searches these every morning.</p>
+          {/* Same-niche titles for the role they just typed — tap to include. */}
+          <KeywordSuggestions
+            keyword={suggestKw}
+            existing={roles}
+            onAdd={(t) => setRoles((prev) => prev.some((x) => x.toLowerCase() === t.toLowerCase()) ? prev : [...prev, t])}
+          />
         </div>
         <div>
           <Label>Target locations</Label>
