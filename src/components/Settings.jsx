@@ -13,13 +13,12 @@ import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } fro
 import { getProfile, updateProfile, uploadCV } from '@/services/apiProfile';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSettings';
 import { getInboxStats } from '@/services/apiInboxes';
-import { createGmailAccount, deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl } from '@/services/apiGmail';
+import { deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl } from '@/services/apiGmail';
 import { useAuth } from '@/context/AuthContext';
 import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush, isIOS, isStandalone } from '@/services/push';
 import { LegalSections } from '@/components/legal/PolicyContent';
 import api from '@/api';
-import OnboardingModal from './OnboardingModal';
-import InboxSafetyGuide from './InboxSafetyGuide';
+import PendingActivationCard from './PendingActivationCard';
 import KeywordSuggestions from './KeywordSuggestions';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -475,7 +474,8 @@ const INBOX_STATUS = {
 };
 
 // Mirrors backend MAX_INBOXES_PER_USER (integrations/serializers.py).
-const MAX_INBOXES = 3;
+// ONE inbox per account during the invite-only pilot.
+const MAX_INBOXES = 1;
 
 function SendingTab() {
   const qc = useQueryClient();
@@ -483,14 +483,17 @@ function SendingTab() {
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe });
 
-  const [showConnect, setShowConnect] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null);
   const [togglingId, setTogglingId] = useState(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [savingAF, setSavingAF] = useState(false);
   const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [pendingGate, setPendingGate] = useState(false);
   const [params, setParams] = useSearchParams();
+
+  // White-glove pilot gate: no Google button until a founder activates the
+  // account (PendingActivationCard shows instead — never a dead end).
+  const isPendingActivation = pendingGate || (profile && profile.activation_status !== 'activated');
 
   useEffect(() => {
     if (profile) setAutoFollow(profile.job_preferences?.auto_followups ?? true);
@@ -505,9 +508,16 @@ function SendingTab() {
       refresh();
       params.delete('gmail_connected'); setParams(params, { replace: true });
     } else if (params.get('gmail_error')) {
-      toast.error(params.get('gmail_error') === 'limit'
-        ? `You can connect up to ${MAX_INBOXES} inboxes. Disconnect one to add another.`
-        : 'Could not connect Gmail. Please try again.');
+      const code = params.get('gmail_error');
+      if (code === 'activation') {
+        // Reached Google before activation — show the white-glove state, no
+        // raw error, no scary toast.
+        setPendingGate(true);
+      } else {
+        toast.error(code === 'limit'
+          ? 'One inbox per account during the pilot. Disconnect the current one to switch.'
+          : 'Could not connect Gmail. Please try again.');
+      }
       params.delete('gmail_error'); setParams(params, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -519,12 +529,15 @@ function SendingTab() {
       const url = await getGmailOAuthUrl();
       window.location.href = url;   // leave to Google; it returns to the callback
     } catch (e) {
-      toast.error(e.message);
       setConnectingGoogle(false);
+      if ((e.message || '').includes('pending_activation')) {
+        setPendingGate(true);       // white-glove state, not an error
+      } else {
+        toast.error(e.message);
+      }
     }
   };
 
-  const handleConnect = async (form) => { await createGmailAccount(form); refresh(); setShowConnect(false); toast.success('Inbox connected!'); };
   const handleToggle = async (id) => { setTogglingId(id); try { await toggleGmailAccount(id); refresh(); } catch (e) { toast.error(e.message); } finally { setTogglingId(null); } };
   const handleDelete = async (id) => { try { await deleteGmailAccount(id); toast.success('Inbox removed.'); refresh(); } catch (e) { toast.error(e.message); } setConfirmDelete(null); };
 
@@ -557,10 +570,8 @@ function SendingTab() {
           <>
             {accounts.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-sm text-secondary-dark mb-3">No inboxes connected yet.</p>
-                <button onClick={() => setShowGuide(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light">
-                  New to this? See the 2-min safe-setup guide <ArrowRight className="w-3 h-3" />
-                </button>
+                <p className="text-sm text-secondary-dark">No inbox connected yet.</p>
+                <p className="text-xs text-secondary-dark/70 mt-1">One click with Google — no passwords to paste.</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -634,21 +645,21 @@ function SendingTab() {
 
             {accounts.length >= MAX_INBOXES ? (
               <p className="text-xs font-semibold text-secondary-dark bg-neutral-light border border-neutral-dark rounded-xl px-3 py-2.5">
-                {MAX_INBOXES} of {MAX_INBOXES} inboxes connected — that's the maximum. Remove one to connect a different Gmail.
+                Your inbox is connected. One inbox per account during the pilot — remove it to connect a different Gmail.
               </p>
+            ) : isPendingActivation ? (
+              <PendingActivationCard />
             ) : (
-              <div className="flex flex-col sm:flex-row gap-2 pt-1">
-                <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+              <div className="flex flex-col gap-2 pt-1">
+                <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
                   {connectingGoogle ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />} Connect Gmail with Google
                 </button>
-                <button onClick={() => setShowConnect(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Use App Password</button>
-                <button onClick={() => setShowGuide(true)} className="px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:border-primary-light/40 hover:text-black-light transition-all whitespace-nowrap">Guide</button>
               </div>
             )}
-            <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> "Connect with Google" is the easy, secure way — one click, no password to paste, and your emails always send.</p>
+            <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> One click with Google — no passwords, ever. We can only send introductions you approve and read the replies to them; nothing else in your inbox.</p>
             <p className="text-xs text-secondary-dark leading-relaxed">
-              Each warmed inbox sends about <span className="font-semibold text-black">5 new introductions a day</span>, with the rest of its daily limit reserved for follow-ups (where most replies come from). Connect up to {MAX_INBOXES} inboxes to raise your capacity
-              {totalCapacity > 0 && <> — right now that's about <span className="font-semibold text-black">{totalNewPerDay} new contacts</span> and <span className="font-semibold text-black">{totalCapacity} total emails</span> per day.</>}
+              Your inbox sends about <span className="font-semibold text-black">5 new introductions a day</span>, with the rest of its daily limit reserved for follow-ups (where most replies come from)
+              {totalCapacity > 0 && <> — right now that's about <span className="font-semibold text-black">{totalNewPerDay} new contact{totalNewPerDay === 1 ? '' : 's'}</span> and <span className="font-semibold text-black">{totalCapacity} total emails</span> per day.</>}
             </p>
           </>
         )}
@@ -689,8 +700,6 @@ function SendingTab() {
         <p className="text-[11px] text-secondary-dark/60 flex items-center gap-1"><Info className="w-3 h-3" /> Pulls from your Profile (name, sign-off email, Calendly, location). Edit those in the Profile tab.</p>
       </Collapsible>
 
-      {showConnect && <OnboardingModal onClose={() => setShowConnect(false)} onComplete={handleConnect} onShowGuide={() => setShowGuide(true)} />}
-      {showGuide && <InboxSafetyGuide onClose={() => setShowGuide(false)} onConnect={() => { setShowGuide(false); setShowConnect(true); }} />}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">

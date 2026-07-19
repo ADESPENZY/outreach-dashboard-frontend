@@ -37,7 +37,7 @@ export function PrivacyPolicy() {
       <Policy heading="What we collect">
         <li><b>Account</b> — your email, username, and (for password sign-ups) a securely hashed password.</li>
         <li><b>Profile</b> — your CV text, contact details, links, Calendly, and AI-extracted skills/projects.</li>
-        <li><b>Connected inboxes</b> — the Gmail address and an app password, stored <b>encrypted</b> (Fernet), used only to send your outreach.</li>
+        <li><b>Connected inboxes</b> — your Gmail address and a Google sign-in credential (OAuth token), stored <b>encrypted</b> (Fernet). We never see or store your password. Its permissions are limited to <b>sending the introductions you approve</b> and <b>reading replies to them</b>.</li>
         <li><b>Generated content &amp; activity</b> — the jobs, contacts, emails, and CVs the system creates for you, plus open/reply events.</li>
       </Policy>
       <Policy heading="How we use it">
@@ -54,7 +54,7 @@ export function PrivacyPolicy() {
       <Policy heading="Who we share it with (processors only — we never sell your data)">
         <li><b>OpenAI</b> — CV scoring, email &amp; CV generation.</li>
         <li><b>Apify, Hunter, Apollo, Serper</b> — job scraping &amp; contact discovery.</li>
-        <li><b>Google / Gmail</b> — sending your emails via SMTP from your own inbox.</li>
+        <li><b>Google / Gmail</b> — sending your introductions from your own inbox via the Gmail API (Google sign-in).</li>
         <li><b>Resend</b> — our transactional emails to you.</li>
         <li><b>Supabase, Render, Vercel</b> — database &amp; hosting.</li>
       </Policy>
@@ -64,7 +64,7 @@ export function PrivacyPolicy() {
         <li><b>Legitimate interests</b> — security, fraud prevention, and aggregated/anonymised product analytics.</li>
       </Policy>
       <Policy heading="Your Gmail data">
-        <li>We store your app password encrypted and use it <b>solely to send</b> email on your behalf. We do not read your inbox. You can disconnect an inbox at any time from <b>Inboxes</b>.</li>
+        <li>You connect Gmail with <b>Google sign-in</b> — we never see or store your password. The encrypted credential lets us do exactly two things: <b>send the introductions you approve</b> and <b>detect replies, bounces, and opt-outs on those introductions</b>. We do not read, store, or analyse anything else in your inbox, and you can disconnect at any time from <b>Settings → Email &amp; Sending</b> or from your Google Account's security page.</li>
       </Policy>
       <Policy heading="Your rights">
         <li>View &amp; edit everything in <b>Profile</b>. Export your CV as PDF. Withdraw optional-email consent in <b>Settings → Notifications</b>. <b>Delete your account</b> any time (Settings → Danger Zone) — this permanently erases your data. We retain your data only until you delete your account.</li>

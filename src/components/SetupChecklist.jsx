@@ -20,7 +20,7 @@ const STEPS = [
     id: 'inbox',
     icon: Mail,
     title: 'Connect your inbox',
-    route: '/dashboard/inboxes',
+    route: '/dashboard/settings?tab=sending',
   },
   {
     id: 'scout',
