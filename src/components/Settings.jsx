@@ -15,7 +15,7 @@ import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSet
 import { getInboxStats } from '@/services/apiInboxes';
 import { deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl } from '@/services/apiGmail';
 import { useAuth } from '@/context/AuthContext';
-import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush, isIOS, isStandalone } from '@/services/push';
+import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush, isIOS, isStandalone, pushFailureMessage } from '@/services/push';
 import { LegalSections } from '@/components/legal/PolicyContent';
 import api from '@/api';
 import PendingActivationCard from './PendingActivationCard';
@@ -890,10 +890,10 @@ function AccountTab({ navigate }) {
     setPushBusy(true);
     try {
       if (v) {
-        const ok = await enablePush();
+        const { ok, reason } = await enablePush();
         setPushOn(ok);
         if (ok) toast.success('Notifications on for this device.');
-        else toast.error('Could not enable — permission was blocked or unsupported here.');
+        else toast.error(pushFailureMessage(reason));
       } else {
         await disablePush();
         setPushOn(false);

@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bell, X } from 'lucide-react';
 import { toast } from 'react-toastify';
-import { pushAvailableHere, permissionState, isPushEnabled, enablePush } from '../services/push';
+import { pushAvailableHere, permissionState, isPushEnabled, enablePush, pushFailureMessage } from '../services/push';
 
 /**
  * Gentle push opt-in, shown once the user has had a "win" (sent their first
@@ -49,13 +49,18 @@ export default function PushPrompt() {
 
   const turnOn = useCallback(async () => {
     setBusy(true);
-    const ok = await enablePush();
+    // enablePush is fully bounded (every step has a timeout), so the button can
+    // never sit on "Enabling…" forever — it always resolves with a reason.
+    const { ok, reason } = await enablePush();
     setBusy(false);
     setVisible(false);
     if (ok) {
       toast.success("Notifications on — we'll ping you the moment someone replies.");
-    } else {
-      // Permission denied or unsupported — don't nag again.
+      return;
+    }
+    toast.info(pushFailureMessage(reason));
+    // Don't nag again for hard-nos; a transient failure can re-prompt later.
+    if (reason !== 'timeout' && reason !== 'error') {
       try { localStorage.setItem(DISMISS_KEY, String(Date.now())); } catch { /* ignore */ }
     }
   }, []);
