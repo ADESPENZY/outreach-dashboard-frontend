@@ -1,5 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+// FIRST: register the beforeinstallprompt listener before Chrome fires it —
+// a component-level listener mounts too late and misses the event.
+import './services/pwaInstall'
 import './index.css'
 import App from './App.jsx'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'

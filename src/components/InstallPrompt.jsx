@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Rocket, X, Share, Plus, Download } from 'lucide-react';
+import { getInstallPrompt, onInstallPromptChange, triggerInstall } from '../services/pwaInstall';
 
 /**
  * PWA install prompt — installability differs sharply by platform:
@@ -47,40 +48,35 @@ function recentlyDismissed() {
 }
 
 export default function InstallPrompt() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  // The one-shot beforeinstallprompt event is owned by services/pwaInstall
+  // (captured at module load, before React mounts) — this card and the
+  // persistent InstallButton both read from that single source instead of
+  // racing each other with their own listeners.
+  const [canOneTap, setCanOneTap] = useState(() => !!getInstallPrompt());
   const [visible, setVisible] = useState(false);
   const [iosMode, setIosMode] = useState(false);
 
   useEffect(() => {
     if (isStandalone() || recentlyDismissed()) return undefined;
 
-    // Android / desktop Chrome: capture the install event for a one-tap button.
-    const onBeforeInstall = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setVisible(true);
-    };
-    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    const unsub = onInstallPromptChange((p) => {
+      setCanOneTap(!!p);
+      if (p) setVisible(true);
+      else setVisible(false);          // installed or consumed
+    });
+    if (getInstallPrompt()) setVisible(true);
 
     // iOS gives us no event — decide from UA. Only nudge on the phone, where
     // "Add to Home Screen" actually exists.
+    let t;
     if (isIOS() && isMobile()) {
       setIosMode(true);
       // small delay so it doesn't fight the first paint / boot loader
-      const t = setTimeout(() => setVisible(true), 2500);
-      return () => {
-        clearTimeout(t);
-        window.removeEventListener('beforeinstallprompt', onBeforeInstall);
-      };
+      t = setTimeout(() => setVisible(true), 2500);
     }
-
-    // Hide again if the app gets installed while the prompt is showing.
-    const onInstalled = () => setVisible(false);
-    window.addEventListener('appinstalled', onInstalled);
-
     return () => {
-      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
-      window.removeEventListener('appinstalled', onInstalled);
+      unsub();
+      if (t) clearTimeout(t);
     };
   }, []);
 
@@ -94,13 +90,11 @@ export default function InstallPrompt() {
   }, []);
 
   const install = useCallback(async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
+    if (!canOneTap) return;
+    const outcome = await triggerInstall();
     setVisible(false);
     if (outcome !== 'accepted') dismiss();
-  }, [deferredPrompt, dismiss]);
+  }, [canOneTap, dismiss]);
 
   if (!visible) return null;
 

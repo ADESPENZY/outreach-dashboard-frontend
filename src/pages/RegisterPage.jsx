@@ -12,6 +12,7 @@ import {
   animate,
 } from 'framer-motion';
 import { GoogleLogin } from '@react-oauth/google';
+import GoogleSignInSlot from '../components/GoogleSignInSlot';
 import SmallSpinner from '../components/SmallSpinner';
 import UsernamePickerModal from '../components/UsernamePickerModal';
 import { useAuth } from '../context/AuthContext';
@@ -566,17 +567,19 @@ const RegisterPage = () => {
           {/* Glass panel */}
           <div className="bg-[#12131C]/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-2xl mt-8">
 
-            {/* Google Sign-In */}
-            <div ref={googleBtnRef} className="w-full flex justify-center mb-5">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => toast.error('Google sign-in failed. Please try again.')}
-                theme="filled_black"
-                size="large"
-                shape="rectangular"
-                text="signup_with"
-                width={googleWidth}
-              />
+            {/* Google Sign-In — visible fallback when the GSI script is blocked */}
+            <div ref={googleBtnRef} className="w-full mb-5">
+              <GoogleSignInSlot>
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => toast.error('Google sign-in failed. Please try again.')}
+                  theme="filled_black"
+                  size="large"
+                  shape="rectangular"
+                  text="signup_with"
+                  width={googleWidth}
+                />
+              </GoogleSignInSlot>
             </div>
 
             {/* OR Divider */}

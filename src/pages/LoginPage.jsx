@@ -12,6 +12,8 @@ import {
   animate
 } from 'framer-motion';
 import { GoogleLogin } from '@react-oauth/google';
+import GoogleSignInSlot from '../components/GoogleSignInSlot';
+import InstallButton from '../components/InstallButton';
 import SmallSpinner from '../components/SmallSpinner';
 import UsernamePickerModal from '../components/UsernamePickerModal';
 import { useAuth } from '../context/AuthContext';
@@ -537,24 +539,27 @@ const LoginPage = () => {
     <section className="min-h-screen grid grid-cols-1 lg:grid-cols-12 bg-[#0B0C10] text-white">
       {/* ── LEFT: Auth Panel ── */}
       <div className="lg:col-span-5 flex flex-col justify-between p-8 sm:p-12 lg:p-16 relative z-10">
-        {/* Brand mark */}
+        {/* Brand mark + persistent install entry point */}
         <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4 }}
-          className="flex items-center gap-2"
+          className="flex items-center justify-between gap-2"
         >
-          <Rocket
-            size={18}
-            className="rotate-45"
-            style={{ color: '#FF5B2E', filter: 'drop-shadow(0 0 6px rgba(255,91,46,0.50))' }}
-          />
-          <span className="font-montserrat font-semibold text-white text-lg">
-            Apply
-            <span className="font-extrabold bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent">
-              DIR
+          <div className="flex items-center gap-2">
+            <Rocket
+              size={18}
+              className="rotate-45"
+              style={{ color: '#FF5B2E', filter: 'drop-shadow(0 0 6px rgba(255,91,46,0.50))' }}
+            />
+            <span className="font-montserrat font-semibold text-white text-lg">
+              Apply
+              <span className="font-extrabold bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent">
+                DIR
+              </span>
             </span>
-          </span>
+          </div>
+          <InstallButton />
         </motion.div>
 
         {/* Center block */}
@@ -583,17 +588,21 @@ const LoginPage = () => {
           {/* Glass panel */}
           <div className="bg-[#12131C]/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-2xl mt-8">
 
-            {/* Google Sign-In */}
-            <div ref={googleBtnRef} className="w-full flex justify-center mb-5">
-              <GoogleLogin
-                onSuccess={handleGoogleSuccess}
-                onError={() => toast.error('Google sign-in failed. Please try again.')}
-                theme="filled_black"
-                size="large"
-                shape="rectangular"
-                text="signin_with"
-                width={googleWidth}
-              />
+            {/* Google Sign-In — slot shows a visible fallback if the GSI
+                script is blocked (ad-blocker/privacy shield), instead of the
+                button silently vanishing on that device. */}
+            <div ref={googleBtnRef} className="w-full mb-5">
+              <GoogleSignInSlot>
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={() => toast.error('Google sign-in failed. Please try again.')}
+                  theme="filled_black"
+                  size="large"
+                  shape="rectangular"
+                  text="signin_with"
+                  width={googleWidth}
+                />
+              </GoogleSignInSlot>
             </div>
 
             {/* OR Divider */}
