@@ -53,3 +53,14 @@ export async function extractSkills() {
     throw new Error(parseApiError(err));
   }
 }
+
+// Pilot intake — tell us which Gmail introductions will send from. Fires the
+// personal founder ack + the "add this Gmail in Cloud Console" founder alert.
+export async function requestSendingDesk(gmail) {
+  try {
+    const response = await api.post("/api/accounts/profile/sending-desk/", { gmail });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

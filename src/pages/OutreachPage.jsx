@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import {
   Mail, Send, CheckCircle2, ArrowRight, ChevronDown, ChevronUp,
   Pencil, Trash2, Clock, PartyPopper, Linkedin, ExternalLink, Loader2,
-  AlertTriangle, MapPin, Wallet,
+  AlertTriangle, MapPin, Wallet, Sparkles,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import GenerateCvButton from '../components/GenerateCvButton';
@@ -15,6 +15,7 @@ import {
   getDraftEmails, getSentEmails, approveEmail, queueEmail, editEmail, deleteEmail,
 } from '../services/apiOutreach';
 import { getGmailAccounts } from '../services/apiGmail';
+import { getProfile } from '../services/apiProfile';
 
 // ── Introductions — review what your headhunter wrote ─────────────────────
 // An assistant presenting polished letters for approval, not an email editor.
@@ -750,6 +751,12 @@ const OutreachPage = () => {
     queryFn: getSentEmails,
   });
   const { data: inboxData } = useQuery({ queryKey: ['gmailAccounts'], queryFn: getGmailAccounts });
+  const { data: profileData } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+  // Pilot: the sending desk has been reserved but not yet activated by us —
+  // the connect banner becomes a quiet status chip instead of a CTA.
+  const deskBeingPrepared = !!(profileData
+    && profileData.activation_status !== 'activated'
+    && profileData.intended_gmail);
 
   // Once they've sent an intro, they're "in the game" — flag the win so the
   // gentle push opt-in (PushPrompt) can offer reply alerts.
@@ -858,25 +865,47 @@ const OutreachPage = () => {
         <TabButton id="replies" label="Got Replies"    count={replies.length}  active={tab === 'replies'} pulse onClick={() => selectTab('replies')} />
       </div>
 
-      {/* Prominent connect gate — introductions can't send without a Gmail. */}
+      {/* Prominent connect gate — introductions can't send without a Gmail.
+          Once the sending desk is reserved (pilot), it softens into a status
+          chip: preparation is on us, not an action on them. */}
       {!loading && !canSend && pending.length > 0 && tab === 'pending' && (
-        <div className="flex items-center gap-4 rounded-2xl border border-primary-light/30 bg-primary-light/5 p-4 md:p-5">
-          <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center shrink-0 shadow-sm shadow-primary-light/30">
-            <Mail className="w-5 h-5 text-white" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-bold font-montserrat text-black-light">Connect your inbox to start sending</p>
-            <p className="text-xs text-secondary-dark mt-0.5 leading-relaxed">
-              Introductions send from your own Gmail — that’s why hiring managers reply. Takes under a minute.
-            </p>
+        deskBeingPrepared ? (
+          <div className="flex items-center gap-4 rounded-2xl border border-primary-light/25 bg-gradient-to-r from-primary-light/[0.06] to-white p-4 md:p-5">
+            <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center shrink-0 shadow-sm shadow-primary-light/30">
+              <Sparkles className="w-5 h-5 text-white" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold font-montserrat text-black-light">Your sending desk is being prepared</p>
+              <p className="text-xs text-secondary-dark mt-0.5 leading-relaxed">
+                Introductions will send from <span className="font-semibold text-black-light">{profileData.intended_gmail}</span> — we&rsquo;ll email you the moment you&rsquo;re live.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowConnect(true)}
+              className="shrink-0 inline-flex items-center gap-1.5 text-primary-dark font-semibold font-montserrat text-sm hover:text-primary-light transition-colors"
+            >
+              View status <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
-          <button
-            onClick={() => setShowConnect(true)}
-            className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2.5 text-sm shadow-sm hover:opacity-90 transition-all"
-          >
-            Connect Gmail <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
+        ) : (
+          <div className="flex items-center gap-4 rounded-2xl border border-primary-light/30 bg-primary-light/5 p-4 md:p-5">
+            <span className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center shrink-0 shadow-sm shadow-primary-light/30">
+              <Mail className="w-5 h-5 text-white" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold font-montserrat text-black-light">Connect your inbox to start sending</p>
+              <p className="text-xs text-secondary-dark mt-0.5 leading-relaxed">
+                Introductions send from your own Gmail — that’s why hiring managers reply. Takes under a minute.
+              </p>
+            </div>
+            <button
+              onClick={() => setShowConnect(true)}
+              className="shrink-0 inline-flex items-center gap-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2.5 text-sm shadow-sm hover:opacity-90 transition-all"
+            >
+              Connect Gmail <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )
       )}
 
       {loading ? (
