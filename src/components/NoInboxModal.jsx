@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { Mail, X, Loader2 } from 'lucide-react';
-import { getGmailOAuthUrl } from '../services/apiGmail';
+import { getGmailOAuthUrl, getOutlookOAuthUrl } from '../services/apiGmail';
 import { getProfile } from '../services/apiProfile';
 import PendingActivationCard from './PendingActivationCard';
 
@@ -17,6 +17,7 @@ import PendingActivationCard from './PendingActivationCard';
  */
 function NoInboxModal({ onClose }) {
   const [connecting, setConnecting] = useState(false);
+  const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [pendingGate, setPendingGate] = useState(false);
 
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
@@ -31,6 +32,21 @@ function NoInboxModal({ onClose }) {
       setConnecting(false);
       if ((e.message || '').includes('pending_activation')) {
         setPendingGate(true); // flip to the white-glove state, no error toast
+      } else {
+        toast.error(e.message || 'Could not start the connection. Please try again.');
+      }
+    }
+  };
+
+  const handleOutlookConnect = async () => {
+    setConnectingOutlook(true);
+    try {
+      const url = await getOutlookOAuthUrl();
+      window.location.href = url; // off to Microsoft; callback returns to Settings
+    } catch (e) {
+      setConnectingOutlook(false);
+      if ((e.message || '').includes('pending_activation')) {
+        setPendingGate(true);
       } else {
         toast.error(e.message || 'Could not start the connection. Please try again.');
       }
@@ -75,11 +91,19 @@ function NoInboxModal({ onClose }) {
             <div className="flex flex-col gap-3">
               <button
                 onClick={handleGoogleConnect}
-                disabled={connecting}
+                disabled={connecting || connectingOutlook}
                 className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-gradient-to-r from-primary-light to-primary-dark hover:opacity-90 text-white font-bold font-montserrat rounded-xl shadow-md shadow-primary-light/30 transition-all active:scale-95 disabled:opacity-60"
               >
                 {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                 Connect with Google
+              </button>
+              <button
+                onClick={handleOutlookConnect}
+                disabled={connecting || connectingOutlook}
+                className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-white border border-neutral-dark text-black-light font-bold font-montserrat rounded-xl hover:border-[#0A66C2]/50 hover:text-[#0A66C2] transition-all active:scale-95 disabled:opacity-60"
+              >
+                {connectingOutlook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4 text-[#0A66C2]" />}
+                Connect Outlook
               </button>
               <button
                 onClick={onClose}

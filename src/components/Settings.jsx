@@ -13,7 +13,7 @@ import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } fro
 import { getProfile, updateProfile, uploadCV } from '@/services/apiProfile';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSettings';
 import { getInboxStats } from '@/services/apiInboxes';
-import { deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl } from '@/services/apiGmail';
+import { deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl, getOutlookOAuthUrl } from '@/services/apiGmail';
 import { useAuth } from '@/context/AuthContext';
 import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush, isIOS, isStandalone, pushFailureMessage } from '@/services/push';
 import { LegalSections } from '@/components/legal/PolicyContent';
@@ -473,9 +473,28 @@ const INBOX_STATUS = {
   Paused:  { cls: 'bg-red-50 text-red-600 border-red-200',             dot: 'bg-red-400',     icon: AlertTriangle },
 };
 
-// Mirrors backend MAX_INBOXES_PER_USER (integrations/serializers.py).
-// ONE inbox per account during the invite-only pilot.
-const MAX_INBOXES = 1;
+// Small provider mark for a connected inbox — brand-colored inline SVG so no
+// external asset/CSP dependency. Gmail = red envelope 'M', Outlook = blue 'O'.
+function ProviderBadge({ provider }) {
+  if (provider === 'outlook') {
+    return (
+      <div className="w-8 h-8 rounded-full bg-[#0A66C2]/10 flex items-center justify-center shrink-0" title="Outlook">
+        <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+          <path fill="#0A66C2" d="M13 4h7a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-7v-4h5v-2h-5V9h5V7h-5V4Z" />
+          <path fill="#0A66C2" d="M2 5.6 12 4v16L2 18.4V5.6Z" />
+          <text x="7" y="15" textAnchor="middle" fontSize="8" fontWeight="700" fill="#fff">O</text>
+        </svg>
+      </div>
+    );
+  }
+  return (
+    <div className="w-8 h-8 rounded-full bg-[#EA4335]/10 flex items-center justify-center shrink-0" title="Gmail">
+      <svg viewBox="0 0 24 24" className="w-4 h-4" aria-hidden="true">
+        <path fill="#EA4335" d="M3 5h18a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1.4 2L12 12.3 19.6 7H4.4Z" />
+      </svg>
+    </div>
+  );
+}
 
 function SendingTab() {
   const qc = useQueryClient();
@@ -488,10 +507,11 @@ function SendingTab() {
   const [autoFollow, setAutoFollow] = useState(true);
   const [savingAF, setSavingAF] = useState(false);
   const [connectingGoogle, setConnectingGoogle] = useState(false);
+  const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [pendingGate, setPendingGate] = useState(false);
   const [params, setParams] = useSearchParams();
 
-  // White-glove pilot gate: no Google button until a founder activates the
+  // White-glove pilot gate: no connect buttons until a founder activates the
   // account (PendingActivationCard shows instead — never a dead end).
   const isPendingActivation = pendingGate || (profile && profile.activation_status !== 'activated');
 
@@ -501,24 +521,32 @@ function SendingTab() {
 
   const refresh = () => { qc.invalidateQueries({ queryKey: ['inboxes'] }); qc.invalidateQueries({ queryKey: ['gmailAccounts'] }); };
 
-  // Toast the result when Google bounces the user back here after consent.
+  // Toast the result when a provider bounces the user back here after consent.
   useEffect(() => {
     if (params.get('gmail_connected')) {
       toast.success('Gmail connected — you can send now.');
       refresh();
       params.delete('gmail_connected'); setParams(params, { replace: true });
+    } else if (params.get('outlook_connected')) {
+      toast.success('Outlook connected — you can send now.');
+      refresh();
+      params.delete('outlook_connected'); setParams(params, { replace: true });
     } else if (params.get('gmail_error')) {
       const code = params.get('gmail_error');
       if (code === 'activation') {
-        // Reached Google before activation — show the white-glove state, no
-        // raw error, no scary toast.
-        setPendingGate(true);
+        setPendingGate(true);   // reached Google before activation — white-glove state
       } else {
         toast.error(code === 'limit'
-          ? 'One inbox per account during the pilot. Disconnect the current one to switch.'
+          ? 'You already have a Gmail connected. Disconnect it to switch.'
           : 'Could not connect Gmail. Please try again.');
       }
       params.delete('gmail_error'); setParams(params, { replace: true });
+    } else if (params.get('outlook_error')) {
+      const code = params.get('outlook_error');
+      toast.error(code === 'limit'
+        ? 'You already have an Outlook connected. Disconnect it to switch.'
+        : 'Could not connect Outlook. Please try again.');
+      params.delete('outlook_error'); setParams(params, { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -538,6 +566,21 @@ function SendingTab() {
     }
   };
 
+  const handleOutlookConnect = async () => {
+    setConnectingOutlook(true);
+    try {
+      const url = await getOutlookOAuthUrl();
+      window.location.href = url;   // leave to Microsoft; it returns to the callback
+    } catch (e) {
+      setConnectingOutlook(false);
+      if ((e.message || '').includes('pending_activation')) {
+        setPendingGate(true);
+      } else {
+        toast.error(e.message);
+      }
+    }
+  };
+
   const handleToggle = async (id) => { setTogglingId(id); try { await toggleGmailAccount(id); refresh(); } catch (e) { toast.error(e.message); } finally { setTogglingId(null); } };
   const handleDelete = async (id) => { try { await deleteGmailAccount(id); toast.success('Inbox removed.'); refresh(); } catch (e) { toast.error(e.message); } setConfirmDelete(null); };
 
@@ -550,6 +593,10 @@ function SendingTab() {
   };
 
   const accounts = data?.accounts || [];
+  // One inbox per provider during the pilot — offer each connect button only
+  // when that provider isn't already connected.
+  const hasGmail = accounts.some(a => (a.provider || 'gmail') === 'gmail');
+  const hasOutlook = accounts.some(a => a.provider === 'outlook');
   // Capacity = the ENFORCED (age-ramped) limit, not the raw ceiling — honest.
   const activeAccounts = accounts.filter(a => a.status !== 'Paused');
   const totalCapacity = activeAccounts.reduce((s, a) => s + (a.effective_daily_limit ?? a.daily_send_limit ?? 0), 0);
@@ -586,7 +633,7 @@ function SendingTab() {
                     <div key={acc.id} className="rounded-2xl border border-neutral-dark p-4 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-primary-light/10 flex items-center justify-center shrink-0"><Mail className="w-4 h-4 text-primary-dark" /></div>
+                          <ProviderBadge provider={acc.provider} />
                           <span className="font-semibold text-black text-sm truncate">{acc.email}</span>
                         </div>
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border shrink-0 ${st.cls}`}>
@@ -643,20 +690,27 @@ function SendingTab() {
               </div>
             )}
 
-            {accounts.length >= MAX_INBOXES ? (
-              <p className="text-xs font-semibold text-secondary-dark bg-neutral-light border border-neutral-dark rounded-xl px-3 py-2.5">
-                Your inbox is connected. One inbox per account during the pilot — remove it to connect a different Gmail.
-              </p>
-            ) : isPendingActivation ? (
+            {isPendingActivation ? (
               <PendingActivationCard />
+            ) : (hasGmail && hasOutlook) ? (
+              <p className="text-xs font-semibold text-secondary-dark bg-neutral-light border border-neutral-dark rounded-xl px-3 py-2.5">
+                Gmail and Outlook both connected — that's the max during the pilot. Remove one to switch to a different account.
+              </p>
             ) : (
               <div className="flex flex-col gap-2 pt-1">
-                <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
-                  {connectingGoogle ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />} Connect Gmail with Google
-                </button>
+                {!hasGmail && (
+                  <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                    {connectingGoogle ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />} Connect Gmail with Google
+                  </button>
+                )}
+                {!hasOutlook && (
+                  <button onClick={handleOutlookConnect} disabled={connectingOutlook} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-neutral-dark text-black-light text-sm font-semibold rounded-xl hover:border-[#0A66C2]/50 hover:text-[#0A66C2] transition-all disabled:opacity-60">
+                    {connectingOutlook ? <ApplyDirLoader.Button /> : <Mail className="w-4 h-4 text-[#0A66C2]" />} Connect Outlook
+                  </button>
+                )}
               </div>
             )}
-            <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> One click with Google — no passwords, ever. We can only send introductions you approve and read the replies to them; nothing else in your inbox.</p>
+            <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> One click, no passwords, ever. We can only send introductions you approve and read the replies to them; nothing else in your inbox.</p>
             <p className="text-xs text-secondary-dark leading-relaxed">
               Your inbox sends about <span className="font-semibold text-black">5 new introductions a day</span>, with the rest of its daily limit reserved for follow-ups (where most replies come from)
               {totalCapacity > 0 && <> — right now that's about <span className="font-semibold text-black">{totalNewPerDay} new contact{totalNewPerDay === 1 ? '' : 's'}</span> and <span className="font-semibold text-black">{totalCapacity} total emails</span> per day.</>}

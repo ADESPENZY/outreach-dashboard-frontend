@@ -52,3 +52,15 @@ export async function getGmailOAuthUrl() {
     throw new Error(parseApiError(err));
   }
 }
+
+// Outlook (Microsoft Graph, OAuth) — returns the Microsoft consent URL. Same
+// flow as Gmail: redirect the browser there; Microsoft returns to the backend
+// callback, which stores the token and bounces back to Settings.
+export async function getOutlookOAuthUrl() {
+  try {
+    const response = await api.get("/api/integrations/outlook/oauth/authorize/");
+    return response.data.authorize_url;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
