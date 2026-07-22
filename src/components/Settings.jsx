@@ -1040,15 +1040,26 @@ function AccountTab({ navigate }) {
           </div>
           <SaveButton onClick={saveUsername} saving={savingUname} disabled={!usernameChanged || !usernameValid} />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
-          <div><Label>Current password</Label><Input type="password" value={cur} onChange={e => setCur(e.target.value)} autoComplete="current-password" /></div>
-          <div><Label>New password</Label><Input type="password" value={nxt} onChange={e => setNxt(e.target.value)} autoComplete="new-password" /></div>
-          <div><Label>Confirm new</Label><Input type="password" value={cfm} onChange={e => setCfm(e.target.value)} autoComplete="new-password" /></div>
-        </div>
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <button onClick={sendReset} disabled={sendingReset} className="text-xs font-semibold text-primary-dark hover:text-primary-light disabled:opacity-60">{sendingReset ? 'Sending…' : 'Forgot password? Email me a reset link'}</button>
-          <SaveButton onClick={savePassword} saving={savingPw} disabled={!cur || !nxt || !cfm}>Update Password</SaveButton>
-        </div>
+        {me?.has_password === false ? (
+          /* Google-only so far — no password exists to "change". The reset
+             link doubles as the set-a-password path (proves mailbox ownership). */
+          <div className="flex items-center justify-between gap-3 flex-wrap bg-neutral rounded-xl border border-neutral-dark px-4 py-3">
+            <p className="text-sm text-secondary-dark">You sign in with Google. Want a password too? Set one via email — then either method works.</p>
+            <button onClick={sendReset} disabled={sendingReset} className="text-xs font-semibold text-primary-dark hover:text-primary-light disabled:opacity-60 shrink-0">{sendingReset ? 'Sending…' : 'Email me a set-password link'}</button>
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div><Label>Current password</Label><Input type="password" value={cur} onChange={e => setCur(e.target.value)} autoComplete="current-password" /></div>
+              <div><Label>New password</Label><Input type="password" value={nxt} onChange={e => setNxt(e.target.value)} autoComplete="new-password" /></div>
+              <div><Label>Confirm new</Label><Input type="password" value={cfm} onChange={e => setCfm(e.target.value)} autoComplete="new-password" /></div>
+            </div>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <button onClick={sendReset} disabled={sendingReset} className="text-xs font-semibold text-primary-dark hover:text-primary-light disabled:opacity-60">{sendingReset ? 'Sending…' : 'Forgot password? Email me a reset link'}</button>
+              <SaveButton onClick={savePassword} saving={savingPw} disabled={!cur || !nxt || !cfm}>Update Password</SaveButton>
+            </div>
+          </>
+        )}
       </Collapsible>
 
       {/* Notifications */}
@@ -1145,11 +1156,13 @@ function AccountTab({ navigate }) {
             <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> Deleting is permanent — profile, jobs, contacts, emails, and inboxes are all erased. Connected inboxes stop sending immediately.
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div><Label>Type DELETE to confirm</Label><Input value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="DELETE" /></div>
-            <div><Label>Your password</Label><Input type="password" value={delPw} onChange={e => setDelPw(e.target.value)} placeholder="Leave blank if you use Google sign-in" autoComplete="current-password" /></div>
+            <div className={me?.has_password === false ? 'sm:col-span-2' : ''}><Label>Type DELETE to confirm</Label><Input value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="DELETE" /></div>
+            {me?.has_password !== false && (
+              <div><Label>Your password</Label><Input type="password" value={delPw} onChange={e => setDelPw(e.target.value)} placeholder="Required to delete your account" autoComplete="current-password" /></div>
+            )}
           </div>
           <div className="flex justify-end">
-            <button onClick={handleDelete} disabled={deleting || confirmText.trim().toUpperCase() !== 'DELETE'}
+            <button onClick={handleDelete} disabled={deleting || confirmText.trim().toUpperCase() !== 'DELETE' || (me?.has_password !== false && !delPw)}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-red-200 transition-all disabled:opacity-50">
               {deleting ? <ApplyDirLoader.Button variant="light" /> : <Trash2 className="w-4 h-4" />} Permanently delete my account
             </button>
