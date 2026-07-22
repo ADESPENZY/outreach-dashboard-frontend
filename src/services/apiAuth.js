@@ -93,3 +93,18 @@ export async function forgotPassword(email) {
     throw new Error(err.response?.data?.detail || parseApiError(err));
   }
 }
+
+export async function resetPasswordConfirm({ uid, token, new_password }) {
+  try {
+    const response = await api.post("/api/accounts/auth/password-reset/confirm/", {
+      uid, token, new_password,
+    });
+    return response.data;
+  } catch (err) {
+    // Preserve the axios response so the page can distinguish an invalid/
+    // expired token (400 detail) from a network/server failure.
+    const e = new Error(err.response?.data?.detail || parseApiError(err));
+    e.response = err.response;
+    throw e;
+  }
+}

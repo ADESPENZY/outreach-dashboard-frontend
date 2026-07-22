@@ -14,6 +14,21 @@ export const clearClientAuthState = () => {
   localStorage.removeItem('refresh');
 };
 
+// Silent session recovery: exchange the httpOnly refresh cookie for a new
+// access token. Used by AuthContext on boot when this tab's sessionStorage
+// is empty (fresh tab / restored session). Raw axios — NOT the `api`
+// instance — so a 401 here stays a plain rejection and never triggers the
+// interceptor's clear-and-redirect guards on public pages.
+export const trySilentRefresh = async () => {
+  const { data } = await axios.post(
+    `${BASE_URL}/api/accounts/auth/refresh/`,
+    {},
+    { withCredentials: true }
+  );
+  sessionStorage.setItem('access', data.access);
+  return data.access;
+};
+
 let _isRefreshing = false;
 let _refreshQueue = [];
 

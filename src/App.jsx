@@ -9,6 +9,8 @@ import JobsPage from './pages/JobsPage';
 import OutreachPage from './pages/OutreachPage';
 import ProgressPage from './pages/ProgressPage';
 import RegisterPage from './pages/RegisterPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import LegalPage from './pages/LegalPage';
 import { AuthProvider } from './context/AuthContext';
 import AppBootLoader from './components/AppBootLoader';
@@ -43,6 +45,8 @@ function App() {
           {/* Public */}
           <Route index element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/privacy" element={<LegalPage doc="privacy" />} />
           <Route path="/terms" element={<LegalPage doc="terms" />} />
 
@@ -78,6 +82,10 @@ function App() {
               <Route path="connectedAccounts" element={<Navigate to="/dashboard/settings" replace />} />
             </Route>
           </Route>
+
+          {/* Catch-all — an unmatched path used to render an empty tree
+              (blank white screen). Send strays to the login page instead. */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
 
         <ToastContainer

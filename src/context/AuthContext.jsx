@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import api, { clearClientAuthState } from '../api';
+import api, { clearClientAuthState, trySilentRefresh } from '../api';
 import { getMe, login as loginApi, register as registerApi, googleAuth } from '../services/apiAuth';
 
 const AuthContext = createContext();
@@ -12,18 +12,18 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAuth = async () => {
-    if (!sessionStorage.getItem('access')) {
-      setCurrentUser(null);
-      setIsAuthenticated(false);
-      setIsLoading(false);
-      return;
-    }
     setIsLoading(true);
     try {
+      if (!sessionStorage.getItem('access')) {
+        // Fresh tab: sessionStorage is per-tab, but the browser may still
+        // hold a valid httpOnly refresh cookie. Try a silent refresh before
+        // declaring the user logged out; if it 401s we fall to catch below.
+        await trySilentRefresh();
+      }
       const user = await getMe();
       setCurrentUser(user);
       setIsAuthenticated(true);
-    } catch (err) {
+    } catch {
       setCurrentUser(null);
       setIsAuthenticated(false);
       clearClientAuthState();
