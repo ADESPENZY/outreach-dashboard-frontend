@@ -5,6 +5,10 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
+  // Fail fast instead of hanging indefinitely if the backend is slow to answer
+  // (e.g. a stale DB connection being re-established). 20s is well above a
+  // healthy p99 but short enough that the user isn't left staring at a frozen UI.
+  timeout: 20000,
 });
 
 export const clearClientAuthState = () => {
@@ -23,7 +27,7 @@ export const trySilentRefresh = async () => {
   const { data } = await axios.post(
     `${BASE_URL}/api/accounts/auth/refresh/`,
     {},
-    { withCredentials: true }
+    { withCredentials: true, timeout: 20000 }
   );
   sessionStorage.setItem('access', data.access);
   return data.access;
@@ -60,7 +64,20 @@ api.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        
+
+        // Transparent single retry for timeouts / network errors ONLY — i.e. the
+        // request never reached a response (a stale-connection hang, a dropped
+        // socket). A real HTTP response (any 4xx/5xx) is NOT retried, so failed
+        // logins and other server rejections are never double-submitted (which
+        // would e.g. double-increment a lockout counter).
+        const isTimeoutOrNetwork =
+            error.code === 'ECONNABORTED' || !error.response;
+        if (isTimeoutOrNetwork && originalRequest && !originalRequest._netRetry) {
+            originalRequest._netRetry = true;
+            await new Promise((r) => setTimeout(r, 800)); // short backoff
+            return api(originalRequest);
+        }
+
         if (error.response?.status === 401) {
             const isAuthPage = window.location.pathname === '/' || window.location.pathname === '/register';
 
