@@ -27,11 +27,15 @@ const NAV = [
   { name: 'Progress',      icon: BarChart3,  path: '/dashboard/progress' },
 ];
 
-// Settings → Connected Emails is where inbox/warmup management lives. That
-// sub-section is built in a later phase; for now everything points at Settings.
-const CONNECTED_EMAILS_PATH = '/dashboard/settings';
+// Settings → Email & Sending is where inbox management (and the Reconnect
+// button for a revoked inbox) lives. Deep-link straight to that tab so an
+// 'Issue' inbox in the sidebar is one click from re-authorising.
+const CONNECTED_EMAILS_PATH = '/dashboard/settings?tab=sending';
 
-// Map the inbox-stats status enum to the sidebar's display.
+// Map the inbox-stats status enum to the sidebar's display. Must match the
+// Settings → Connected Inboxes card exactly: 'Issue' (revoked token, needs
+// reconnecting) is red and distinct from 'Paused' (user paused it), which is
+// neutral. Both come from the same `status` field the settings card reads.
 function inboxStatus(acc) {
   if (acc.status === 'Warming') {
     const day = acc.warmup?.days_running;
@@ -41,8 +45,11 @@ function inboxStatus(acc) {
       icon: 'flame',
     };
   }
-  if (acc.status === 'Paused') {
+  if (acc.status === 'Issue') {
     return { label: 'Issue', cls: 'text-red-600', dot: 'bg-red-500' };
+  }
+  if (acc.status === 'Paused') {
+    return { label: 'Paused', cls: 'text-secondary-dark', dot: 'bg-neutral-dark' };
   }
   return { label: 'LIVE', cls: 'text-emerald-600', dot: 'bg-emerald-500' };
 }
@@ -175,7 +182,9 @@ const Sidebar = ({ isOpen, onClose }) => {
                     <Link
                       to={CONNECTED_EMAILS_PATH}
                       onClick={onClose}
-                      title={`${acc.email} — ${s.label}`}
+                      title={acc.status === 'Issue'
+                        ? `${acc.email} — needs reconnecting. Click to re-authorise.`
+                        : `${acc.email} — ${s.label}`}
                       className="group flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-neutral transition-colors"
                     >
                       <span className="w-5 h-5 rounded-full bg-neutral border border-neutral-dark flex items-center justify-center shrink-0 text-secondary-dark/60 group-hover:text-primary-light">
