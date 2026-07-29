@@ -7,6 +7,7 @@ import {
   FileText, Upload, Sparkles, Plus, X,
   Bell, Clock, KeyRound, AtSign, LogOut, Trash2, AlertTriangle, ShieldCheck,
   Crown, Flame, CheckCircle2, Send, Download, Info, ArrowRight, HeartHandshake,
+  RefreshCw, AlertCircle,
 } from 'lucide-react';
 import { ApplyDirLoader } from '@/components/ui/ApplyDirLoader';
 import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
@@ -470,7 +471,11 @@ function TagGroup({ label, tags, cls }) {
 const INBOX_STATUS = {
   Active:  { cls: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500', icon: CheckCircle2 },
   Warming: { cls: 'bg-amber-50 text-amber-700 border-amber-200',       dot: 'bg-amber-400',   icon: Flame },
-  Paused:  { cls: 'bg-red-50 text-red-600 border-red-200',             dot: 'bg-red-400',     icon: AlertTriangle },
+  // 'Paused' = the user paused it (resume any time). 'Issue' = the token was
+  // revoked and the inbox needs re-authorising (Reconnect) — a stronger, more
+  // alarming red so it reads as "needs your action", not "resting".
+  Paused:  { cls: 'bg-neutral-light text-secondary-dark border-neutral-dark', dot: 'bg-neutral-dark', icon: AlertTriangle },
+  Issue:   { cls: 'bg-red-50 text-red-700 border-red-300',             dot: 'bg-red-500',     icon: AlertCircle },
 };
 
 // Small provider mark for a connected inbox — brand-colored inline SVG so no
@@ -581,6 +586,13 @@ function SendingTab() {
     }
   };
 
+  // Reconnect an 'Issue' inbox: re-run the SAME OAuth flow. Re-consenting with
+  // the same address updates the existing row in place (backend upsert-by-email)
+  // — token refreshed, reactivated, flags cleared. Works regardless of the
+  // !hasGmail connect-button gate, since the dead inbox still counts as present.
+  const handleReconnect = (acc) =>
+    (acc.provider === 'outlook' ? handleOutlookConnect() : handleGoogleConnect());
+
   const handleToggle = async (id) => { setTogglingId(id); try { await toggleGmailAccount(id); refresh(); } catch (e) { toast.error(e.message); } finally { setTogglingId(null); } };
   const handleDelete = async (id) => { try { await deleteGmailAccount(id); toast.success('Inbox removed.'); refresh(); } catch (e) { toast.error(e.message); } setConfirmDelete(null); };
 
@@ -598,7 +610,8 @@ function SendingTab() {
   const hasGmail = accounts.some(a => (a.provider || 'gmail') === 'gmail');
   const hasOutlook = accounts.some(a => a.provider === 'outlook');
   // Capacity = the ENFORCED (age-ramped) limit, not the raw ceiling — honest.
-  const activeAccounts = accounts.filter(a => a.status !== 'Paused');
+  // A Paused or Issue inbox isn't sending, so it contributes nothing today.
+  const activeAccounts = accounts.filter(a => a.status !== 'Paused' && a.status !== 'Issue');
   const totalCapacity = activeAccounts.reduce((s, a) => s + (a.effective_daily_limit ?? a.daily_send_limit ?? 0), 0);
   // New-introductions budget across active inboxes (limit // 4 each, from the API).
   const totalNewPerDay = activeAccounts.reduce((s, a) => s + (a.new_budget ?? Math.max(1, Math.floor((a.effective_daily_limit ?? 0) / 4))), 0);
@@ -660,14 +673,20 @@ function SendingTab() {
                         {wp?.days_running != null && (<><span className="text-secondary-dark">Account age</span><span className="text-black-light font-semibold text-right">{wp.days_running} days</span></>)}
                       </div>
 
-                      {warming && (
+                      {acc.status === 'Issue' && (
+                        <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5 leading-snug">
+                          <strong>{acc.provider === 'outlook' ? 'Microsoft' : 'Google'} disconnected this inbox</strong> — its access was revoked (a password change or security update usually does it), so sending has stopped. Click <strong>Reconnect</strong> to sign in again and resume; nothing else is lost.
+                        </p>
+                      )}
+
+                      {warming && acc.status !== 'Issue' && (
                         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 leading-snug">
                           New inbox warming up — its daily limit ramps <strong>5 → 10 → 20</strong> over ~2 weeks so Gmail trusts it. This is the number actually enforced today.
                         </p>
                       )}
 
                       <div className="w-full h-1.5 bg-neutral-dark rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${acc.status === 'Paused' ? 'bg-neutral-dark' : 'bg-primary-light'}`} style={{ width: `${Math.min(quotaPct, 100)}%` }} />
+                        <div className={`h-full rounded-full ${(acc.status === 'Paused' || acc.status === 'Issue') ? 'bg-neutral-dark' : 'bg-primary-light'}`} style={{ width: `${Math.min(quotaPct, 100)}%` }} />
                       </div>
 
                       {acc.status === 'Warming' && wp && (
@@ -678,10 +697,23 @@ function SendingTab() {
                       )}
 
                       <div className="flex items-center justify-between pt-1">
-                        <button onClick={() => handleToggle(acc.id)} disabled={togglingId === acc.id}
-                          className="text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
-                          {togglingId === acc.id ? 'Updating…' : acc.status === 'Paused' ? 'Resume sending' : 'Pause'}
-                        </button>
+                        {acc.status === 'Issue' ? (
+                          // Reconnect — NOT Resume. Resume flips is_active true
+                          // without a fresh token, so the next send re-fails and
+                          // the inbox bounces straight back to Issue.
+                          <button onClick={() => handleReconnect(acc)}
+                            disabled={connectingGoogle || connectingOutlook}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                            {(connectingGoogle || connectingOutlook)
+                              ? <ApplyDirLoader.Button variant="light" />
+                              : <RefreshCw className="w-3.5 h-3.5" />} Reconnect
+                          </button>
+                        ) : (
+                          <button onClick={() => handleToggle(acc.id)} disabled={togglingId === acc.id}
+                            className="text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
+                            {togglingId === acc.id ? 'Updating…' : acc.status === 'Paused' ? 'Resume sending' : 'Pause'}
+                          </button>
+                        )}
                         <button onClick={() => setConfirmDelete(acc)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-700"><Trash2 className="w-3.5 h-3.5" /> Remove</button>
                       </div>
                     </div>
@@ -758,7 +790,7 @@ function SendingTab() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
             <h4 className="text-lg font-bold mb-3 text-black font-montserrat">Remove inbox?</h4>
-            <p className="text-sm text-secondary-dark mb-6">This disconnects <strong>{confirmDelete.email}</strong>. Scheduled emails from it will stop. You can reconnect anytime.</p>
+            <p className="text-sm text-secondary-dark mb-6">This disconnects <strong>{confirmDelete.email}</strong> and stops new sends from it. Its sending history is kept, and you can connect it again anytime. If it still has follow-ups scheduled in active threads, remove is blocked until those have sent — pause it instead.</p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setConfirmDelete(null)} className="px-4 py-2 text-sm font-semibold rounded-xl bg-neutral hover:bg-neutral-dark transition-colors">Cancel</button>
               <button onClick={() => handleDelete(confirmDelete.id)} className="px-4 py-2 text-sm font-semibold rounded-xl bg-red-600 text-white hover:bg-red-700 transition-colors">Remove</button>
