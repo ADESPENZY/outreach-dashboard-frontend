@@ -697,23 +697,37 @@ function SendingTab() {
                       )}
 
                       <div className="flex items-center justify-between pt-1">
-                        {acc.status === 'Issue' ? (
-                          // Reconnect — NOT Resume. Resume flips is_active true
-                          // without a fresh token, so the next send re-fails and
-                          // the inbox bounces straight back to Issue.
-                          <button onClick={() => handleReconnect(acc)}
-                            disabled={connectingGoogle || connectingOutlook}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
-                            {(connectingGoogle || connectingOutlook)
-                              ? <ApplyDirLoader.Button variant="light" />
-                              : <RefreshCw className="w-3.5 h-3.5" />} Reconnect
-                          </button>
-                        ) : (
-                          <button onClick={() => handleToggle(acc.id)} disabled={togglingId === acc.id}
-                            className="text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
-                            {togglingId === acc.id ? 'Updating…' : acc.status === 'Paused' ? 'Resume sending' : 'Pause'}
-                          </button>
-                        )}
+                        <div className="flex items-center gap-3">
+                          {acc.status === 'Issue' ? (
+                            // Revoked token: Reconnect is the ONLY sensible action.
+                            // Resume flips is_active true without a fresh token, so
+                            // the next send re-fails and it bounces back to Issue.
+                            <button onClick={() => handleReconnect(acc)}
+                              disabled={connectingGoogle || connectingOutlook}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                              {(connectingGoogle || connectingOutlook)
+                                ? <ApplyDirLoader.Button variant="light" />
+                                : <RefreshCw className="w-3.5 h-3.5" />} Reconnect
+                            </button>
+                          ) : (
+                            <>
+                              <button onClick={() => handleToggle(acc.id)} disabled={togglingId === acc.id}
+                                className="text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
+                                {togglingId === acc.id ? 'Updating…' : acc.status === 'Paused' ? 'Resume sending' : 'Pause'}
+                              </button>
+                              {/* A paused inbox may also be stale — always let the
+                                  user re-authorise it. (Re-consent upserts the same
+                                  row by email; safe and idempotent.) */}
+                              {acc.status === 'Paused' && (
+                                <button onClick={() => handleReconnect(acc)}
+                                  disabled={connectingGoogle || connectingOutlook}
+                                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light disabled:opacity-50">
+                                  <RefreshCw className="w-3.5 h-3.5" /> Reconnect
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                         <button onClick={() => setConfirmDelete(acc)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-700"><Trash2 className="w-3.5 h-3.5" /> Remove</button>
                       </div>
                     </div>
