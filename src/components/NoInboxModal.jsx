@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { toast } from 'react-toastify';
 import { Mail, X, Loader2 } from 'lucide-react';
-import { getGmailOAuthUrl, getOutlookOAuthUrl } from '../services/apiGmail';
 import { getProfile } from '../services/apiProfile';
+import { useConnectProvider } from '@/hooks/useConnectProvider';
 import PendingActivationCard from './PendingActivationCard';
 
 /**
@@ -16,44 +15,24 @@ import PendingActivationCard from './PendingActivationCard';
  * button — never a dead end, never a raw error.
  */
 function NoInboxModal({ onClose }) {
-  const [connecting, setConnecting] = useState(false);
-  const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [pendingGate, setPendingGate] = useState(false);
 
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
-  const isPending = pendingGate || (profile && profile.activation_status !== 'activated');
+  // Testing-mode activation gate DISABLED 2026-07-30 (OAuth app PUBLISHED — no
+  // allowlisting). Hardwired off so the connect buttons always render;
+  // PendingActivationCard + the pendingGate error path are retained for the
+  // planned invite-code gate (restore `pendingGate || (profile && profile.activation_status !== 'activated')` to re-gate).
+  const isPending = false;
 
-  const handleGoogleConnect = async () => {
-    setConnecting(true);
-    try {
-      const url = await getGmailOAuthUrl();
-      window.location.href = url; // off to Google; callback returns to Settings
-    } catch (e) {
-      setConnecting(false);
-      if ((e.message || '').includes('pending_activation')) {
-        setPendingGate(true); // flip to the white-glove state, no error toast
-      } else {
-        toast.error(e.message || 'Could not start the connection. Please try again.');
-      }
-    }
-  };
-
-  const handleOutlookConnect = async () => {
-    setConnectingOutlook(true);
-    try {
-      const url = await getOutlookOAuthUrl();
-      window.location.href = url; // off to Microsoft; callback returns to Settings
-    } catch (e) {
-      setConnectingOutlook(false);
-      if ((e.message || '').includes('pending_activation')) {
-        setPendingGate(true);
-      } else {
-        toast.error(e.message || 'Could not start the connection. Please try again.');
-      }
-    }
-  };
+  // Shared connect flow — this is the FIRST-RUN path, so it MUST go through the
+  // hook (and thus the Gmail pre-consent explainer), not its own redirect.
+  const {
+    connectingGoogle, connectingOutlook,
+    connectGoogle, connectOutlook, explainer,
+  } = useConnectProvider({ onPendingActivation: () => setPendingGate(true) });
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm px-4">
       <div className="bg-white rounded-2xl p-6 md:p-8 w-full max-w-md shadow-2xl border border-neutral-dark relative animate-fade-in">
         <button
@@ -90,16 +69,16 @@ function NoInboxModal({ onClose }) {
 
             <div className="flex flex-col gap-3">
               <button
-                onClick={handleGoogleConnect}
-                disabled={connecting || connectingOutlook}
+                onClick={connectGoogle}
+                disabled={connectingGoogle || connectingOutlook}
                 className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-gradient-to-r from-primary-light to-primary-dark hover:opacity-90 text-white font-bold font-montserrat rounded-xl shadow-md shadow-primary-light/30 transition-all active:scale-95 disabled:opacity-60"
               >
-                {connecting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
+                {connectingGoogle ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4" />}
                 Connect with Google
               </button>
               <button
-                onClick={handleOutlookConnect}
-                disabled={connecting || connectingOutlook}
+                onClick={connectOutlook}
+                disabled={connectingGoogle || connectingOutlook}
                 className="w-full flex items-center justify-center gap-2 py-3 px-5 bg-white border border-neutral-dark text-black-light font-bold font-montserrat rounded-xl hover:border-[#0A66C2]/50 hover:text-[#0A66C2] transition-all active:scale-95 disabled:opacity-60"
               >
                 {connectingOutlook ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mail className="w-4 h-4 text-[#0A66C2]" />}
@@ -120,6 +99,9 @@ function NoInboxModal({ onClose }) {
         )}
       </div>
     </div>
+    {/* Pre-consent explainer (Gmail only) — owned by useConnectProvider. */}
+    {explainer}
+    </>
   );
 }
 

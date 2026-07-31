@@ -752,11 +752,11 @@ const OutreachPage = () => {
   });
   const { data: inboxData } = useQuery({ queryKey: ['gmailAccounts'], queryFn: getGmailAccounts });
   const { data: profileData } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
-  // Pilot: the sending desk has been reserved but not yet activated by us —
-  // the connect banner becomes a quiet status chip instead of a CTA.
-  const deskBeingPrepared = !!(profileData
-    && profileData.activation_status !== 'activated'
-    && profileData.intended_gmail);
+  // Testing-mode activation gate DISABLED 2026-07-30 (OAuth app PUBLISHED — no
+  // allowlisting). Hardwired off so the connect banner is always the CTA, never
+  // the "being prepared" status chip. Retained for the planned invite-code gate
+  // (restore `!!(profileData && profileData.activation_status !== 'activated' && profileData.intended_gmail)` to re-gate).
+  const deskBeingPrepared = false;
 
   // Once they've sent an intro, they're "in the game" — flag the win so the
   // gentle push opt-in (PushPrompt) can offer reply alerts.

@@ -74,6 +74,13 @@ const Sidebar = ({ isOpen, onClose }) => {
   const shownInboxes = sortedInboxes.slice(0, 2);
   const totalInboxes = sortedInboxes.length;
 
+  // One inbox per provider during the pilot, so once Gmail AND Outlook are both
+  // connected there is nothing left to add — hide the Add entry point rather
+  // than send the user to a page that can only refuse them.
+  const hasGmail = allInboxes.some((a) => (a.provider || 'gmail') === 'gmail');
+  const hasOutlook = allInboxes.some((a) => a.provider === 'outlook');
+  const canAddInbox = !(hasGmail && hasOutlook);
+
   const itemClasses = (isActive) =>
     [
       'flex items-center gap-3 px-3 py-2.5 rounded-xl',
@@ -214,26 +221,30 @@ const Sidebar = ({ isOpen, onClose }) => {
             </Link>
           )}
 
-          <Link
-            to={CONNECTED_EMAILS_PATH}
-            onClick={onClose}
-            className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
-          >
-            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
-            Add Gmail
-          </Link>
+          {canAddInbox && (
+            <Link
+              to={CONNECTED_EMAILS_PATH}
+              onClick={onClose}
+              className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
+            >
+              <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+              Add Email
+            </Link>
+          )}
         </div>
 
         {/* CONNECTED INBOXES — icon-only Add when collapsed on desktop */}
         <div className={`pt-4 border-t border-neutral-dark flex-col items-center ${isCollapsed ? 'hidden md:flex' : 'hidden'}`}>
-          <Link
-            to={CONNECTED_EMAILS_PATH}
-            onClick={onClose}
-            title="Add Gmail"
-            className="flex items-center justify-center w-9 h-9 rounded-xl border-2 border-dashed border-neutral-dark text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-          </Link>
+          {canAddInbox && (
+            <Link
+              to={CONNECTED_EMAILS_PATH}
+              onClick={onClose}
+              title="Add Email"
+              className="flex items-center justify-center w-9 h-9 rounded-xl border-2 border-dashed border-neutral-dark text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+            </Link>
+          )}
         </div>
 
         {/* Settings gear — the very bottom */}

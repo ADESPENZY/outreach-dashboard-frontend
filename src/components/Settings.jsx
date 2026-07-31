@@ -14,7 +14,8 @@ import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } fro
 import { getProfile, updateProfile, uploadCV } from '@/services/apiProfile';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSettings';
 import { getInboxStats } from '@/services/apiInboxes';
-import { deleteGmailAccount, toggleGmailAccount, getGmailOAuthUrl, getOutlookOAuthUrl } from '@/services/apiGmail';
+import { deleteGmailAccount, toggleGmailAccount } from '@/services/apiGmail';
+import { useConnectProvider } from '@/hooks/useConnectProvider';
 import { useAuth } from '@/context/AuthContext';
 import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush, isIOS, isStandalone, pushFailureMessage } from '@/services/push';
 import { LegalSections } from '@/components/legal/PolicyContent';
@@ -511,14 +512,23 @@ function SendingTab() {
   const [togglingId, setTogglingId] = useState(null);
   const [autoFollow, setAutoFollow] = useState(true);
   const [savingAF, setSavingAF] = useState(false);
-  const [connectingGoogle, setConnectingGoogle] = useState(false);
-  const [connectingOutlook, setConnectingOutlook] = useState(false);
   const [pendingGate, setPendingGate] = useState(false);
   const [params, setParams] = useSearchParams();
 
-  // White-glove pilot gate: no connect buttons until a founder activates the
-  // account (PendingActivationCard shows instead — never a dead end).
-  const isPendingActivation = pendingGate || (profile && profile.activation_status !== 'activated');
+  // Single owner of the connect flow (explainer → OAuth redirect). Both the
+  // connect buttons and reconnect use it; Gmail gets the pre-consent explainer,
+  // Outlook and reconnect skip it. `explainer` is rendered near the modals below.
+  const {
+    connectingGoogle, connectingOutlook,
+    connectGoogle, connectOutlook, reconnect, explainer,
+  } = useConnectProvider({ onPendingActivation: () => setPendingGate(true) });
+
+  // Testing-mode activation gate DISABLED 2026-07-30 (Google OAuth app is now
+  // PUBLISHED — no allowlisting). Hardwired off so the connect buttons always
+  // render. PendingActivationCard + the pendingGate plumbing + activation_status
+  // are retained for the planned invite-code gate — to re-gate, restore the
+  // condition `pendingGate || (profile && profile.activation_status !== 'activated')`.
+  const isPendingActivation = false;
 
   useEffect(() => {
     if (profile) setAutoFollow(profile.job_preferences?.auto_followups ?? true);
@@ -538,8 +548,21 @@ function SendingTab() {
       params.delete('outlook_connected'); setParams(params, { replace: true });
     } else if (params.get('gmail_error')) {
       const code = params.get('gmail_error');
-      if (code === 'activation') {
-        setPendingGate(true);   // reached Google before activation — white-glove state
+      if (code === 'cancelled') {
+        // User backed out at Google's consent / unverified-app screen. Not an
+        // error — a reassuring nudge, with a Try again that re-opens the connect
+        // flow (which re-shows the pre-consent explainer).
+        toast.info(({ closeToast }) => (
+          <div>
+            <p className="text-sm">Sign-in cancelled. If Google's warning stopped you, tap Advanced → Go to ApplyDir — it's safe, we're just awaiting review.</p>
+            <button
+              onClick={() => { closeToast(); connectGoogle(); }}
+              className="mt-2 text-xs font-bold text-primary-dark hover:text-primary-light"
+            >
+              Try again
+            </button>
+          </div>
+        ));
       } else {
         toast.error(code === 'limit'
           ? 'You already have a Gmail connected. Disconnect it to switch.'
@@ -555,43 +578,6 @@ function SendingTab() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  const handleGoogleConnect = async () => {
-    setConnectingGoogle(true);
-    try {
-      const url = await getGmailOAuthUrl();
-      window.location.href = url;   // leave to Google; it returns to the callback
-    } catch (e) {
-      setConnectingGoogle(false);
-      if ((e.message || '').includes('pending_activation')) {
-        setPendingGate(true);       // white-glove state, not an error
-      } else {
-        toast.error(e.message);
-      }
-    }
-  };
-
-  const handleOutlookConnect = async () => {
-    setConnectingOutlook(true);
-    try {
-      const url = await getOutlookOAuthUrl();
-      window.location.href = url;   // leave to Microsoft; it returns to the callback
-    } catch (e) {
-      setConnectingOutlook(false);
-      if ((e.message || '').includes('pending_activation')) {
-        setPendingGate(true);
-      } else {
-        toast.error(e.message);
-      }
-    }
-  };
-
-  // Reconnect an 'Issue' inbox: re-run the SAME OAuth flow. Re-consenting with
-  // the same address updates the existing row in place (backend upsert-by-email)
-  // — token refreshed, reactivated, flags cleared. Works regardless of the
-  // !hasGmail connect-button gate, since the dead inbox still counts as present.
-  const handleReconnect = (acc) =>
-    (acc.provider === 'outlook' ? handleOutlookConnect() : handleGoogleConnect());
 
   const handleToggle = async (id) => { setTogglingId(id); try { await toggleGmailAccount(id); refresh(); } catch (e) { toast.error(e.message); } finally { setTogglingId(null); } };
   const handleDelete = async (id) => { try { await deleteGmailAccount(id); toast.success('Inbox removed.'); refresh(); } catch (e) { toast.error(e.message); } setConfirmDelete(null); };
@@ -609,12 +595,6 @@ function SendingTab() {
   // when that provider isn't already connected.
   const hasGmail = accounts.some(a => (a.provider || 'gmail') === 'gmail');
   const hasOutlook = accounts.some(a => a.provider === 'outlook');
-  // Capacity = the ENFORCED (age-ramped) limit, not the raw ceiling — honest.
-  // A Paused or Issue inbox isn't sending, so it contributes nothing today.
-  const activeAccounts = accounts.filter(a => a.status !== 'Paused' && a.status !== 'Issue');
-  const totalCapacity = activeAccounts.reduce((s, a) => s + (a.effective_daily_limit ?? a.daily_send_limit ?? 0), 0);
-  // New-introductions budget across active inboxes (limit // 4 each, from the API).
-  const totalNewPerDay = activeAccounts.reduce((s, a) => s + (a.new_budget ?? Math.max(1, Math.floor((a.effective_daily_limit ?? 0) / 4))), 0);
 
   // Signature preview values
   const name = profile?.full_name || me?.first_name || 'Your Name';
@@ -625,7 +605,7 @@ function SendingTab() {
   return (
     <>
       {/* Section A — Connected inboxes */}
-      <Collapsible title="Connected Inboxes" description="The Gmail accounts your introductions send from." icon={Mail} defaultOpen>
+      <Collapsible title="Connected Inboxes" description="The inboxes your introductions send from." icon={Mail} defaultOpen>
         {isLoading ? <ApplyDirLoader.Inline /> : (
           <>
             {accounts.length === 0 ? (
@@ -661,12 +641,18 @@ function SendingTab() {
                         </span>
                         <span className="text-secondary-dark">Sent today</span>
                         <span className="text-black-light font-semibold text-right">{acc.sent_today}/{enforced}</span>
-                        {acc.new_budget != null && (
+                        {/* Both numbers come from allocate_daily_budget, so this
+                            is exactly what the send path will allow today. */}
+                        {acc.original_budget != null && (
                           <>
                             <span className="text-secondary-dark">New intros today</span>
                             <span className="text-black-light font-semibold text-right">
-                              {acc.new_sent_today ?? 0}/{acc.new_budget}
-                              <span className="text-secondary-dark font-normal"> · follow-ups take the rest</span>
+                              {acc.new_sent_today ?? 0}/{acc.original_budget}
+                              {acc.followups_due > 0 && (
+                                <span className="text-secondary-dark font-normal">
+                                  {' '}· {acc.followups_due} follow-up{acc.followups_due === 1 ? '' : 's'} reserved
+                                </span>
+                              )}
                             </span>
                           </>
                         )}
@@ -681,7 +667,7 @@ function SendingTab() {
 
                       {warming && acc.status !== 'Issue' && (
                         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 leading-snug">
-                          New inbox warming up — its daily limit ramps <strong>5 → 10 → 20</strong> over ~2 weeks so Gmail trusts it. This is the number actually enforced today.
+                          Building your reputation — new inboxes start at 5 introductions a day and grow to 20 over about two weeks. Sending slowly at first is what keeps you out of spam later.
                         </p>
                       )}
 
@@ -702,7 +688,7 @@ function SendingTab() {
                             // Revoked token: Reconnect is the ONLY sensible action.
                             // Resume flips is_active true without a fresh token, so
                             // the next send re-fails and it bounces back to Issue.
-                            <button onClick={() => handleReconnect(acc)}
+                            <button onClick={() => reconnect(acc)}
                               disabled={connectingGoogle || connectingOutlook}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
                               {(connectingGoogle || connectingOutlook)
@@ -719,7 +705,7 @@ function SendingTab() {
                                   user re-authorise it. (Re-consent upserts the same
                                   row by email; safe and idempotent.) */}
                               {acc.status === 'Paused' && (
-                                <button onClick={() => handleReconnect(acc)}
+                                <button onClick={() => reconnect(acc)}
                                   disabled={connectingGoogle || connectingOutlook}
                                   className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light disabled:opacity-50">
                                   <RefreshCw className="w-3.5 h-3.5" /> Reconnect
@@ -745,12 +731,12 @@ function SendingTab() {
             ) : (
               <div className="flex flex-col gap-2 pt-1">
                 {!hasGmail && (
-                  <button onClick={handleGoogleConnect} disabled={connectingGoogle} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                  <button onClick={connectGoogle} disabled={connectingGoogle} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-sm font-semibold rounded-xl hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
                     {connectingGoogle ? <ApplyDirLoader.Button variant="light" /> : <Mail className="w-4 h-4" />} Connect Gmail with Google
                   </button>
                 )}
                 {!hasOutlook && (
-                  <button onClick={handleOutlookConnect} disabled={connectingOutlook} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-neutral-dark text-black-light text-sm font-semibold rounded-xl hover:border-[#0A66C2]/50 hover:text-[#0A66C2] transition-all disabled:opacity-60">
+                  <button onClick={connectOutlook} disabled={connectingOutlook} className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-neutral-dark text-black-light text-sm font-semibold rounded-xl hover:border-[#0A66C2]/50 hover:text-[#0A66C2] transition-all disabled:opacity-60">
                     {connectingOutlook ? <ApplyDirLoader.Button /> : <Mail className="w-4 h-4 text-[#0A66C2]" />} Connect Outlook
                   </button>
                 )}
@@ -758,8 +744,7 @@ function SendingTab() {
             )}
             <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> One click, no passwords, ever. We can only send introductions you approve and read the replies to them; nothing else in your inbox.</p>
             <p className="text-xs text-secondary-dark leading-relaxed">
-              Your inbox sends about <span className="font-semibold text-black">5 new introductions a day</span>, with the rest of its daily limit reserved for follow-ups (where most replies come from)
-              {totalCapacity > 0 && <> — right now that's about <span className="font-semibold text-black">{totalNewPerDay} new contact{totalNewPerDay === 1 ? '' : 's'}</span> and <span className="font-semibold text-black">{totalCapacity} total emails</span> per day.</>}
+              20 introductions a day — about 5 new ones, with the rest going to follow-ups. Most replies come from follow-ups, so that's where the room is reserved.
             </p>
           </>
         )}
@@ -812,6 +797,9 @@ function SendingTab() {
           </div>
         </div>
       )}
+
+      {/* Pre-consent explainer (Gmail only) — owned by useConnectProvider. */}
+      {explainer}
     </>
   );
 }
