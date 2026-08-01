@@ -88,6 +88,38 @@ const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base' }) => {
     );
 };
 
+// Card age line. posted_at is the employer's own posting date but is absent on
+// ~56% of rows (LinkedIn/Workday/Indeed never supply it), so we fall back to
+// created_at — when WE found it — under a different verb rather than passing a
+// scrape date off as a posting date. posted_at is a DATE, so it has no hours.
+// isFresh drives the urgency nudge and is deliberately NEVER true on the
+// created_at fallback: a month-old job scraped today is not a fresh posting.
+const postedAge = (job) => {
+    const short = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    if (job.posted_at) {
+        const d = new Date(`${job.posted_at}T00:00:00`);
+        const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+        if (days <= 0) return { label: 'Posted today', isFresh: true };
+        if (days === 1) return { label: 'Posted yesterday', isFresh: true };
+        if (days < 7) return { label: `Posted ${days} days ago`, isFresh: false };
+        const weeks = Math.floor(days / 7);
+        if (weeks < 5) return { label: `Posted ${weeks} week${weeks === 1 ? '' : 's'} ago`, isFresh: false };
+        return { label: `Posted ${short(d)}`, isFresh: false };
+    }
+
+    if (!job.created_at) return { label: '', isFresh: false };
+    const d = new Date(job.created_at);
+    const hours = Math.floor(Math.max(0, Date.now() - d.getTime()) / 3600000);
+    if (hours < 1) return { label: 'Found just now', isFresh: false };
+    if (hours < 24) return { label: `Found ${hours} hour${hours === 1 ? '' : 's'} ago`, isFresh: false };
+    const days = Math.floor(hours / 24);
+    if (days < 7) return { label: `Found ${days} day${days === 1 ? '' : 's'} ago`, isFresh: false };
+    const weeks = Math.floor(days / 7);
+    if (weeks < 5) return { label: `Found ${weeks} week${weeks === 1 ? '' : 's'} ago`, isFresh: false };
+    return { label: `Found ${short(d)}`, isFresh: false };
+};
+
 const NEGATIVE_RE = /(does ?not|does ?n['’]?t|\bweak\b|\bfails?\b|not match|not align|\black(s|ing)?\b|\bmissing\b|mismatch|\bgaps?\b|\bunfortunately\b|\bpoor(ly)?\b|unrelated|irrelevant)/i;
 const positiveReason = (text) =>
     (!text || NEGATIVE_RE.test(text))
@@ -372,6 +404,7 @@ const JobsPage = () => {
         const match = matchStrength(job.fit_score);
         const reason = positiveReason(job.fit_reasoning);
         const state = cardState(job);
+        const age = postedAge(job);
         const pendingThisJob = updateStatusMutation.isPending && updateStatusMutation.variables?.id === job.id;
         const approvePending = pendingThisJob && updateStatusMutation.variables?.newStatus === 'approved';
         const rejectPending  = pendingThisJob && ['rejected', 'expired'].includes(updateStatusMutation.variables?.newStatus);
@@ -409,12 +442,22 @@ const JobsPage = () => {
                         {job.salary_info && (
                             <p className="text-sm font-semibold text-emerald-600 mt-1">{job.salary_info}</p>
                         )}
+                        {age.label && (
+                            <p className="text-xs text-secondary-dark/80 mt-1">{age.label}</p>
+                        )}
                     </div>
                 </div>
 
                 <span className={`mt-3 self-start inline-flex items-center rounded-md border ${match.badge}`}>
                     {match.label}
                 </span>
+
+                {state === 'new' && age.isFresh && (
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-amber-600">
+                        <Clock className="w-3.5 h-3.5 shrink-0" />
+                        Reply odds are highest in the first 48 hours.
+                    </p>
+                )}
 
                 <p className="mt-3 text-sm italic text-secondary-dark leading-relaxed border-l-2 border-neutral-dark bg-neutral/50 rounded-r-lg pl-3 py-2 transition-colors duration-300 group-hover:bg-primary-light/5">
                     {reason}
