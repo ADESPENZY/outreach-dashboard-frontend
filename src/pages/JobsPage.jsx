@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useSearchParams } from 'react-router';
@@ -22,24 +22,17 @@ import ApplyDirectModal from '../components/ApplyDirectModal';
 import BroadenSearchNudge from '../components/BroadenSearchNudge';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
-// Curated roles the headhunter found. Cards resolve IN PLACE: acting on one
-// never moves it to another section, so the grid never rearranges under the
-// user's cursor.
-//   • Review queue: new + in-flight (working/queued) cards, 9/page.
-//   • Apply directly: no-contact jobs, collapsed at the bottom.
+// Curated roles the headhunter found, organised by lifecycle so the review flow
+// is never blocked:
+//   • In progress (Section A): cards actively finding a contact + drafting.
+//     Capped at 3 working per user by the backend; extras queue silently.
+//   • For your review (Section B): the main queue — new, unacted jobs, 9/page.
+//   • Apply directly (Section C): no-contact jobs, collapsed at the bottom.
 // Filter tabs let the user focus (e.g. "Contact found" = the highest-value cards).
-//
-// Three invariants this page guarantees:
-//   1. A spinner NEVER runs past RESOLVE_TIMEOUT_MS. On expiry the card is
-//      force-resolved to Apply Direct locally, whatever the backend is doing.
-//   2. At most MAX_WORKING cards are in flight; the rest show a calm "Queued".
-//   3. At most ONE toast is visible, and only for RESULTS — never for starts.
 
 const ITEMS_PER_PAGE = 9;
-const MAX_WORKING = 3;              // mirrors backend MAX_CONCURRENT_AUTODRAFT
-const RESOLVE_TIMEOUT_MS = 90000;   // hard ceiling on any "finding…" spinner
-const POLL_MS = 4000;               // status poll cadence while work is in flight
-const TOAST_BATCH_MS = 5000;        // results inside this window merge into one toast
+const MAX_WORKING = 3;            // mirrors backend MAX_CONCURRENT_AUTODRAFT
+const COMPLETE_HOLD_MS = 3000;    // "Found Sarah Chen ✓" dwell before the card fades
 
 const GRID_STAGGER = {
     hidden: {},
@@ -159,84 +152,16 @@ const JobsPage = () => {
     const [showPersonalization, setShowPersonalization] = useState(false);
     const [drawerJobId, setDrawerJobId] = useState(null);
     const [applyModal, setApplyModal] = useState(null);
+    // Ids the user just acted on, most-recent first — orders the in-progress tray.
+    const [actedOrder, setActedOrder] = useState([]);
     // Which filter tab is active.
     const [activeTab, setActiveTab] = useState('all');
-    // Collapsed Apply-Direct section in the All view.
+    // Collapsed Apply-Direct section (Section C) in the All view.
     const [applyExpanded, setApplyExpanded] = useState(false);
-    // Jobs whose spinner blew the 90s ceiling — presented as Apply Direct.
-    const [timedOut, setTimedOut] = useState(() => new Set());
-    // Jobs that resolved to "no contact" while the user was watching. They keep
-    // their slot in the review grid and grow an Apply Direct button in place,
-    // rather than vanishing into the collapsed section at the foot of the page.
-    const [resolvedInPlace, setResolvedInPlace] = useState(() => new Set());
-
-    const handledRef   = useRef(new Set());   // ids we've already reported a result for
-    const timedOutRef  = useRef(new Set());   // sync mirror of `timedOut`
-    const inPlaceRef   = useRef(new Set());   // sync mirror of `resolvedInPlace`
-    const startedAtRef = useRef(new Map());   // jobId -> ms when its spinner began
-
-    // ── Toast discipline ──────────────────────────────────────────────────────
-    // One toast on screen at a time, results only. Messages queue behind the
-    // visible one and are pumped by its onClose; results arriving inside a
-    // TOAST_BATCH_MS window collapse into a single summary line.
-    const toastQueueRef = useRef([]);
-    const toastBusyRef  = useRef(false);
-    const resultBufRef  = useRef([]);
-    const batchTimerRef = useRef(null);
-
-    const pumpToasts = useCallback(() => {
-        if (toastBusyRef.current) return;
-        const next = toastQueueRef.current.shift();
-        if (!next) return;
-        toastBusyRef.current = true;
-        const show = next.kind === 'success' ? toast.success
-            : next.kind === 'error' ? toast.error
-            : toast.info;
-        show(next.text, {
-            onClose: () => { toastBusyRef.current = false; pumpToasts(); },
-        });
-    }, []);
-
-    const enqueueToast = useCallback((kind, text) => {
-        toastQueueRef.current.push({ kind, text });
-        pumpToasts();
-    }, [pumpToasts]);
-
-    const flushResults = useCallback(() => {
-        batchTimerRef.current = null;
-        const batch = resultBufRef.current;
-        resultBufRef.current = [];
-        if (!batch.length) return;
-
-        const ready = batch.filter((r) => r.kind === 'ready');
-        const none  = batch.filter((r) => r.kind === 'none');
-
-        if (ready.length >= 3) {
-            enqueueToast('success', `${ready.length} introductions ready — view on Introductions.`);
-        } else {
-            ready.forEach((r) => enqueueToast('success',
-                `Introduction ready for ${r.name} — view on Introductions.`));
-        }
-        if (none.length >= 3) {
-            enqueueToast('info', `Couldn't find a hiring manager for ${none.length} roles — you can apply directly.`);
-        } else {
-            none.forEach((r) => enqueueToast('info',
-                `Couldn't find a hiring manager at ${r.company} — you can apply directly.`));
-        }
-    }, [enqueueToast]);
-
-    // Window opens on the FIRST result and is not extended by later ones, so a
-    // steady trickle can never postpone the toast indefinitely.
-    const reportResult = useCallback((result) => {
-        resultBufRef.current.push(result);
-        if (!batchTimerRef.current) {
-            batchTimerRef.current = setTimeout(flushResults, TOAST_BATCH_MS);
-        }
-    }, [flushResults]);
-
-    useEffect(() => () => {
-        if (batchTimerRef.current) clearTimeout(batchTimerRef.current);
-    }, []);
+    // Cards mid-"completion moment": snapshot {id, name, title, company} shown in
+    // the tray with a success flourish for COMPLETE_HOLD_MS, then faded out.
+    const [completing, setCompleting] = useState([]);
+    const handledRef = useRef(new Set());   // dedupe completion / no-contact toasts
 
     const [searchParams] = useSearchParams();
     const isActivateRequested = searchParams.get('activate') === '1';
@@ -273,105 +198,65 @@ const JobsPage = () => {
         // Poll while a scrape is active (results stream in), or while anything is
         // still resolving (finding contact / drafting) or queued. Idle otherwise.
         refetchInterval: (query) =>
-            (isSearching || (query.state.data?.jobs || []).some((j) => ['working', 'queued'].includes(cardState(j)))) ? POLL_MS : false,
+            (isSearching || (query.state.data?.jobs || []).some((j) => ['working', 'queued'].includes(cardState(j)))) ? 4000 : false,
     });
 
-    // Stable identity per fetch — the 90s-ceiling effect depends on `jobs`, and a
-    // fresh array each render would tear its interval down before it could tick.
-    const jobs = useMemo(() => pageData?.jobs ?? [], [pageData]);
-
-    // Server state, with the local 90s force-resolve layered on top. The override
-    // only ever applies while the server still says working/queued — if the
-    // backend later produces a real result, that result wins.
-    const effState = (job) => {
-        const s = cardState(job);
-        if ((s === 'working' || s === 'queued') && timedOut.has(job.id)) return 'no_contact';
-        return s;
-    };
+    const jobs = pageData?.jobs ?? [];
 
     // ── Buckets ───────────────────────────────────────────────────────────────
-    // In-flight cards stay in the review queue at their existing index — that is
-    // what keeps the grid from rearranging when the user clicks Reach Out.
-    const workingJobs = jobs.filter((j) => effState(j) === 'working');
-    const queuedJobs  = jobs.filter((j) => effState(j) === 'queued');
-    const newJobs     = jobs.filter((j) => effState(j) === 'new');
-    const contactJobs = jobs.filter((j) => ['drafted', 'sent'].includes(effState(j)));
-    const applyJobs   = jobs.filter((j) => effState(j) === 'no_contact');
-    // A card the user watched resolve to "no contact" holds its slot here.
-    const reviewJobs  = jobs.filter((j) => {
-        const s = effState(j);
-        return ['new', 'working', 'queued'].includes(s)
-            || (s === 'no_contact' && resolvedInPlace.has(j.id));
-    });
-    // …and is therefore excluded from the collapsed section, so it isn't shown twice.
-    const applySectionJobs = applyJobs.filter((j) => !resolvedInPlace.has(j.id));
+    const completingIds = new Set(completing.map((c) => c.id));
+    const orderByActed = (a, b) => {
+        const ia = actedOrder.indexOf(a.id), ib = actedOrder.indexOf(b.id);
+        return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
+    };
+    const workingJobs = jobs.filter((j) => cardState(j) === 'working').sort(orderByActed);
+    const queuedJobs  = jobs.filter((j) => cardState(j) === 'queued').sort(orderByActed);
+    const newJobs     = jobs.filter((j) => cardState(j) === 'new');
+    // Contact-found cards still mid-completion animation live in the tray, not the grid.
+    const contactJobs = jobs.filter((j) => ['drafted', 'sent'].includes(cardState(j)) && !completingIds.has(j.id));
+    const applyJobs   = jobs.filter((j) => cardState(j) === 'no_contact');
 
-    const reviewCount    = newJobs.length;
-    const inProgressCount = workingJobs.length + queuedJobs.length;
-    const contactReady   = contactJobs.length;
-    const pickedCount    = reviewJobs.length + contactJobs.length + applySectionJobs.length;
-    const reviewedTotal  = analytics?.funnel?.find((s) => s.stage === 'Scraped')?.count ?? null;
+    const reviewCount   = newJobs.length;
+    const contactReady  = contactJobs.length;
+    const pickedCount    = newJobs.length + contactJobs.length + applyJobs.length;
+    const reviewedTotal = analytics?.funnel?.find((s) => s.stage === 'Scraped')?.count ?? null;
+
+    const trayCount = workingJobs.length + queuedJobs.length + completing.length;
 
     // ── Pagination over the review queue (New / All tabs) ─────────────────────
-    const totalPages = Math.max(1, Math.ceil(reviewJobs.length / ITEMS_PER_PAGE));
+    const totalPages = Math.max(1, Math.ceil(newJobs.length / ITEMS_PER_PAGE));
     useEffect(() => {
         if (currentPage > totalPages) setCurrentPage(totalPages);
     }, [currentPage, totalPages]);
     useEffect(() => { setCurrentPage(1); }, [activeTab]);
-    const pageNewJobs = reviewJobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+    const pageNewJobs = newJobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-    // ── Spinner ceiling ───────────────────────────────────────────────────────
-    // Every card we see in working/queued gets a start stamp — on click, and also
-    // on page load for cards that were already in flight (a spinner inherited from
-    // a previous session must still be bounded). Once the stamp is older than
-    // RESOLVE_TIMEOUT_MS the card is force-resolved to Apply Direct locally and
-    // reported once, no matter what the backend is doing.
+    // ── Completion / no-contact reconciliation ────────────────────────────────
+    // As acted-on jobs resolve: contact found → brief success flourish in the tray,
+    // then fade + toast (it now lives on Introductions); no contact → toast, and it
+    // drops into the Apply Direct section.
     useEffect(() => {
-        const active = jobs.filter((j) => ['working', 'queued'].includes(cardState(j)));
-        const now = Date.now();
-        active.forEach((j) => {
-            if (!startedAtRef.current.has(j.id)) startedAtRef.current.set(j.id, now);
-        });
-        if (!active.length) return undefined;
-
-        const tick = () => {
-            const t = Date.now();
-            const expired = active.filter((j) => {
-                const t0 = startedAtRef.current.get(j.id);
-                return t0 && t - t0 >= RESOLVE_TIMEOUT_MS && !timedOutRef.current.has(j.id);
-            });
-            if (!expired.length) return;
-            expired.forEach((j) => {
-                timedOutRef.current.add(j.id);
-                inPlaceRef.current.add(j.id);   // keep its slot; don't drop to the bottom
-                handledRef.current.add(j.id);   // never double-report if the server lands later
-                startedAtRef.current.delete(j.id);
-                reportResult({ kind: 'none', company: j.company_name });
-            });
-            setTimedOut(new Set(timedOutRef.current));
-            setResolvedInPlace(new Set(inPlaceRef.current));
-        };
-        tick();                                   // catch anything already past the line
-        const id = setInterval(tick, 1000);
-        return () => clearInterval(id);
-    }, [jobs, reportResult]);
-
-    // ── Result reporting ──────────────────────────────────────────────────────
-    // Only jobs we actually saw spinning produce a toast, and only once each.
-    useEffect(() => {
-        jobs.forEach((j) => {
-            if (!startedAtRef.current.has(j.id) || handledRef.current.has(j.id)) return;
+        if (actedOrder.length === 0) return;
+        const byId = Object.fromEntries(jobs.map((j) => [j.id, j]));
+        actedOrder.forEach((id) => {
+            const j = byId[id];
+            if (!j) return;
             const s = cardState(j);
-            if (s === 'drafted' || s === 'sent') {
-                handledRef.current.add(j.id);
-                startedAtRef.current.delete(j.id);
-                reportResult({ kind: 'ready', name: j.contact_name || 'the hiring manager' });
-            } else if (s === 'no_contact') {
-                handledRef.current.add(j.id);
-                startedAtRef.current.delete(j.id);
-                inPlaceRef.current.add(j.id);
-                setResolvedInPlace(new Set(inPlaceRef.current));
-                reportResult({ kind: 'none', company: j.company_name });
+            if ((s === 'drafted' || s === 'sent') && !handledRef.current.has(id)) {
+                handledRef.current.add(id);
+                const name = j.contact_name || 'the hiring manager';
+                setCompleting((prev) => prev.some((c) => c.id === id)
+                    ? prev
+                    : [...prev, { id, name, title: j.contact_title || '', company: j.company_name }]);
+                setTimeout(() => {
+                    setCompleting((prev) => prev.filter((c) => c.id !== id));
+                    setActedOrder((prev) => prev.filter((x) => x !== id));
+                    toast.success(`Introduction ready for ${name} — view on Introductions.`);
+                }, COMPLETE_HOLD_MS);
+            } else if (s === 'no_contact' && !handledRef.current.has(id)) {
+                handledRef.current.add(id);
+                setActedOrder((prev) => prev.filter((x) => x !== id));
+                toast.info(`Couldn't find a hiring manager at ${j.company_name} — you can apply directly.`);
             }
         });
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -387,13 +272,7 @@ const JobsPage = () => {
                 if (!old?.jobs) return old;
                 let list = old.jobs;
                 if (newStatus === 'approved') {
-                    // Decide queued-vs-working locally so the card shows the right
-                    // calm state on the very first frame; the server confirms below.
-                    const active = list.filter((j) => cardState(j) === 'working').length;
-                    const willQueue = active >= MAX_WORKING;
-                    list = list.map((j) => j.id === id
-                        ? { ...j, status: 'approved', has_draft: false, is_queued: willQueue }
-                        : j);
+                    list = list.map((j) => j.id === id ? { ...j, status: 'approved', has_draft: false, is_queued: false } : j);
                 } else if (newStatus === 'rejected' || newStatus === 'expired') {
                     list = list.filter((j) => j.id !== id);
                 }
@@ -401,18 +280,25 @@ const JobsPage = () => {
             });
             return { prev };
         },
-        onSuccess: (data, { id, newStatus }) => {
-            // No toast on start and none on queue — starting work is not a result.
+        onSuccess: (data, { id, newStatus, silent }) => {
             if (newStatus === 'approved') {
-                queryClient.setQueryData(['jobs-page', 'opportunities'], (old) => old?.jobs
-                    ? { ...old, jobs: old.jobs.map((j) => j.id === id ? { ...j, is_queued: !!data?.queued } : j) }
-                    : old);
+                if (data?.queued) {
+                    // Reflect the queued state so the tray shows "Queued", not a spinner.
+                    queryClient.setQueryData(['jobs-page', 'opportunities'], (old) => old?.jobs
+                        ? { ...old, jobs: old.jobs.map((j) => j.id === id ? { ...j, is_queued: true } : j) }
+                        : old);
+                    toast.info('Queued — your headhunter will get to this shortly.');
+                } else {
+                    toast.success('Finding the hiring manager — drafting your intro…');
+                }
+            } else if (newStatus === 'rejected' && !silent) {
+                toast.success('Skipped. Your headhunter will keep looking.');
             }
             queryClient.invalidateQueries({ queryKey: ['analytics'] });
         },
         onError: (err, _vars, ctx) => {
             if (ctx?.prev) queryClient.setQueryData(['jobs-page', 'opportunities'], ctx.prev);
-            enqueueToast('error', err.message || 'Something went wrong. Please try again.');
+            toast.error(err.message || 'Something went wrong. Please try again.');
         },
         onSettled: () => queryClient.invalidateQueries({ queryKey: ['jobs-page'] }),
     });
@@ -420,14 +306,11 @@ const JobsPage = () => {
     const handleUpdateStatus = (id, newStatus, silent = false) =>
         updateStatusMutation.mutate({ id, newStatus, silent });
 
-    // Reach Out → approve; contact search + draft happen in the background. The
-    // card does NOT move — it resolves in place. Stamp the start time here so the
-    // 90s ceiling is measured from the click, not from the next poll.
+    // Reach Out → approve; contact search + draft happen in the background.
     const approveJob = (jobId) => {
         setDrawerJobId(null);
+        setActedOrder((prev) => [jobId, ...prev.filter((x) => x !== jobId)]);
         handledRef.current.delete(jobId);
-        timedOutRef.current.delete(jobId);
-        startedAtRef.current.set(jobId, Date.now());
         handleUpdateStatus(jobId, 'approved');
     };
     const handleReachOut = (jobId) => {
@@ -456,7 +339,7 @@ const JobsPage = () => {
         if (job.apply_url) window.open(job.apply_url, '_blank', 'noopener,noreferrer');
         try { await trackJob(job.id, 'applied'); } catch { /* non-blocking */ }
         handleUpdateStatus(job.id, 'expired', true);
-        enqueueToast('success', "Good luck! We're tracking this on your Progress page.");
+        toast.success("Good luck! We're tracking this on your Progress page.");
     };
     // Generate CV — open the tailored-CV modal for this role.
     const generateCV = (job) => setApplyModal({ job, track: true });
@@ -475,13 +358,52 @@ const JobsPage = () => {
 
     // ── Renderers ─────────────────────────────────────────────────────────────
 
-    // The one card used everywhere in the grid. Plain render fn (not a nested
-    // component) so it never remounts mid-animation.
+    // Compact tray card for the "In progress" section (working / queued / done).
+    // Plain render fn (not a nested component) so it never remounts mid-animation.
+    const trayCard = (job, { variant, done, key }) => (
+        <motion.div
+            key={key}
+            layout
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -14, transition: { duration: 0.4, ease: 'easeInOut' } }}
+            className={`relative overflow-hidden bg-white rounded-2xl border shadow-sm p-4 flex items-start gap-3 ${
+                done ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-l-4 border-l-primary-light border-neutral-dark'}`}
+        >
+            {done ? (
+                <span className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-montserrat font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
+                    <CheckCircle2 className="w-5 h-5" />
+                </span>
+            ) : (
+                <CompanyLogo job={job} size="w-10 h-10" text="" />
+            )}
+            <div className="min-w-0 flex-1">
+                <h3 className="font-montserrat text-sm font-bold text-black-light leading-snug line-clamp-1">{job.title}</h3>
+                <p className="text-xs text-secondary-dark truncate">{job.company_name}</p>
+                {done ? (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
+                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">Found {done.name}{done.title ? `, ${done.title}` : ''} — see your intro</span>
+                    </p>
+                ) : variant === 'queued' ? (
+                    <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-secondary-dark">
+                        <Clock className="w-3.5 h-3.5 shrink-0" /> Queued — starting shortly
+                    </p>
+                ) : (
+                    <p className="mt-2 flex items-center gap-1.5 text-xs text-primary-dark">
+                        <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                        <span className="truncate">Finding the hiring manager…</span>
+                    </p>
+                )}
+            </div>
+        </motion.div>
+    );
+
+    // Full review/apply card used in the grid. Plain render fn (see trayCard).
     const fullCard = (job) => {
         const match = matchStrength(job.fit_score);
         const reason = positiveReason(job.fit_reasoning);
-        const state = effState(job);
-        const inFlight = state === 'working' || state === 'queued';
+        const state = cardState(job);
         const age = postedAge(job);
         const pendingThisJob = updateStatusMutation.isPending && updateStatusMutation.variables?.id === job.id;
         const approvePending = pendingThisJob && updateStatusMutation.variables?.newStatus === 'approved';
@@ -493,9 +415,9 @@ const JobsPage = () => {
                 layout
                 variants={CARD_ITEM}
                 exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
-                whileHover={state === 'new' ? { y: -6, transition: { duration: 0.3, ease: 'easeOut' } } : undefined}
+                whileHover={{ y: -6, transition: { duration: 0.3, ease: 'easeOut' } }}
                 onClick={() => state === 'new' && setDrawerJobId(job.id)}
-                className={`group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 ${state === 'new' ? 'cursor-pointer hover:-translate-y-1.5' : ''} ${['drafted', 'sent'].includes(state) ? 'border-l-4 border-l-emerald-400' : ''} ${inFlight ? 'border-l-4 border-l-primary-light' : ''}`}
+                className={`group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 ${state === 'new' ? 'cursor-pointer hover:-translate-y-1.5' : ''} ${['drafted', 'sent'].includes(state) ? 'border-l-4 border-l-emerald-400' : ''}`}
             >
                 <span className={`absolute inset-x-0 top-0 h-1 ${match.accent}`} />
 
@@ -561,16 +483,6 @@ const JobsPage = () => {
                         <UserX className="w-3.5 h-3.5 text-secondary-dark shrink-0" />
                         <span>No hiring manager found for this role</span>
                     </div>
-                ) : state === 'working' ? (
-                    <div className="mt-3 flex items-center gap-1.5 text-xs text-primary-dark min-h-[1.25rem]">
-                        <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
-                        <span className="truncate">Finding hiring manager…</span>
-                    </div>
-                ) : state === 'queued' ? (
-                    <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
-                        <Clock className="w-3.5 h-3.5 shrink-0" />
-                        <span>Queued</span>
-                    </div>
                 ) : (
                     <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
                         <Search className="w-3.5 h-3.5 text-secondary-dark/50 shrink-0" />
@@ -599,14 +511,6 @@ const JobsPage = () => {
                                     ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
                                     : <>Reach Out <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
                             </button>
-                        </div>
-                    ) : inFlight ? (
-                        // Processing happens in place: a calm status bar where the
-                        // buttons were, so the card's height and position never change.
-                        <div className="w-full inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 bg-neutral text-secondary-dark font-semibold font-montserrat text-sm cursor-default select-none">
-                            {state === 'working'
-                                ? <><Loader2 className="w-4 h-4 shrink-0 animate-spin text-primary-light" /> Finding hiring manager…</>
-                                : <><Clock className="w-4 h-4 shrink-0" /> Queued</>}
                         </div>
                     ) : (state === 'drafted' || state === 'sent') ? (
                         <button
@@ -698,7 +602,7 @@ const JobsPage = () => {
         </motion.div>
     );
 
-    const nothingAtAll = !loading && pickedCount === 0;
+    const nothingAtAll = !loading && pickedCount === 0 && trayCount === 0;
 
     // What the active tab renders below the tray.
     const renderTabBody = () => {
@@ -710,11 +614,10 @@ const JobsPage = () => {
             return applyJobs.length ? grid(applyJobs)
                 : <p className="text-sm text-secondary-dark py-8 text-center">No apply-direct roles right now.</p>;
         }
-        // 'all' and 'new' both lead with the review queue (paginated). In-flight
-        // cards stay in this list at their own index — that is the no-jump rule.
+        // 'all' and 'new' both lead with the New review queue (paginated).
         return (
             <>
-                {reviewJobs.length > 0 ? grid(pageNewJobs) : (
+                {newJobs.length > 0 ? grid(pageNewJobs) : (
                     activeTab === 'new'
                         ? <p className="text-sm text-secondary-dark py-8 text-center">Nothing new to review — you&rsquo;re all caught up.</p>
                         : null
@@ -741,7 +644,7 @@ const JobsPage = () => {
                 )}
 
                 {/* Section C — Apply directly, collapsed at the bottom (All view only). */}
-                {activeTab === 'all' && applySectionJobs.length > 0 && (
+                {activeTab === 'all' && applyJobs.length > 0 && (
                     <div className="mt-8 border-t border-neutral-dark pt-6">
                         <button
                             onClick={() => setApplyExpanded((v) => !v)}
@@ -750,7 +653,7 @@ const JobsPage = () => {
                             <span className="flex items-center gap-2 min-w-0">
                                 <UserX className="w-4 h-4 text-secondary-dark shrink-0" />
                                 <span className="text-sm font-semibold text-black-light">
-                                    Apply directly ({applySectionJobs.length})
+                                    Apply directly ({applyJobs.length})
                                 </span>
                                 <span className="text-xs text-secondary-dark truncate hidden sm:inline">
                                     — no hiring manager found for these roles
@@ -767,7 +670,7 @@ const JobsPage = () => {
                                     transition={{ duration: 0.25, ease: 'easeInOut' }}
                                     className="overflow-hidden"
                                 >
-                                    <div className="pt-6">{grid(applySectionJobs)}</div>
+                                    <div className="pt-6">{grid(applyJobs)}</div>
                                 </motion.div>
                             )}
                         </AnimatePresence>
@@ -848,11 +751,32 @@ const JobsPage = () => {
                                 {contactReady > 0 && (
                                     <> · <span className="font-bold text-emerald-600">{contactReady}</span> {contactReady === 1 ? 'has' : 'have'} a hiring manager ready</>
                                 )}
-                                {inProgressCount > 0 && (
-                                    <> · <span className="font-bold text-black-light">{inProgressCount}</span> in progress</>
-                                )}
                             </p>
                         </div>
+                    )}
+
+                    {/* ── Section A — In progress (working + queued + completing) ──── */}
+                    {trayCount > 0 && (
+                        <section className="space-y-3">
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/70">
+                                    In progress
+                                </h2>
+                                {workingJobs.length >= MAX_WORKING && (
+                                    <span className="text-[11px] text-secondary-dark">· working on {MAX_WORKING} at a time</span>
+                                )}
+                            </div>
+                            <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                <AnimatePresence mode="popLayout">
+                                    {completing.map((c) => {
+                                        const job = jobs.find((j) => j.id === c.id) || { id: c.id, title: c.title, company_name: c.company };
+                                        return trayCard(job, { done: c, key: `done-${c.id}` });
+                                    })}
+                                    {workingJobs.map((job) => trayCard(job, { variant: 'working', key: job.id }))}
+                                    {queuedJobs.map((job) => trayCard(job, { variant: 'queued', key: job.id }))}
+                                </AnimatePresence>
+                            </motion.div>
+                        </section>
                     )}
 
                     {/* ── Filter tabs ─────────────────────────────────────────────── */}
@@ -860,7 +784,7 @@ const JobsPage = () => {
                         <div className="flex flex-wrap items-center gap-2">
                             {tabButton('all', 'All', pickedCount)}
                             {tabButton('contact', 'Contact found', contactReady, true)}
-                            {tabButton('new', 'New', reviewJobs.length)}
+                            {tabButton('new', 'New', reviewCount)}
                             {tabButton('apply', 'Apply direct', applyJobs.length)}
                         </div>
                     )}
