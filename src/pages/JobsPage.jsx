@@ -50,6 +50,44 @@ const matchStrength = (score) => {
     return { label: 'Fair match', badge: 'px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border-gray-200', accent: 'bg-neutral-200' };
 };
 
+// `company_website` arrives in two shapes depending on which resolver filled it
+// — a bare domain ('medal.tv') from resolve_company_website, or a full URL from
+// the GPT company-resolution path. Normalise to the bare host for the logo CDN.
+const logoDomain = (site) => {
+    const raw = (site || '').trim();
+    if (!raw) return '';
+    return raw
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '')
+        .split(/[/?#]/)[0]
+        .toLowerCase();
+};
+
+// Company logo with the letter-avatar as fallback. Falls back when there's no
+// resolved domain (common on job-board sources) or the logo 404s. Module-level,
+// not nested in JobsPage, so it never remounts mid-animation.
+const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base' }) => {
+    const [failed, setFailed] = useState(false);
+    const domain = logoDomain(job.company_website);
+
+    if (domain && !failed) {
+        return (
+            <img
+                src={`https://logo.clearbit.com/${domain}`}
+                alt=""
+                loading="lazy"
+                onError={() => setFailed(true)}
+                className={`${size} shrink-0 rounded-xl border border-neutral-dark bg-white object-contain`}
+            />
+        );
+    }
+    return (
+        <span className={`${size} shrink-0 rounded-xl bg-neutral text-secondary-dark border border-neutral-dark flex items-center justify-center font-montserrat font-bold ${text}`}>
+            {(job.company_name || '?').trim().charAt(0).toUpperCase()}
+        </span>
+    );
+};
+
 const NEGATIVE_RE = /(does ?not|does ?n['’]?t|\bweak\b|\bfails?\b|not match|not align|\black(s|ing)?\b|\bmissing\b|mismatch|\bgaps?\b|\bunfortunately\b|\bpoor(ly)?\b|unrelated|irrelevant)/i;
 const positiveReason = (text) =>
     (!text || NEGATIVE_RE.test(text))
@@ -300,10 +338,13 @@ const JobsPage = () => {
             className={`relative overflow-hidden bg-white rounded-2xl border shadow-sm p-4 flex items-start gap-3 ${
                 done ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-l-4 border-l-primary-light border-neutral-dark'}`}
         >
-            <span className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-montserrat font-bold ${
-                done ? 'bg-emerald-50 text-emerald-600 border border-emerald-200' : 'bg-neutral text-secondary-dark border border-neutral-dark'}`}>
-                {done ? <CheckCircle2 className="w-5 h-5" /> : (job.company_name || '?').trim().charAt(0).toUpperCase()}
-            </span>
+            {done ? (
+                <span className="w-10 h-10 shrink-0 rounded-xl flex items-center justify-center font-montserrat font-bold bg-emerald-50 text-emerald-600 border border-emerald-200">
+                    <CheckCircle2 className="w-5 h-5" />
+                </span>
+            ) : (
+                <CompanyLogo job={job} size="w-10 h-10" text="" />
+            )}
             <div className="min-w-0 flex-1">
                 <h3 className="font-montserrat text-sm font-bold text-black-light leading-snug line-clamp-1">{job.title}</h3>
                 <p className="text-xs text-secondary-dark truncate">{job.company_name}</p>
@@ -348,11 +389,9 @@ const JobsPage = () => {
                 <span className={`absolute inset-x-0 top-0 h-1 ${match.accent}`} />
 
                 <div className="flex items-start gap-3">
-                    <span className="w-11 h-11 shrink-0 rounded-xl bg-neutral text-secondary-dark border border-neutral-dark flex items-center justify-center font-montserrat font-bold text-base">
-                        {(job.company_name || '?').trim().charAt(0).toUpperCase()}
-                    </span>
+                    <CompanyLogo job={job} />
                     <div className="min-w-0 flex-1">
-                        <h2 className="font-montserrat text-lg font-bold text-black-light leading-snug line-clamp-2 group-hover:text-primary-dark transition-colors">
+                        <h2 className="font-montserrat text-lg font-bold text-black-light leading-snug line-clamp-2">
                             {job.title}
                         </h2>
                         <p className="text-sm text-secondary-dark mt-0.5 flex items-center gap-1.5 flex-wrap">
@@ -427,7 +466,7 @@ const JobsPage = () => {
                             >
                                 {approvePending
                                     ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
-                                    : <>Write Intro <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
+                                    : <>Reach Out <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
                             </button>
                         </div>
                     ) : (state === 'drafted' || state === 'sent') ? (
