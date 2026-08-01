@@ -51,30 +51,25 @@ const matchStrength = (score) => {
     return { label: 'Fair match', badge: 'px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border-gray-200', accent: 'bg-neutral-200' };
 };
 
-// `company_website` arrives in two shapes depending on which resolver filled it
-// — a bare domain ('medal.tv') from resolve_company_website, or a full URL from
-// the GPT company-resolution path. Normalise to the bare host for the logo CDN.
-const logoDomain = (site) => {
-    const raw = (site || '').trim();
-    if (!raw) return '';
-    return raw
-        .replace(/^https?:\/\//i, '')
-        .replace(/^www\./i, '')
-        .split(/[/?#]/)[0]
-        .toLowerCase();
-};
-
-// Company logo with the letter-avatar as fallback. Falls back when there's no
-// resolved domain (common on job-board sources) or the logo 404s. Module-level,
-// not nested in JobsPage, so it never remounts mid-animation.
+// Company logo with the letter-avatar as fallback. The logo comes from the ATS
+// the job was scraped from (Workday's per-tenant asset, or the JSON-LD /
+// og:image logo on Workable, Ashby and Greenhouse) and is stored on the job as
+// `company_logo_url`. Falls back to the letter when the employer published no
+// logo or the image fails to load.
+//
+// This used to build a logo.clearbit.com URL from the company domain. That host
+// no longer resolves — the subdomain was withdrawn from DNS — so every card was
+// silently falling back to a letter.
+//
+// Module-level, not nested in JobsPage, so it never remounts mid-animation.
 const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base' }) => {
     const [failed, setFailed] = useState(false);
-    const domain = logoDomain(job.company_website);
+    const src = (job.company_logo_url || '').trim();
 
-    if (domain && !failed) {
+    if (src && !failed) {
         return (
             <img
-                src={`https://logo.clearbit.com/${domain}`}
+                src={src}
                 alt=""
                 loading="lazy"
                 onError={() => setFailed(true)}
