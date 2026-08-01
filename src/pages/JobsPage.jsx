@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { useSearchParams } from 'react-router';
@@ -33,6 +33,7 @@ import BroadenSearchNudge from '../components/BroadenSearchNudge';
 const ITEMS_PER_PAGE = 9;
 const MAX_WORKING = 3;            // mirrors backend MAX_CONCURRENT_AUTODRAFT
 const COMPLETE_HOLD_MS = 3000;    // "Found Sarah Chen ✓" dwell before the card fades
+const RESOLVE_TIMEOUT_MS = 90000; // hard ceiling on any tray spinner — never longer
 
 const GRID_STAGGER = {
     hidden: {},
@@ -162,6 +163,10 @@ const JobsPage = () => {
     // the tray with a success flourish for COMPLETE_HOLD_MS, then faded out.
     const [completing, setCompleting] = useState([]);
     const handledRef = useRef(new Set());   // dedupe completion / no-contact toasts
+    // Jobs whose spinner blew the 90s ceiling — presented as Apply Direct instead.
+    const [timedOut, setTimedOut] = useState(() => new Set());
+    const timedOutRef  = useRef(new Set());   // sync mirror of `timedOut`
+    const startedAtRef = useRef(new Map());   // jobId -> ms when its spinner began
 
     const [searchParams] = useSearchParams();
     const isActivateRequested = searchParams.get('activate') === '1';
@@ -201,7 +206,18 @@ const JobsPage = () => {
             (isSearching || (query.state.data?.jobs || []).some((j) => ['working', 'queued'].includes(cardState(j)))) ? 4000 : false,
     });
 
-    const jobs = pageData?.jobs ?? [];
+    // Stable identity per fetch — the 90s-ceiling effect depends on `jobs`, and a
+    // fresh array each render would tear its interval down before it could tick.
+    const jobs = useMemo(() => pageData?.jobs ?? [], [pageData]);
+
+    // Server state, with the local 90s force-resolve layered on top. The override
+    // only applies while the server still says working/queued — if the backend
+    // later produces a real result, that result wins.
+    const effState = (job) => {
+        const s = cardState(job);
+        if ((s === 'working' || s === 'queued') && timedOut.has(job.id)) return 'no_contact';
+        return s;
+    };
 
     // ── Buckets ───────────────────────────────────────────────────────────────
     const completingIds = new Set(completing.map((c) => c.id));
@@ -209,12 +225,17 @@ const JobsPage = () => {
         const ia = actedOrder.indexOf(a.id), ib = actedOrder.indexOf(b.id);
         return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
     };
-    const workingJobs = jobs.filter((j) => cardState(j) === 'working').sort(orderByActed);
-    const queuedJobs  = jobs.filter((j) => cardState(j) === 'queued').sort(orderByActed);
-    const newJobs     = jobs.filter((j) => cardState(j) === 'new');
+    const workingJobs = jobs.filter((j) => effState(j) === 'working').sort(orderByActed);
+    const queuedJobs  = jobs.filter((j) => effState(j) === 'queued').sort(orderByActed);
+    const newJobs     = jobs.filter((j) => effState(j) === 'new');
     // Contact-found cards still mid-completion animation live in the tray, not the grid.
-    const contactJobs = jobs.filter((j) => ['drafted', 'sent'].includes(cardState(j)) && !completingIds.has(j.id));
-    const applyJobs   = jobs.filter((j) => cardState(j) === 'no_contact');
+    const contactJobs = jobs.filter((j) => ['drafted', 'sent'].includes(effState(j)) && !completingIds.has(j.id));
+    const applyJobs   = jobs.filter((j) => effState(j) === 'no_contact');
+
+    // Hard cap: nothing new starts while MAX_WORKING are already in flight. The
+    // optimistic cache update in onMutate lands before the next poll, so rapid
+    // clicking can't slip a 4th through a polling gap.
+    const atCapacity = workingJobs.length + queuedJobs.length >= MAX_WORKING;
 
     const reviewCount   = newJobs.length;
     const contactReady  = contactJobs.length;
@@ -230,6 +251,40 @@ const JobsPage = () => {
     }, [currentPage, totalPages]);
     useEffect(() => { setCurrentPage(1); }, [activeTab]);
     const pageNewJobs = newJobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+
+    // ── Spinner ceiling ───────────────────────────────────────────────────────
+    // Every card we see spinning gets a start stamp — on click, and also on first
+    // sight of one that was already spinning, so a spinner inherited from a reload
+    // is bounded too. Past RESOLVE_TIMEOUT_MS the card leaves the tray and drops
+    // into Apply Direct, whatever the backend is still doing.
+    useEffect(() => {
+        const active = jobs.filter((j) => ['working', 'queued'].includes(cardState(j)));
+        const now = Date.now();
+        active.forEach((j) => {
+            if (!startedAtRef.current.has(j.id)) startedAtRef.current.set(j.id, now);
+        });
+        if (!active.length) return undefined;
+
+        const tick = () => {
+            const t = Date.now();
+            const expired = active.filter((j) => {
+                const t0 = startedAtRef.current.get(j.id);
+                return t0 && t - t0 >= RESOLVE_TIMEOUT_MS && !timedOutRef.current.has(j.id);
+            });
+            if (!expired.length) return;
+            expired.forEach((j) => {
+                timedOutRef.current.add(j.id);
+                handledRef.current.add(j.id);   // never double-toast if the server lands later
+                startedAtRef.current.delete(j.id);
+                setActedOrder((prev) => prev.filter((x) => x !== j.id));
+                toast.info(`Couldn't find a hiring manager at ${j.company_name} — you can apply directly.`);
+            });
+            setTimedOut(new Set(timedOutRef.current));
+        };
+        tick();                                 // catch anything already past the line
+        const id = setInterval(tick, 1000);
+        return () => clearInterval(id);
+    }, [jobs]);
 
     // ── Completion / no-contact reconciliation ────────────────────────────────
     // As acted-on jobs resolve: contact found → brief success flourish in the tray,
@@ -282,14 +337,13 @@ const JobsPage = () => {
         },
         onSuccess: (data, { id, newStatus, silent }) => {
             if (newStatus === 'approved') {
+                // No toast for starting or queueing — those aren't results. Only
+                // "intro ready" / "no hiring manager" talk to the user.
                 if (data?.queued) {
                     // Reflect the queued state so the tray shows "Queued", not a spinner.
                     queryClient.setQueryData(['jobs-page', 'opportunities'], (old) => old?.jobs
                         ? { ...old, jobs: old.jobs.map((j) => j.id === id ? { ...j, is_queued: true } : j) }
                         : old);
-                    toast.info('Queued — your headhunter will get to this shortly.');
-                } else {
-                    toast.success('Finding the hiring manager — drafting your intro…');
                 }
             } else if (newStatus === 'rejected' && !silent) {
                 toast.success('Skipped. Your headhunter will keep looking.');
@@ -311,10 +365,21 @@ const JobsPage = () => {
         setDrawerJobId(null);
         setActedOrder((prev) => [jobId, ...prev.filter((x) => x !== jobId)]);
         handledRef.current.delete(jobId);
+        timedOutRef.current.delete(jobId);
+        startedAtRef.current.set(jobId, Date.now());   // ceiling runs from the click
         handleUpdateStatus(jobId, 'approved');
     };
     const handleReachOut = (jobId) => {
         setDrawerJobId(null);
+        // At capacity this is the only feedback the user gets — explain, don't
+        // silently do nothing. toastId dedupes repeat clicks instead of stacking.
+        if (atCapacity) {
+            toast.info(
+                `Your headhunter works on ${MAX_WORKING} at a time — this one starts as soon as a slot frees.`,
+                { toastId: 'reachout-capacity' },
+            );
+            return;
+        }
         if (profile && !profile.tone_preference) {
             setPendingJobId(jobId);
             setShowPersonalization(true);
@@ -502,15 +567,26 @@ const JobsPage = () => {
                                 {rejectPending ? <ApplyDirLoader.Button variant="dark" /> : null}
                                 Skip
                             </button>
-                            <button
-                                onClick={() => handleReachOut(job.id)}
-                                disabled={pendingThisJob}
-                                className="group/btn inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
-                            >
-                                {approvePending
-                                    ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
-                                    : <>Reach Out <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
-                            </button>
+                            {atCapacity && !approvePending ? (
+                                // Deliberately NOT `disabled` — it must stay clickable so
+                                // the click can explain why nothing happened.
+                                <button
+                                    onClick={() => handleReachOut(job.id)}
+                                    className="inline-flex items-center justify-center gap-2 bg-neutral hover:bg-neutral-dark text-secondary-dark font-semibold font-montserrat rounded-xl px-5 py-2.5 transition-colors"
+                                >
+                                    <Clock className="w-4 h-4 shrink-0" /> Reach Out
+                                </button>
+                            ) : (
+                                <button
+                                    onClick={() => handleReachOut(job.id)}
+                                    disabled={pendingThisJob}
+                                    className="group/btn inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {approvePending
+                                        ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
+                                        : <>Reach Out <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover/btn:translate-x-1" /></>}
+                                </button>
+                            )}
                         </div>
                     ) : (state === 'drafted' || state === 'sent') ? (
                         <button
