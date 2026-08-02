@@ -51,29 +51,57 @@ const matchStrength = (score) => {
     return { label: 'Fair match', badge: 'px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border-gray-200', accent: 'bg-neutral-200' };
 };
 
-// Company logo with the letter-avatar as fallback. The logo comes from the ATS
-// the job was scraped from (Workday's per-tenant asset, or the JSON-LD /
-// og:image logo on Workable, Ashby and Greenhouse) and is stored on the job as
-// `company_logo_url`. Falls back to the letter when the employer published no
-// logo or the image fails to load.
+// `company_website` is stored as either a bare domain ('medal.tv') or a full
+// URL, depending on which resolver filled it. Normalise to the bare host.
+const logoDomain = (site) => {
+    const raw = (site || '').trim();
+    if (!raw) return '';
+    return raw
+        .replace(/^https?:\/\//i, '')
+        .replace(/^www\./i, '')
+        .split(/[/?#]/)[0]
+        .toLowerCase();
+};
+
+// Company logo, tried in three stages, ending at the letter avatar.
 //
-// This used to build a logo.clearbit.com URL from the company domain. That host
-// no longer resolves — the subdomain was withdrawn from DNS — so every card was
-// silently falling back to a letter.
+//   0. The logo the ATS published (`company_logo_url`) — the real brand mark.
+//   1. The domain's favicon — a square icon.
+//   2. The letter avatar.
+//
+// Stage 1 exists because roughly 4 in 10 ATS logos are wide wordmarks (SAP
+// Fioneer ships 550x120, InnovationTeam 346x87) and a 4.6:1 image inside a 44px
+// square renders as an unreadable sliver. When onLoad reports an aspect ratio
+// that wide we switch to the favicon, which is square by definition, so the grid
+// stays visually even. Square-ish logos (the majority) are shown as-is.
+//
+// The previous version pointed at logo.clearbit.com, which no longer resolves —
+// its DNS record was withdrawn — so every card fell through to a letter. The
+// favicon host used here was checked to be serving before being relied on.
 //
 // Module-level, not nested in JobsPage, so it never remounts mid-animation.
 const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base' }) => {
-    const [failed, setFailed] = useState(false);
-    const src = (job.company_logo_url || '').trim();
+    const [stage, setStage] = useState(0);
+    const domain = logoDomain(job.company_website);
+    const atsLogo = (job.company_logo_url || '').trim();
+    const favicon = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=64` : '';
 
-    if (src && !failed) {
+    let src = '';
+    if (stage === 0 && atsLogo) src = atsLogo;
+    else if (stage <= 1 && favicon) src = favicon;
+
+    if (src) {
         return (
             <img
                 src={src}
                 alt=""
                 loading="lazy"
-                onError={() => setFailed(true)}
-                className={`${size} shrink-0 rounded-xl border border-neutral-dark bg-white object-contain`}
+                onError={() => setStage((s) => s + 1)}
+                onLoad={(e) => {
+                    const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
+                    if (stage === 0 && favicon && w && h && w / h > 2.2) setStage(1);
+                }}
+                className={`${size} shrink-0 rounded-xl border border-neutral-dark bg-white object-contain p-0.5`}
             />
         );
     }
