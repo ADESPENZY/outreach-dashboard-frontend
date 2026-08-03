@@ -80,7 +80,9 @@ const logoDomain = (site) => {
 // favicon host used here was checked to be serving before being relied on.
 //
 // Module-level, not nested in JobsPage, so it never remounts mid-animation.
-const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base' }) => {
+// `radius`/`pad` default to the original values so trayCard renders identically;
+// fullCard overrides them for its small inline variant.
+const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base', radius = 'rounded-xl', pad = 'p-0.5' }) => {
     const [stage, setStage] = useState(0);
     const domain = logoDomain(job.company_website);
     const atsLogo = (job.company_logo_url || '').trim();
@@ -101,12 +103,12 @@ const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base' }) => {
                     const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
                     if (stage === 0 && favicon && w && h && w / h > 2.2) setStage(1);
                 }}
-                className={`${size} shrink-0 rounded-xl border border-neutral-dark bg-white object-contain p-0.5`}
+                className={`${size} shrink-0 ${radius} border border-neutral-dark bg-white object-contain ${pad}`}
             />
         );
     }
     return (
-        <span className={`${size} shrink-0 rounded-xl bg-neutral text-secondary-dark border border-neutral-dark flex items-center justify-center font-montserrat font-bold ${text}`}>
+        <span className={`${size} shrink-0 ${radius} bg-neutral text-secondary-dark border border-neutral-dark flex items-center justify-center font-montserrat font-bold ${text}`}>
             {(job.company_name || '?').trim().charAt(0).toUpperCase()}
         </span>
     );
@@ -118,31 +120,46 @@ const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base' }) => {
 // scrape date off as a posting date. posted_at is a DATE, so it has no hours.
 // isFresh drives the urgency nudge and is deliberately NEVER true on the
 // created_at fallback: a month-old job scraped today is not a fresh posting.
+// `label` is the full verb phrase (now the tooltip); `short` is the compact chip
+// shown on the card. Both branches can yield the same `short`, which is exactly
+// why `label` is still needed to tell "Posted" from "Found".
 const postedAge = (job) => {
-    const short = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const shortDate = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
     if (job.posted_at) {
         const d = new Date(`${job.posted_at}T00:00:00`);
         const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-        if (days <= 0) return { label: 'Posted today', isFresh: true };
-        if (days === 1) return { label: 'Posted yesterday', isFresh: true };
-        if (days < 7) return { label: `Posted ${days} days ago`, isFresh: false };
+        if (days <= 0) return { label: 'Posted today', short: 'today', isFresh: true };
+        if (days === 1) return { label: 'Posted yesterday', short: '1d', isFresh: true };
+        if (days < 7) return { label: `Posted ${days} days ago`, short: `${days}d`, isFresh: false };
         const weeks = Math.floor(days / 7);
-        if (weeks < 5) return { label: `Posted ${weeks} week${weeks === 1 ? '' : 's'} ago`, isFresh: false };
-        return { label: `Posted ${short(d)}`, isFresh: false };
+        if (weeks < 5) return { label: `Posted ${weeks} week${weeks === 1 ? '' : 's'} ago`, short: `${weeks}w`, isFresh: false };
+        return { label: `Posted ${shortDate(d)}`, short: shortDate(d), isFresh: false };
     }
 
-    if (!job.created_at) return { label: '', isFresh: false };
+    if (!job.created_at) return { label: '', short: '', isFresh: false };
     const d = new Date(job.created_at);
     const hours = Math.floor(Math.max(0, Date.now() - d.getTime()) / 3600000);
-    if (hours < 1) return { label: 'Found just now', isFresh: false };
-    if (hours < 24) return { label: `Found ${hours} hour${hours === 1 ? '' : 's'} ago`, isFresh: false };
+    if (hours < 1) return { label: 'Found just now', short: 'now', isFresh: false };
+    if (hours < 24) return { label: `Found ${hours} hour${hours === 1 ? '' : 's'} ago`, short: `${hours}h`, isFresh: false };
     const days = Math.floor(hours / 24);
-    if (days < 7) return { label: `Found ${days} day${days === 1 ? '' : 's'} ago`, isFresh: false };
+    if (days < 7) return { label: `Found ${days} day${days === 1 ? '' : 's'} ago`, short: `${days}d`, isFresh: false };
     const weeks = Math.floor(days / 7);
-    if (weeks < 5) return { label: `Found ${weeks} week${weeks === 1 ? '' : 's'} ago`, isFresh: false };
-    return { label: `Found ${short(d)}`, isFresh: false };
+    if (weeks < 5) return { label: `Found ${weeks} week${weeks === 1 ? '' : 's'} ago`, short: `${weeks}w`, isFresh: false };
+    return { label: `Found ${shortDate(d)}`, short: shortDate(d), isFresh: false };
 };
+
+// `job.source` is a lowercase slug from the adapter. Presentation only — the
+// fallback just title-cases anything not listed, so a new adapter still reads OK.
+const SOURCE_LABELS = {
+    greenhouse: 'Greenhouse', ashby: 'Ashby', lever: 'Lever', workday: 'Workday',
+    workable: 'Workable', smartrecruiters: 'SmartRecruiters', bamboohr: 'BambooHR',
+    linkedin: 'LinkedIn', indeed: 'Indeed', wellfound: 'Wellfound',
+    weworkremotely: 'We Work Remotely', remoteok: 'RemoteOK', remotive: 'Remotive',
+    himalayas: 'Himalayas', yc: 'Y Combinator',
+};
+const sourceLabel = (s) =>
+    SOURCE_LABELS[s] || (s ? s.charAt(0).toUpperCase() + s.slice(1) : '');
 
 const NEGATIVE_RE = /(does ?not|does ?n['’]?t|\bweak\b|\bfails?\b|not match|not align|\black(s|ing)?\b|\bmissing\b|mismatch|\bgaps?\b|\bunfortunately\b|\bpoor(ly)?\b|unrelated|irrelevant)/i;
 const positiveReason = (text) =>
@@ -505,40 +522,46 @@ const JobsPage = () => {
                 exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.18 } }}
                 whileHover={{ y: -6, transition: { duration: 0.3, ease: 'easeOut' } }}
                 onClick={() => state === 'new' && setDrawerJobId(job.id)}
-                className={`group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-6 flex flex-col h-full transition-all duration-300 ease-out hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 ${state === 'new' ? 'cursor-pointer hover:-translate-y-1.5' : ''} ${['drafted', 'sent'].includes(state) ? 'border-l-4 border-l-emerald-400' : ''}`}
+                className={`group relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 flex flex-col h-full transition-all duration-300 ease-out hover:shadow-xl hover:shadow-primary-light/10 hover:border-primary-light/30 ${state === 'new' ? 'cursor-pointer hover:-translate-y-1.5' : ''} ${['drafted', 'sent'].includes(state) ? 'border-l-4 border-l-emerald-400' : ''}`}
             >
                 <span className={`absolute inset-x-0 top-0 h-1 ${match.accent}`} />
 
-                <div className="flex items-start gap-3">
-                    <CompanyLogo job={job} />
-                    <div className="min-w-0 flex-1">
-                        <h2 className="font-montserrat text-lg font-bold text-black-light leading-snug line-clamp-2">
-                            {job.title}
-                        </h2>
-                        <p className="text-sm text-secondary-dark mt-0.5 flex items-center gap-1.5 flex-wrap">
-                            <span className="font-medium text-black-light truncate max-w-full">{job.company_name}</span>
-                            {job.location && (
-                                <>
-                                    <span className="text-secondary-dark/40">·</span>
-                                    <span className="inline-flex items-center gap-1 min-w-0">
-                                        <MapPin className="w-3.5 h-3.5 shrink-0" />
-                                        <span className="truncate">{job.location}</span>
-                                    </span>
-                                </>
-                            )}
-                        </p>
-                        {job.salary_info && (
-                            <p className="text-sm font-semibold text-emerald-600 mt-1">{job.salary_info}</p>
-                        )}
-                        {age.label && (
-                            <p className="text-xs text-secondary-dark/80 mt-1">{age.label}</p>
-                        )}
-                    </div>
+                {/* Identity row: logo + company are the anchor, age right-aligned.
+                    title= keeps the Posted/Found verb the short chip drops. */}
+                <div className="flex items-center gap-2">
+                    <CompanyLogo job={job} size="w-6 h-6" text="text-[10px]" radius="rounded-md" pad="" />
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-secondary-dark">
+                        {job.company_name}
+                    </span>
+                    {age.short && (
+                        <span title={age.label} className="shrink-0 inline-flex items-center gap-1 text-[11px] text-secondary-dark/70">
+                            <Clock className="w-3 h-3 shrink-0" /> {age.short}
+                        </span>
+                    )}
                 </div>
 
-                <span className={`mt-3 self-start inline-flex items-center rounded-md border ${match.badge}`}>
-                    {match.label}
-                </span>
+                <h2 className="mt-1.5 font-montserrat text-base font-bold text-black-light leading-snug line-clamp-2">
+                    {job.title}
+                </h2>
+
+                {job.location && (
+                    <p className="mt-1 flex items-center gap-1 min-w-0 text-xs text-secondary-dark">
+                        <MapPin className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{job.location}</span>
+                    </p>
+                )}
+
+                {/* Salary is ~14% populated — absent renders nothing, no reserved row. */}
+                <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+                    <span className={`inline-flex items-center rounded-md border ${match.badge}`}>
+                        {match.label}
+                    </span>
+                    {job.salary_info && (
+                        <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold bg-emerald-50 text-emerald-600 border-emerald-100">
+                            {job.salary_info}
+                        </span>
+                    )}
+                </div>
 
                 {state === 'new' && age.isFresh && (
                     <p className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-amber-600">
@@ -547,12 +570,12 @@ const JobsPage = () => {
                     </p>
                 )}
 
-                <p className="mt-3 text-sm italic text-secondary-dark leading-relaxed border-l-2 border-neutral-dark bg-neutral/50 rounded-r-lg pl-3 py-2 transition-colors duration-300 group-hover:bg-primary-light/5">
+                <p className="mt-2.5 text-xs text-secondary-dark leading-relaxed line-clamp-2">
                     {reason}
                 </p>
 
                 {(state === 'drafted' || state === 'sent') ? (
-                    <div className="mt-3 space-y-1.5">
+                    <div className="mt-2.5 space-y-1.5">
                         {job.contact_name && (
                             <p className="flex items-center gap-1.5 text-xs text-secondary-dark truncate">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -567,25 +590,48 @@ const JobsPage = () => {
                         </span>
                     </div>
                 ) : state === 'no_contact' ? (
-                    <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
+                    <div className="mt-2.5 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
                         <UserX className="w-3.5 h-3.5 text-secondary-dark shrink-0" />
                         <span>No hiring manager found for this role</span>
                     </div>
                 ) : (
-                    <div className="mt-3 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
+                    <div className="mt-2.5 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
                         <Search className="w-3.5 h-3.5 text-secondary-dark/50 shrink-0" />
                         <span>We&rsquo;ll find the contact and draft your intro</span>
                     </div>
                 )}
 
-                {/* Actions */}
-                <div className="mt-auto pt-5" onClick={(e) => e.stopPropagation()}>
+                {/* Bottom block — mt-auto keeps the footer + actions aligned across the grid. */}
+                <div className="mt-auto pt-4">
+                    {/* Hairline footer: the raw listing + provenance. stopPropagation so
+                        the link never also opens the detail drawer. */}
+                    <div className="flex items-center justify-between gap-2 border-t border-neutral-dark/60 pt-2.5 text-[11px]">
+                        {job.apply_url ? (
+                            <a
+                                href={job.apply_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 min-w-0 text-secondary-dark/70 hover:text-primary-dark transition-colors"
+                            >
+                                <span className="truncate">View job posting</span>
+                                <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                        ) : <span />}
+                        {job.source && (
+                            <span className="shrink-0 max-w-[45%] truncate text-secondary-dark/50">
+                                via {sourceLabel(job.source)}
+                            </span>
+                        )}
+                    </div>
+
+                    <div className="pt-3" onClick={(e) => e.stopPropagation()}>
                     {state === 'new' ? (
-                        <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-2">
                             <button
                                 onClick={() => handleUpdateStatus(job.id, 'rejected')}
                                 disabled={pendingThisJob}
-                                className="inline-flex items-center justify-center gap-2 text-secondary-dark hover:bg-neutral font-semibold rounded-xl px-5 py-2.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="shrink-0 inline-flex items-center justify-center gap-2 text-secondary-dark hover:bg-neutral font-semibold rounded-xl px-3 py-2.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                                 {rejectPending ? <ApplyDirLoader.Button variant="dark" /> : null}
                                 Skip
@@ -595,7 +641,7 @@ const JobsPage = () => {
                                 // the click can explain why nothing happened.
                                 <button
                                     onClick={() => handleReachOut(job.id)}
-                                    className="inline-flex items-center justify-center gap-2 bg-neutral hover:bg-neutral-dark text-secondary-dark font-semibold font-montserrat rounded-xl px-5 py-2.5 transition-colors"
+                                    className="flex-1 inline-flex items-center justify-center gap-2 bg-neutral hover:bg-neutral-dark text-secondary-dark font-semibold font-montserrat rounded-xl px-4 py-2.5 transition-colors"
                                 >
                                     <Clock className="w-4 h-4 shrink-0" /> Reach Out
                                 </button>
@@ -603,7 +649,7 @@ const JobsPage = () => {
                                 <button
                                     onClick={() => handleReachOut(job.id)}
                                     disabled={pendingThisJob}
-                                    className="group/btn inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
+                                    className="flex-1 group/btn inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2.5 shadow-sm hover:opacity-90 transition-all duration-300 hover:scale-105 hover:shadow-lg hover:shadow-primary-dark/40 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                                 >
                                     {approvePending
                                         ? <><ApplyDirLoader.Button variant="light" /> Reaching out…</>
@@ -641,6 +687,7 @@ const JobsPage = () => {
                             </button>
                         </div>
                     ) : null}
+                    </div>
                 </div>
             </motion.div>
         );
@@ -740,6 +787,20 @@ const JobsPage = () => {
                             Next <ArrowRight className="w-4 h-4" />
                         </button>
                     </div>
+                )}
+
+                {/* Section B2 — Contact found. Same unpaginated grid the
+                    "Contact found" tab renders, included here so the All tab
+                    shows every card its count promises (pickedCount sums
+                    new + contact + apply). Pagination above is bound to
+                    newJobs only and is unaffected. */}
+                {activeTab === 'all' && contactJobs.length > 0 && (
+                    <section className="mt-8 space-y-3">
+                        <h2 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/70">
+                            Contact found
+                        </h2>
+                        {grid(contactJobs)}
+                    </section>
                 )}
 
                 {/* Section C — Apply directly, collapsed at the bottom (All view only). */}
