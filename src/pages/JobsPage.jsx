@@ -51,6 +51,15 @@ const matchStrength = (score) => {
     return { label: 'Fair match', badge: 'px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-500 border-gray-200', accent: 'bg-neutral-200' };
 };
 
+// Pipeline position for the card's progress bar. Derived purely from the visual
+// state cardState already computes — no new data, no backend change. `no_contact`
+// is deliberately absent: an apply-direct card has no pipeline left to show.
+const STAGE = {
+    new:     { label: 'New',         pct: 25 },
+    drafted: { label: 'Intro ready', pct: 50 },
+    sent:    { label: 'Sent',        pct: 100 },
+};
+
 // `company_website` is stored as either a bare domain ('medal.tv') or a full
 // URL, depending on which resolver filled it. Normalise to the bare host.
 const logoDomain = (site) => {
@@ -575,8 +584,10 @@ const JobsPage = () => {
                 </p>
 
                 {(state === 'drafted' || state === 'sent') ? (
+                    // The "Intro drafted"/"Intro sent" pill used to live here; the stage
+                    // bar below now carries that, so this line is just WHO was found.
                     <div className="mt-2.5 space-y-1.5">
-                        {job.contact_name && (
+                        {job.contact_name ? (
                             <p className="flex items-center gap-1.5 text-xs text-secondary-dark truncate">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                                 <span className="truncate">
@@ -584,10 +595,14 @@ const JobsPage = () => {
                                     {job.contact_title ? <span>, {job.contact_title}</span> : null}
                                 </span>
                             </p>
+                        ) : (
+                            // 'drafted' requires has_real_contact so this should not happen,
+                            // but without it the branch would render an empty gap.
+                            <p className="flex items-center gap-1.5 text-xs text-secondary-dark">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                                <span>Hiring manager found</span>
+                            </p>
                         )}
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/60 px-2.5 py-0.5 text-[11px] font-semibold">
-                            {state === 'sent' ? 'Intro sent' : 'Intro drafted'}
-                        </span>
                     </div>
                 ) : state === 'no_contact' ? (
                     <div className="mt-2.5 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
@@ -603,6 +618,22 @@ const JobsPage = () => {
 
                 {/* Bottom block — mt-auto keeps the footer + actions aligned across the grid. */}
                 <div className="mt-auto pt-4">
+                    {/* Stage progress. Omitted for no_contact — see STAGE. */}
+                    {STAGE[state] && (
+                        <div className="pb-3">
+                            <div className="mb-1.5 flex items-center justify-between text-[11px]">
+                                <span className="text-secondary-dark/60">Stage</span>
+                                <span className="font-medium text-secondary-dark">{STAGE[state].label}</span>
+                            </div>
+                            <div className="h-1 w-full overflow-hidden rounded-full bg-neutral">
+                                <div
+                                    className="h-full rounded-full bg-primary-light transition-all duration-500"
+                                    style={{ width: `${STAGE[state].pct}%` }}
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     {/* Hairline footer: the raw listing + provenance. stopPropagation so
                         the link never also opens the detail drawer. */}
                     <div className="flex items-center justify-between gap-2 border-t border-neutral-dark/60 pt-2.5 text-[11px]">
