@@ -634,29 +634,7 @@ const JobsPage = () => {
                         </div>
                     )}
 
-                    {/* Hairline footer: the raw listing + provenance. stopPropagation so
-                        the link never also opens the detail drawer. */}
-                    <div className="flex items-center justify-between gap-2 border-t border-neutral-dark/60 pt-2.5 text-[11px]">
-                        {job.apply_url ? (
-                            <a
-                                href={job.apply_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 min-w-0 text-secondary-dark/70 hover:text-primary-dark transition-colors"
-                            >
-                                <span className="truncate">View job posting</span>
-                                <ExternalLink className="w-3 h-3 shrink-0" />
-                            </a>
-                        ) : <span />}
-                        {job.source && (
-                            <span className="shrink-0 max-w-[45%] truncate text-secondary-dark/50">
-                                via {sourceLabel(job.source)}
-                            </span>
-                        )}
-                    </div>
-
-                    <div className="pt-3" onClick={(e) => e.stopPropagation()}>
+                    <div onClick={(e) => e.stopPropagation()}>
                     {state === 'new' ? (
                         <div className="flex items-center gap-2">
                             <button
@@ -718,6 +696,30 @@ const JobsPage = () => {
                             </button>
                         </div>
                     ) : null}
+                    </div>
+
+                    {/* Hairline footer — reference material, deliberately AFTER the CTA so it
+                        doesn't interrupt the path from reasoning to action. The border-t now
+                        separates it from the buttons above. stopPropagation keeps the link
+                        from also opening the detail drawer. */}
+                    <div className="mt-4 flex items-center justify-between gap-2 border-t border-neutral-dark/60 pt-3 text-[11px]">
+                        {job.apply_url ? (
+                            <a
+                                href={job.apply_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="inline-flex items-center gap-1 min-w-0 text-secondary-dark/70 hover:text-primary-dark transition-colors"
+                            >
+                                <span className="truncate">View job posting</span>
+                                <ExternalLink className="w-3 h-3 shrink-0" />
+                            </a>
+                        ) : <span />}
+                        {job.source && (
+                            <span className="shrink-0 max-w-[45%] truncate text-secondary-dark/50">
+                                via {sourceLabel(job.source)}
+                            </span>
+                        )}
                     </div>
                 </div>
             </motion.div>
