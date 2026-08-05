@@ -9,6 +9,7 @@ import {
   AlertTriangle, MapPin, Wallet, Sparkles,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
+import { postedAge } from '../utils/jobAge';
 import GenerateCvButton from '../components/GenerateCvButton';
 import NoInboxModal from '../components/NoInboxModal';
 import {
@@ -57,6 +58,36 @@ const matchPill = (score) => {
   if (score >= 60) return { label: 'Good match',   cls: 'bg-blue-50 text-blue-700 border-blue-200' };
   if (score >= 45) return { label: 'Fair match',   cls: 'bg-amber-50 text-amber-700 border-amber-200' };
   return null;
+};
+
+// How old the OPENING is — not how old the draft is. Shown on the review surfaces
+// so someone about to approve an intro can see the role was posted 587 days ago and
+// skip it. Amber past STALE_AFTER_DAYS (see utils/jobAge), matching the
+// Opportunities chip so the two pages tell the same story. Renders nothing when we
+// have no date at all.
+// `pill` matches the PreviewPane's chip row; the default is a plain meta line for
+// the card rail and the list item.
+const JobAgeLine = ({ email, className = '', pill = false }) => {
+  const age = postedAge({ posted_at: email.job_posted_at, created_at: email.job_created_at });
+  if (!age.label) return null;
+
+  if (pill) {
+    return (
+      <span className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+        age.isStale
+          ? 'bg-amber-50 border-amber-200 text-amber-700'
+          : 'bg-neutral border-neutral-dark text-secondary-dark font-medium'} ${className}`}>
+        <Clock className="w-3.5 h-3.5 shrink-0" /> {age.label}
+      </span>
+    );
+  }
+  return (
+    <p className={`flex items-center gap-1.5 min-w-0 ${
+      age.isStale ? 'font-semibold text-amber-600' : 'text-secondary-dark'} ${className}`}>
+      <Clock className="w-3.5 h-3.5 shrink-0" />
+      <span className="truncate">{age.label}</span>
+    </p>
+  );
 };
 
 // Staggered entrance for the pending grid (mirrors the Opportunities feed).
@@ -222,20 +253,19 @@ function IntroCard({ email, onApprove, onDiscard, onSaveEdit, busy }) {
             </div>
           </div>
 
-          {(email.job_location || email.job_salary_info) && (
-            <div className="mt-3 space-y-1">
-              {email.job_location && (
-                <p className="flex items-center gap-1.5 text-xs text-secondary-dark min-w-0">
-                  <MapPin className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{email.job_location}</span>
-                </p>
-              )}
-              {email.job_salary_info && (
-                <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 min-w-0">
-                  <Wallet className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{email.job_salary_info}</span>
-                </p>
-              )}
-            </div>
-          )}
+          <div className="mt-3 space-y-1">
+            {email.job_location && (
+              <p className="flex items-center gap-1.5 text-xs text-secondary-dark min-w-0">
+                <MapPin className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{email.job_location}</span>
+              </p>
+            )}
+            {email.job_salary_info && (
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 min-w-0">
+                <Wallet className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{email.job_salary_info}</span>
+              </p>
+            )}
+            <JobAgeLine email={email} className="text-xs" />
+          </div>
 
           {match && (
             <span className={`mt-3 inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-semibold ${match.cls}`}>
@@ -532,6 +562,7 @@ function PreviewListItem({ email, tab, active, onClick }) {
               {[email.job_location, email.job_salary_info].filter(Boolean).join(' · ')}
             </p>
           )}
+          <JobAgeLine email={email} className="text-xs mt-1" />
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             {match && (
               <span className={`inline-flex items-center rounded border px-1.5 py-0.5 text-xs font-semibold ${match.cls}`}>{match.label}</span>
@@ -613,6 +644,7 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
                 <Wallet className="w-3.5 h-3.5" /> {email.job_salary_info}
               </span>
             )}
+            <JobAgeLine email={email} pill />
             {match && (
               <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-semibold ${match.cls}`}>{match.label}</span>
             )}

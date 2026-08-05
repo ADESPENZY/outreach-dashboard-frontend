@@ -20,6 +20,7 @@ import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePer
 import JobDetailDrawer from '../components/JobDetailDrawer';
 import ApplyDirectModal from '../components/ApplyDirectModal';
 import BroadenSearchNudge from '../components/BroadenSearchNudge';
+import { postedAge } from '../utils/jobAge';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // Curated roles the headhunter found, organised by lifecycle so the review flow
@@ -121,41 +122,6 @@ const CompanyLogo = ({ job, size = 'w-11 h-11', text = 'text-base', radius = 'ro
             {(job.company_name || '?').trim().charAt(0).toUpperCase()}
         </span>
     );
-};
-
-// Card age line. posted_at is the employer's own posting date but is absent on
-// ~56% of rows (LinkedIn/Workday/Indeed never supply it), so we fall back to
-// created_at — when WE found it — under a different verb rather than passing a
-// scrape date off as a posting date. posted_at is a DATE, so it has no hours.
-// isFresh drives the urgency nudge and is deliberately NEVER true on the
-// created_at fallback: a month-old job scraped today is not a fresh posting.
-// `label` is the full verb phrase (now the tooltip); `short` is the compact chip
-// shown on the card. Both branches can yield the same `short`, which is exactly
-// why `label` is still needed to tell "Posted" from "Found".
-const postedAge = (job) => {
-    const shortDate = (d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-
-    if (job.posted_at) {
-        const d = new Date(`${job.posted_at}T00:00:00`);
-        const days = Math.floor((Date.now() - d.getTime()) / 86400000);
-        if (days <= 0) return { label: 'Posted today', short: 'today', isFresh: true };
-        if (days === 1) return { label: 'Posted yesterday', short: '1d', isFresh: true };
-        if (days < 7) return { label: `Posted ${days} days ago`, short: `${days}d`, isFresh: false };
-        const weeks = Math.floor(days / 7);
-        if (weeks < 5) return { label: `Posted ${weeks} week${weeks === 1 ? '' : 's'} ago`, short: `${weeks}w`, isFresh: false };
-        return { label: `Posted ${shortDate(d)}`, short: shortDate(d), isFresh: false };
-    }
-
-    if (!job.created_at) return { label: '', short: '', isFresh: false };
-    const d = new Date(job.created_at);
-    const hours = Math.floor(Math.max(0, Date.now() - d.getTime()) / 3600000);
-    if (hours < 1) return { label: 'Found just now', short: 'now', isFresh: false };
-    if (hours < 24) return { label: `Found ${hours} hour${hours === 1 ? '' : 's'} ago`, short: `${hours}h`, isFresh: false };
-    const days = Math.floor(hours / 24);
-    if (days < 7) return { label: `Found ${days} day${days === 1 ? '' : 's'} ago`, short: `${days}d`, isFresh: false };
-    const weeks = Math.floor(days / 7);
-    if (weeks < 5) return { label: `Found ${weeks} week${weeks === 1 ? '' : 's'} ago`, short: `${weeks}w`, isFresh: false };
-    return { label: `Found ${shortDate(d)}`, short: shortDate(d), isFresh: false };
 };
 
 // `job.source` is a lowercase slug from the adapter. Presentation only — the
@@ -542,9 +508,17 @@ const JobsPage = () => {
                     <span className="min-w-0 flex-1 truncate text-xs font-medium text-secondary-dark">
                         {job.company_name}
                     </span>
-                    {age.short && (
-                        <span title={age.label} className="shrink-0 inline-flex items-center gap-1 text-[11px] text-secondary-dark/70">
-                            <Clock className="w-3 h-3 shrink-0" /> {age.short}
+                    {age.chip && (
+                        // Verb is now VISIBLE, not tooltip-only: "Posted 50d" is a fact
+                        // about the employer, "Found 50d" a fact about us, and a tooltip
+                        // never fires on touch. Amber past STALE_AFTER_DAYS so an old
+                        // opening is hard to skim past.
+                        <span
+                            title={age.label}
+                            className={`shrink-0 inline-flex items-center gap-1 text-[11px] ${
+                                age.isStale ? 'font-medium text-amber-600' : 'text-secondary-dark/70'}`}
+                        >
+                            <Clock className="w-3 h-3 shrink-0" /> {age.chip}
                         </span>
                     )}
                 </div>
