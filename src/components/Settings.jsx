@@ -15,6 +15,8 @@ import { getProfile, updateProfile, uploadCV } from '@/services/apiProfile';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSettings';
 import { getInboxStats } from '@/services/apiInboxes';
 import { deleteGmailAccount, toggleGmailAccount } from '@/services/apiGmail';
+import { toggleWarmupPool } from '@/services/apiWarmup';
+import WarmupConsentModal from './WarmupConsentModal';
 import { useConnectProvider } from '@/hooks/useConnectProvider';
 import { useAuth } from '@/context/AuthContext';
 import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush, isIOS, isStandalone, pushFailureMessage } from '@/services/push';
@@ -502,6 +504,26 @@ function ProviderBadge({ provider }) {
   );
 }
 
+// Tiny hover/focus info affordance — an (i) that reveals a short explainer.
+// Right-anchored so it stays inside the card even near the right edge; `title`
+// gives the same text to keyboard/touch users as a fallback.
+function InfoTip({ children, label = 'What’s this?', align = 'right' }) {
+  const text = typeof children === 'string' ? children : undefined;
+  const pos = align === 'left' ? 'left-0' : 'right-0';
+  return (
+    <span className="relative inline-flex group align-middle">
+      <button type="button" aria-label={label} title={text}
+        className="text-secondary-dark/50 hover:text-secondary-dark focus:outline-none">
+        <Info className="w-3 h-3" />
+      </button>
+      <span role="tooltip"
+        className={`pointer-events-none absolute bottom-full ${pos} mb-1.5 w-56 z-50 rounded-lg bg-black text-white text-[11px] font-normal leading-snug px-2.5 py-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shadow-lg`}>
+        {children}
+      </span>
+    </span>
+  );
+}
+
 function SendingTab() {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['inboxes'], queryFn: getInboxStats });
@@ -514,6 +536,12 @@ function SendingTab() {
   const [savingAF, setSavingAF] = useState(false);
   const [pendingGate, setPendingGate] = useState(false);
   const [params, setParams] = useSearchParams();
+  // Warm-up POOL enrolment (opt-in seed-exchange). `warmupModalAcc` = the inbox
+  // whose consent modal is open; `warmupBusyId` = inbox mid-toggle;
+  // `pendingWarmupProvider` = after a fresh connect, prompt that provider's inbox.
+  const [warmupModalAcc, setWarmupModalAcc] = useState(null);
+  const [warmupBusyId, setWarmupBusyId] = useState(null);
+  const [pendingWarmupProvider, setPendingWarmupProvider] = useState(null);
 
   // Single owner of the connect flow (explainer → OAuth redirect). Both the
   // connect buttons and reconnect use it; Gmail gets the pre-consent explainer,
@@ -541,10 +569,12 @@ function SendingTab() {
     if (params.get('gmail_connected')) {
       toast.success('Gmail connected — you can send now.');
       refresh();
+      setPendingWarmupProvider('gmail');  // offer warm-up once stats reload
       params.delete('gmail_connected'); setParams(params, { replace: true });
     } else if (params.get('outlook_connected')) {
       toast.success('Outlook connected — you can send now.');
       refresh();
+      setPendingWarmupProvider('outlook');
       params.delete('outlook_connected'); setParams(params, { replace: true });
     } else if (params.get('gmail_error')) {
       const code = params.get('gmail_error');
@@ -581,6 +611,39 @@ function SendingTab() {
 
   const handleToggle = async (id) => { setTogglingId(id); try { await toggleGmailAccount(id); refresh(); } catch (e) { toast.error(e.message); } finally { setTogglingId(null); } };
   const handleDelete = async (id) => { try { await deleteGmailAccount(id); toast.success('Inbox removed.'); refresh(); } catch (e) { toast.error(e.message); } setConfirmDelete(null); };
+
+  // After a fresh connect, once inbox stats reload, prompt warm-up for the newly
+  // connected inbox — but only if it isn't already enrolled (skips reconnects).
+  useEffect(() => {
+    if (!pendingWarmupProvider || !data?.accounts) return;
+    const acc = data.accounts.find(
+      a => (a.provider || 'gmail') === pendingWarmupProvider && !a.warmup_pool?.is_enabled
+    );
+    if (acc) setWarmupModalAcc(acc);
+    setPendingWarmupProvider(null);
+  }, [pendingWarmupProvider, data]);
+
+  // Enable (from the consent modal — the ONLY place we record consent) or disable
+  // warm-up for one inbox.
+  const confirmWarmup = async () => {
+    const acc = warmupModalAcc;
+    if (!acc) return;
+    setWarmupBusyId(acc.id);
+    try {
+      await toggleWarmupPool(acc.id, true);
+      toast.success('Warm-up on — building this inbox’s reputation.');
+      setWarmupModalAcc(null);
+      refresh();
+    } catch (e) { toast.error(e.message); } finally { setWarmupBusyId(null); }
+  };
+  const disableWarmup = async (acc) => {
+    setWarmupBusyId(acc.id);
+    try {
+      await toggleWarmupPool(acc.id, false);
+      toast.info('Warm-up turned off for this inbox.');
+      refresh();
+    } catch (e) { toast.error(e.message); } finally { setWarmupBusyId(null); }
+  };
 
   const saveAutoFollow = async (v) => {
     setAutoFollow(v); setSavingAF(true);
@@ -637,7 +700,16 @@ function SendingTab() {
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                         <span className="text-secondary-dark">Daily limit</span>
                         <span className="text-black-light font-semibold text-right">
-                          {enforced} / day{warming && <span className="text-amber-600 font-normal"> · warming up</span>}
+                          {enforced} / day{warming && (
+                            <span className="text-amber-600 font-normal"> · warming up{' '}
+                              <InfoTip label="What does “warming up” mean?">
+                                Automatic: a new inbox's daily send limit starts low and
+                                grows to full over ~2 weeks on its own. Different from the
+                                <strong> Warm-up</strong> toggle below, which actively builds
+                                reputation by exchanging mail with our network.
+                              </InfoTip>
+                            </span>
+                          )}
                         </span>
                         <span className="text-secondary-dark">Sent today</span>
                         <span className="text-black-light font-semibold text-right">{acc.sent_today}/{enforced}</span>
@@ -681,6 +753,45 @@ function SendingTab() {
                           <div className="w-full h-1.5 bg-neutral-dark rounded-full overflow-hidden"><div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(wp.progress || 0, 100)}%` }} /></div>
                         </div>
                       )}
+
+                      {/* Warm-up POOL (opt-in seed-exchange) — builds reputation
+                          by exchanging real mail with our private mailbox network.
+                          Distinct from the passive age-ramp shown above. */}
+                      {acc.status !== 'Issue' && (() => {
+                        const pool = acc.warmup_pool || {};
+                        const busy = warmupBusyId === acc.id;
+                        return (
+                          <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-dark bg-neutral-light px-3 py-2">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 text-xs font-semibold text-black-light">
+                                <Flame className="w-3.5 h-3.5 text-primary-dark" /> Warm-up
+                                <InfoTip label="What is Warm-up?" align="left">
+                                  Actively builds this inbox's reputation by exchanging a few
+                                  low-volume, natural emails with our private mailbox network,
+                                  so your real emails land in the inbox. Separate from the
+                                  automatic “warming up” limit ramp shown above.
+                                </InfoTip>
+                              </div>
+                              <p className="text-[11px] text-secondary-dark mt-0.5 leading-snug">
+                                {pool.is_enabled
+                                  ? `Active · day ${pool.days_running ?? 0}${pool.messages_sent ? ` · ${pool.messages_sent} sent` : ''}`
+                                  : 'Off — build reputation so you land in inbox, not spam.'}
+                              </p>
+                            </div>
+                            {pool.is_enabled ? (
+                              <button onClick={() => disableWarmup(acc)} disabled={busy}
+                                className="shrink-0 text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
+                                {busy ? 'Updating…' : 'Turn off'}
+                              </button>
+                            ) : (
+                              <button onClick={() => setWarmupModalAcc(acc)} disabled={busy}
+                                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-gradient-to-r from-primary-light to-primary-dark rounded-lg hover:opacity-90 disabled:opacity-60">
+                                {busy ? 'Updating…' : 'Turn on'}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       <div className="flex items-center justify-between pt-1">
                         <div className="flex items-center gap-3">
@@ -800,6 +911,16 @@ function SendingTab() {
 
       {/* Pre-consent explainer (Gmail only) — owned by useConnectProvider. */}
       {explainer}
+
+      {/* Warm-up consent — the only place we record warm-up consent, shown both
+          by the per-inbox "Turn on" button and the post-connect prompt. */}
+      <WarmupConsentModal
+        open={!!warmupModalAcc}
+        account={warmupModalAcc}
+        busy={warmupBusyId === warmupModalAcc?.id}
+        onConfirm={confirmWarmup}
+        onCancel={() => setWarmupModalAcc(null)}
+      />
     </>
   );
 }
