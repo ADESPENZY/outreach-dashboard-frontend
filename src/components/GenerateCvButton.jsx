@@ -1,38 +1,32 @@
 import React, { useState } from 'react';
 import { toast } from 'react-toastify';
-import { FileText, Check, Loader2, Download } from 'lucide-react';
-import { generateTailoredCV } from '../services/apiOutreach';
+import { FileText, Check, Loader2, Eye } from 'lucide-react';
+import { generateJobCV } from '../services/apiOutreach';
+import TailoredCVPreview from './TailoredCVPreview';
 
-// ── Generate / download a role-tailored CV ────────────────────────────────
+// ── Generate / preview a role-tailored CV ─────────────────────────────────
 // Subtle text button used on every Opportunities card and next to every drafted
-// introduction. First tap generates (or reuses) a CV tailored to THIS job and
-// downloads the PDF; afterwards it shows "CV tailored ✓ · Download" and
-// re-downloads the cached one instantly. Deliberately quiet — never competes
-// with the primary Write Intro / Skip / Approve actions.
-
-function downloadCvBlob(blob, job) {
-  const safe = `${job.company_name || 'role'}_${job.title || 'CV'}`
-    .replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${safe}_CV.pdf`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
+// introduction. Deliberately quiet — never competes with the primary
+// Write Intro / Skip / Approve actions.
+//
+// BEHAVIOUR CHANGE: this used to stream a PDF straight to disk. It now opens the
+// preview, where the user can switch style and download. The generation step is
+// unchanged and still cached: generateJobCV() returns the stored
+// GeneratedResume.content when one exists and only calls OpenAI on the very
+// first request for a job. Switching style afterwards costs nothing.
 
 const GenerateCvButton = ({ job, hasCv = false, className = '' }) => {
   const [done, setDone] = useState(!!hasCv);
   const [busy, setBusy] = useState(false);
+  const [cvData, setCvData] = useState(null);
 
   const handleClick = async () => {
     if (busy || !job?.id) return;
     setBusy(true);
     try {
-      const blob = await generateTailoredCV(job.id);
-      downloadCvBlob(blob, job);
+      // Cached after the first call — this is the only step that can hit OpenAI.
+      const data = await generateJobCV(job.id);
+      setCvData(data);
       if (!done) toast.success('CV tailored to this role.');
       setDone(true);
     } catch (err) {
@@ -46,21 +40,32 @@ const GenerateCvButton = ({ job, hasCv = false, className = '' }) => {
     'inline-flex items-center gap-1.5 text-xs font-semibold transition-colors disabled:opacity-60 disabled:cursor-not-allowed';
 
   return (
-    <button
-      type="button"
-      onClick={handleClick}
-      disabled={busy}
-      aria-label={done ? 'Download tailored CV' : 'Generate a CV tailored to this role'}
-      className={`${base} ${done ? 'text-emerald-600 hover:text-emerald-700' : 'text-secondary-dark hover:text-primary-dark'} ${className}`}
-    >
-      {busy ? (
-        <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Tailoring…</>
-      ) : done ? (
-        <><Check className="w-3.5 h-3.5" /> CV tailored <span className="text-secondary-dark/50">·</span> <Download className="w-3.5 h-3.5" /> Download</>
-      ) : (
-        <><FileText className="w-3.5 h-3.5" /> Generate CV</>
+    <>
+      <button
+        type="button"
+        onClick={handleClick}
+        disabled={busy}
+        aria-label={done ? 'Preview tailored CV' : 'Generate a CV tailored to this role'}
+        className={`${base} ${done ? 'text-emerald-600 hover:text-emerald-700' : 'text-secondary-dark hover:text-primary-dark'} ${className}`}
+      >
+        {busy ? (
+          <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Tailoring…</>
+        ) : done ? (
+          <><Check className="w-3.5 h-3.5" /> CV tailored <span className="text-secondary-dark/50">·</span> <Eye className="w-3.5 h-3.5" /> Preview</>
+        ) : (
+          <><FileText className="w-3.5 h-3.5" /> Generate CV</>
+        )}
+      </button>
+
+      {cvData && (
+        <TailoredCVPreview
+          jobId={job.id}
+          job={job}
+          data={cvData}
+          onClose={() => setCvData(null)}
+        />
       )}
-    </button>
+    </>
   );
 };
 

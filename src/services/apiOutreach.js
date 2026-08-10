@@ -304,3 +304,49 @@ export async function generateTailoredCV(jobId) {
     throw new Error(parseApiError(err));
   }
 }
+
+// ---------------------------------------------------------------------------
+// Outreach — CV template picker
+//
+// Rendering is separate from generation. generateJobCV() above does the (cached)
+// OpenAI work once; everything here re-renders that same stored content into a
+// different design, so switching styles costs nothing.
+// ---------------------------------------------------------------------------
+
+/** Pickable designs + the user's saved default. */
+export async function getCvTemplates() {
+  try {
+    const response = await api.get("/api/outreach/cv/templates/");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/**
+ * Re-render an already-generated CV in `template` and return the PDF as a Blob.
+ * Never triggers generation — the job must already have a stored resume.
+ */
+export async function renderCvPdf(jobId, template) {
+  try {
+    const response = await api.post(
+      "/api/outreach/cv/render/",
+      { job_id: jobId, template },
+      { responseType: "blob" }
+    );
+    return response.data;
+  } catch (err) {
+    // Error bodies arrive as a Blob because of responseType — decode for a
+    // usable message.
+    const blob = err?.response?.data;
+    if (blob instanceof Blob) {
+      try {
+        const json = JSON.parse(await blob.text());
+        throw new Error(json.error || "Could not render your CV.");
+      } catch (parseErr) {
+        if (parseErr instanceof Error && parseErr.message) throw parseErr;
+      }
+    }
+    throw new Error(parseApiError(err));
+  }
+}
