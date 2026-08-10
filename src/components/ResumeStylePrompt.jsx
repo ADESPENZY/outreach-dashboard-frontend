@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { toast } from 'react-toastify';
 import { LayoutTemplate, AlignLeft, Check } from 'lucide-react';
@@ -17,6 +18,11 @@ import { updateProfile } from '../services/apiProfile';
   overlay + card, single-choice buttons with an active state, one primary
   action. There is no shared single-choice component in the codebase to reuse,
   so this mirrors that pattern rather than inventing a new one.
+
+  Portalled to <body> for the same reason as TailoredCVPreview: it renders deep
+  inside JobDetailDrawer's transformed <motion.aside>, which would otherwise
+  become the containing block for this `position: fixed` overlay and shift it
+  off screen.
 
   Adding a style later: it renders whatever `templates` the backend returns —
   no change needed here beyond an icon entry.
@@ -50,7 +56,7 @@ export default function ResumeStylePrompt({ templates, initial, onSaved, onSkip 
     }
   };
 
-  return (
+  const overlay = (
     <AnimatePresence>
       <motion.div
         key="rsp-overlay"
@@ -59,7 +65,8 @@ export default function ResumeStylePrompt({ templates, initial, onSaved, onSkip 
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
         onClick={() => onSkip?.()}
-        className="fixed inset-0 z-[90] flex items-center justify-center px-4 py-6 bg-black/70 backdrop-blur-sm"
+        /* Above TailoredCVPreview's z-[100] — this sits on top of the preview. */
+        className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 bg-black/70 backdrop-blur-sm"
       >
         <motion.div
           key="rsp-card"
@@ -130,4 +137,6 @@ export default function ResumeStylePrompt({ templates, initial, onSaved, onSkip 
       </motion.div>
     </AnimatePresence>
   );
+
+  return createPortal(overlay, document.body);
 }
