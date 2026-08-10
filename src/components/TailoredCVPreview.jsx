@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, LayoutTemplate, AlignLeft, Check } from 'lucide-react';
+import { X, Download, LayoutTemplate, AlignLeft, FileText, PenLine, Check } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getCvTemplates, renderCvPdf } from '../services/apiOutreach';
 import ModernCVTemplate from './ModernCVTemplate';
 import ExecutiveCVTemplate from './ExecutiveCVTemplate';
+import MinimalCVTemplate from './MinimalCVTemplate';
+import SignatureCVTemplate from './SignatureCVTemplate';
 import ResumeStylePrompt from './ResumeStylePrompt';
 
 /*
@@ -23,19 +25,25 @@ import ResumeStylePrompt from './ResumeStylePrompt';
   portal this overlay is positioned and clipped relative to the drawer, which
   pushed the whole top bar (style toggle + Download) off screen.
 
-  ADDING A STYLE LATER is one line in CV_TEMPLATES plus its backend renderer.
-  The backend is the source of truth for which styles exist (it returns the
-  list); this map only supplies the on-screen React preview and icon for each.
+  ADDING A STYLE needs TWO entries, not one: the backend registry (which drives
+  the option buttons — those populate automatically from the API) AND an entry
+  here supplying the on-screen React preview. Miss this map and the buttons
+  still appear, but selecting the new style silently shows a DIFFERENT design's
+  preview while downloading the right PDF. Keep the two in step.
 */
 const CV_TEMPLATES = {
   modern:    { icon: LayoutTemplate, Preview: ModernCVTemplate },
   executive: { icon: AlignLeft,      Preview: ExecutiveCVTemplate },
+  minimal:   { icon: FileText,       Preview: MinimalCVTemplate },
+  signature: { icon: PenLine,        Preview: SignatureCVTemplate },
 };
 
 // Used until the backend list arrives, so the switcher never renders empty.
 const FALLBACK_TEMPLATES = [
   { id: 'modern',    label: 'Modern',    description: 'Two-column with branded sidebar' },
   { id: 'executive', label: 'Executive', description: 'ATS-strict single column' },
+  { id: 'minimal',   label: 'Minimal',   description: 'Plain text, maximum ATS safety' },
+  { id: 'signature', label: 'Signature', description: 'Single column with a brand accent' },
 ];
 
 export default function TailoredCVPreview({ jobId, job, data, onClose }) {
@@ -73,12 +81,12 @@ export default function TailoredCVPreview({ jobId, job, data, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      const blob = await renderCvPdf(jobId, active);
-      const safe = `${job?.company_name || 'role'}_${job?.title || 'CV'}`
-        .replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80);
+      // The server names the file (see outreach.views._safe_cv_filename) so the
+      // convention lives in exactly one place.
+      const { blob, filename } = await renderCvPdf(jobId, active);
       const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
       const a = Object.assign(document.createElement('a'), { href: url });
-      a.setAttribute('download', `${safe}_${active}_CV.pdf`);
+      a.setAttribute('download', filename);
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
       toast.success('CV downloaded.');

@@ -278,8 +278,9 @@ export async function getJobCV(jobId) {
 
 /**
  * One-shot tailored-CV download for the "Apply Direct" flow. Generates (or
- * reuses) a job-specific CV and returns the PDF as a Blob. On error the server
- * sends JSON, so we decode the blob to surface the real message.
+ * reuses) a job-specific CV. Returns { blob, filename } with the server's
+ * filename. On error the server sends JSON, so we decode the blob to surface
+ * the real message.
  */
 export async function generateTailoredCV(jobId) {
   try {
@@ -288,7 +289,10 @@ export async function generateTailoredCV(jobId) {
       { job_id: jobId },
       { responseType: "blob" }
     );
-    return response.data;
+    return {
+      blob: response.data,
+      filename: filenameFromHeaders(response.headers),
+    };
   } catch (err) {
     // The error body is a Blob (responseType: blob) — try to read its JSON.
     const blob = err?.response?.data;
@@ -313,6 +317,28 @@ export async function generateTailoredCV(jobId) {
 // different design, so switching styles costs nothing.
 // ---------------------------------------------------------------------------
 
+/**
+ * Pull the download filename out of a response's Content-Disposition.
+ *
+ * The server is the single source of truth for CV filenames (see
+ * outreach.views._safe_cv_filename). The frontend used to invent its own here,
+ * which is how downloads ended up named inconsistently and without the
+ * candidate's name. Readable cross-origin only because the backend lists the
+ * header in CORS_EXPOSE_HEADERS — hence the fallback, which keeps downloads
+ * working if that ever regresses.
+ */
+export function filenameFromHeaders(headers, fallback = 'CV.pdf') {
+  const raw = headers?.['content-disposition'] || headers?.['Content-Disposition'] || '';
+  // filename*=UTF-8''name.pdf  |  filename="name.pdf"  |  filename=name.pdf
+  const match = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(raw);
+  if (!match) return fallback;
+  try {
+    return decodeURIComponent(match[1]).trim() || fallback;
+  } catch {
+    return match[1].trim() || fallback;
+  }
+}
+
 /** Pickable designs + the user's saved default. */
 export async function getCvTemplates() {
   try {
@@ -324,8 +350,9 @@ export async function getCvTemplates() {
 }
 
 /**
- * Re-render an already-generated CV in `template` and return the PDF as a Blob.
+ * Re-render an already-generated CV in `template`.
  * Never triggers generation — the job must already have a stored resume.
+ * Returns { blob, filename } with the filename the SERVER chose.
  */
 export async function renderCvPdf(jobId, template) {
   try {
@@ -334,7 +361,10 @@ export async function renderCvPdf(jobId, template) {
       { job_id: jobId, template },
       { responseType: "blob" }
     );
-    return response.data;
+    return {
+      blob: response.data,
+      filename: filenameFromHeaders(response.headers),
+    };
   } catch (err) {
     // Error bodies arrive as a Blob because of responseType — decode for a
     // usable message.

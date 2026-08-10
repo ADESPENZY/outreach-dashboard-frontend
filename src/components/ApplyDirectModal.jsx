@@ -29,13 +29,13 @@ const ApplyDirectModal = ({ job, onClose, onApplied }) => {
     }
   };
 
-  const downloadBlob = (blob) => {
-    const safe = `${job.company_name || 'role'}_${job.title || 'CV'}`
-      .replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80);
+  // The server names the file (outreach.views._safe_cv_filename) so every CV
+  // download across the app uses one convention.
+  const downloadBlob = (blob, filename) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${safe}_CV.pdf`;
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -45,8 +45,8 @@ const ApplyDirectModal = ({ job, onClose, onApplied }) => {
   const handleGenerate = async () => {
     setBusy(true);
     try {
-      const blob = await generateTailoredCV(job.id);
-      downloadBlob(blob);
+      const { blob, filename } = await generateTailoredCV(job.id);
+      downloadBlob(blob, filename);
       toast.success('Your tailored CV is ready — opening the listing.');
       onApplied?.();
       openListing();
