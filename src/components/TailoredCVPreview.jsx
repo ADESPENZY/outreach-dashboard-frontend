@@ -1,41 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Download, LayoutTemplate, AlignLeft, FileText, PenLine, Check } from 'lucide-react';
+import { X, Download, LayoutTemplate, AlignLeft, FileText, PenLine, Check, AlertCircle } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { getCvTemplates, renderCvPdf } from '../services/apiOutreach';
-import ModernCVTemplate from './ModernCVTemplate';
-import ExecutiveCVTemplate from './ExecutiveCVTemplate';
-import MinimalCVTemplate from './MinimalCVTemplate';
-import SignatureCVTemplate from './SignatureCVTemplate';
 import ResumeStylePrompt from './ResumeStylePrompt';
 
 /*
   Tailored CV preview + style switcher.
 
-  The content shown here is the ALREADY-GENERATED GeneratedResume JSON passed in
-  as `data`. Switching styles re-renders that same content — on screen instantly,
-  and on download through POST /api/outreach/cv/render/, which never calls
-  OpenAI. Generation happens once, upstream; this is presentation only.
+  THE PREVIEW SHOWS THE REAL PDF. It fetches the same bytes the Download button
+  hands you and displays them in an iframe, so what you see is what you get —
+  byte for byte, not an approximation.
 
-  RENDERED THROUGH A PORTAL, and it must stay that way. This component mounts
-  inside GenerateCvButton, which lives inside JobDetailDrawer's <motion.aside>.
+  It used to render hand-written React/Tailwind rebuilds of each design — four
+  *CVTemplate.jsx components, now DELETED. They were a second, parallel
+  representation of every template, and they drifted: the Modern PDF is laid out
+  with a fixed sidebar and a 72mm main-column margin, while its React twin still
+  used `grid-cols-[30%_70%]` with the sidebar as a grid item. Same data, two
+  layout engines, guaranteed to disagree — and they did.
+
+  Do not reintroduce them. Rendering the PDF makes that class of bug
+  structurally impossible rather than something to keep in sync by hand.
+
+  Each template's PDF is fetched once and cached for the life of the modal, so
+  flipping back and forth is instant and Download reuses the bytes already on
+  screen — one render per style, never two.
+
+  RENDERED THROUGH A PORTAL, and it must stay that way. This mounts inside
+  GenerateCvButton, which lives inside JobDetailDrawer's <motion.aside>.
   Framer-motion keeps a `transform` on that element, and a transformed ancestor
-  becomes the containing block for `position: fixed` descendants — so without the
-  portal this overlay is positioned and clipped relative to the drawer, which
-  pushed the whole top bar (style toggle + Download) off screen.
+  becomes the containing block for `position: fixed` descendants — without the
+  portal this overlay is positioned and clipped relative to the drawer.
 
-  ADDING A STYLE needs TWO entries, not one: the backend registry (which drives
-  the option buttons — those populate automatically from the API) AND an entry
-  here supplying the on-screen React preview. Miss this map and the buttons
-  still appear, but selecting the new style silently shows a DIFFERENT design's
-  preview while downloading the right PDF. Keep the two in step.
+  ADDING A STYLE is now purely a backend change: the option list comes from the
+  API and the preview renders whatever PDF it returns. Only the icon below is
+  cosmetic and optional.
 */
-const CV_TEMPLATES = {
-  modern:    { icon: LayoutTemplate, Preview: ModernCVTemplate },
-  executive: { icon: AlignLeft,      Preview: ExecutiveCVTemplate },
-  minimal:   { icon: FileText,       Preview: MinimalCVTemplate },
-  signature: { icon: PenLine,        Preview: SignatureCVTemplate },
+const TEMPLATE_ICONS = {
+  modern: LayoutTemplate,
+  executive: AlignLeft,
+  minimal: FileText,
+  signature: PenLine,
 };
 
 // Used until the backend list arrives, so the switcher never renders empty.
@@ -46,11 +52,25 @@ const FALLBACK_TEMPLATES = [
   { id: 'signature', label: 'Signature', description: 'Single column with a brand accent' },
 ];
 
-export default function TailoredCVPreview({ jobId, job, data, onClose }) {
+// Chrome/Edge honour these; other viewers ignore them harmlessly.
+const VIEWER_PARAMS = '#toolbar=0&navpanes=0&statusbar=0&view=FitH';
+
+// Only needs the job id now. The CV JSON is no longer passed in (the server
+// renders it), and the filename comes back on Content-Disposition rather than
+// being rebuilt from the job.
+export default function TailoredCVPreview({ jobId, onClose }) {
   const [templates, setTemplates] = useState(FALLBACK_TEMPLATES);
   const [active, setActive] = useState('modern');
   const [downloading, setDownloading] = useState(false);
   const [showPrompt, setShowPrompt] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  // { [templateId]: { url, blob, filename } } — one render per style.
+  const [cache, setCache] = useState({});
+  // Object URLs must be revoked on unmount; a ref keeps the cleanup accurate
+  // even though `cache` changes identity on every fetch.
+  const urlsRef = useRef([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +83,32 @@ export default function TailoredCVPreview({ jobId, job, data, onClose }) {
       })
       .catch(() => { /* keep the fallback list; the preview still works */ });
     return () => { cancelled = true; };
+  }, []);
+
+  // Fetch the selected style's PDF once, then serve it from cache.
+  const ensureRendered = useCallback(async (template) => {
+    if (!template || !jobId) return;
+    if (cache[template]) return;
+    setLoading(true);
+    setError('');
+    try {
+      const { blob, filename } = await renderCvPdf(jobId, template);
+      const pdf = new Blob([blob], { type: 'application/pdf' });
+      const url = URL.createObjectURL(pdf);
+      urlsRef.current.push(url);
+      setCache((prev) => ({ ...prev, [template]: { url, blob: pdf, filename } }));
+    } catch (err) {
+      setError(err?.message || 'Could not render this style.');
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId, cache]);
+
+  useEffect(() => { ensureRendered(active); }, [active, ensureRendered]);
+
+  useEffect(() => () => {
+    urlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    urlsRef.current = [];
   }, []);
 
   useEffect(() => {
@@ -81,10 +127,14 @@ export default function TailoredCVPreview({ jobId, job, data, onClose }) {
   const handleDownload = async () => {
     setDownloading(true);
     try {
-      // The server names the file (see outreach.views._safe_cv_filename) so the
-      // convention lives in exactly one place.
-      const { blob, filename } = await renderCvPdf(jobId, active);
-      const url = URL.createObjectURL(new Blob([blob], { type: 'application/pdf' }));
+      // Reuse the exact bytes already on screen — no second render, and the
+      // file can never differ from the preview.
+      const entry = cache[active];
+      const { blob, filename } = entry || await (async () => {
+        const fresh = await renderCvPdf(jobId, active);
+        return { blob: new Blob([fresh.blob], { type: 'application/pdf' }), filename: fresh.filename };
+      })();
+      const url = URL.createObjectURL(blob);
       const a = Object.assign(document.createElement('a'), { href: url });
       a.setAttribute('download', filename);
       document.body.appendChild(a); a.click(); a.remove();
@@ -97,7 +147,7 @@ export default function TailoredCVPreview({ jobId, job, data, onClose }) {
     }
   };
 
-  const ActivePreview = CV_TEMPLATES[active]?.Preview || ModernCVTemplate;
+  const activeEntry = cache[active];
   const activeLabel = templates.find((t) => t.id === active)?.label || active;
 
   const overlay = (
@@ -124,7 +174,7 @@ export default function TailoredCVPreview({ jobId, job, data, onClose }) {
                 Tailored CV Preview
               </h2>
               <p className="text-secondary-dark text-xs mt-0.5 font-roboto">
-                Same content in every style — pick one, then download.
+                This is the actual PDF — what you see is what downloads.
               </p>
             </div>
             <button
@@ -136,14 +186,14 @@ export default function TailoredCVPreview({ jobId, job, data, onClose }) {
             </button>
           </div>
 
-          {/* ── STYLE PICKER — its own full-width row so it can't be crowded ── */}
+          {/* ── STYLE PICKER ──────────────────────────────────────────── */}
           <div className="px-5 sm:px-6 pb-4 flex-shrink-0 border-b border-neutral-dark">
             <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-secondary-dark mb-2">
               Choose a style · {templates.length} available
             </p>
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               {templates.map(({ id, label, description }) => {
-                const Icon = CV_TEMPLATES[id]?.icon || LayoutTemplate;
+                const Icon = TEMPLATE_ICONS[id] || LayoutTemplate;
                 const isActive = active === id;
                 return (
                   <button
@@ -172,21 +222,48 @@ export default function TailoredCVPreview({ jobId, job, data, onClose }) {
             </div>
           </div>
 
-          {/* ── PREVIEW CANVAS ────────────────────────────────────────── */}
-          <div className="overflow-y-auto flex-1 bg-neutral-dark/10 min-h-0">
-            <div className="max-w-[720px] mx-auto my-5 shadow-xl rounded overflow-hidden ring-1 ring-black/10">
-              <ActivePreview cvData={data} />
-            </div>
+          {/* ── THE ACTUAL PDF ────────────────────────────────────────── */}
+          <div className="flex-1 min-h-0 bg-neutral-dark/20 relative">
+            {activeEntry && (
+              <iframe
+                key={active}
+                src={`${activeEntry.url}${VIEWER_PARAMS}`}
+                title={`${activeLabel} CV preview`}
+                className="w-full h-full border-0"
+              />
+            )}
+
+            {loading && (
+              /* Inline, not Screen — Screen is a `fixed inset-0` full-page
+                 overlay and would escape this container entirely. */
+              <div className="absolute inset-0 flex items-center justify-center bg-neutral-dark/20">
+                <ApplyDirLoader.Inline message={`Rendering ${activeLabel}…`} />
+              </div>
+            )}
+
+            {!loading && !activeEntry && error && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-8 text-center">
+                <AlertCircle className="w-6 h-6 text-primary-dark" />
+                <p className="text-sm font-semibold text-black">Could not render {activeLabel}</p>
+                <p className="text-xs text-secondary-dark max-w-sm">{error}</p>
+                <button
+                  onClick={() => ensureRendered(active)}
+                  className="mt-1 px-4 py-2 text-xs font-semibold rounded-lg border-2 border-neutral-dark hover:border-secondary-dark/40 transition-colors"
+                >
+                  Try again
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* ── ACTION BAR — always visible, never scrolls away ────────── */}
+          {/* ── ACTION BAR ────────────────────────────────────────────── */}
           <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-3 border-t border-neutral-dark bg-neutral flex-shrink-0">
             <p className="text-xs text-secondary-dark truncate">
               Downloading <span className="font-semibold text-black">{activeLabel}</span>
             </p>
             <button
               onClick={handleDownload}
-              disabled={downloading}
+              disabled={downloading || loading || (!activeEntry && !!error)}
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 shrink-0"
             >
               {downloading

@@ -18,15 +18,17 @@ import TailoredCVPreview from './TailoredCVPreview';
 const GenerateCvButton = ({ job, hasCv = false, className = '' }) => {
   const [done, setDone] = useState(!!hasCv);
   const [busy, setBusy] = useState(false);
-  const [cvData, setCvData] = useState(null);
+  const [open, setOpen] = useState(false);
 
   const handleClick = async () => {
     if (busy || !job?.id) return;
     setBusy(true);
     try {
-      // Cached after the first call — this is the only step that can hit OpenAI.
-      const data = await generateJobCV(job.id);
-      setCvData(data);
+      // Ensures the tailored CONTENT exists before the preview asks the server
+      // to render it — /cv/render/ 404s rather than generating. Cached after the
+      // first call, so this is the only step that can ever hit OpenAI.
+      await generateJobCV(job.id);
+      setOpen(true);
       if (!done) toast.success('CV tailored to this role.');
       setDone(true);
     } catch (err) {
@@ -57,13 +59,8 @@ const GenerateCvButton = ({ job, hasCv = false, className = '' }) => {
         )}
       </button>
 
-      {cvData && (
-        <TailoredCVPreview
-          jobId={job.id}
-          job={job}
-          data={cvData}
-          onClose={() => setCvData(null)}
-        />
+      {open && (
+        <TailoredCVPreview jobId={job.id} onClose={() => setOpen(false)} />
       )}
     </>
   );
