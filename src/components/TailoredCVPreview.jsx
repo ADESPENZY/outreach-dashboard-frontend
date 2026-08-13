@@ -162,14 +162,27 @@ export default function TailoredCVPreview({ jobId, onClose }) {
       )}
 
       <div
-        className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4"
+        className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm flex items-stretch justify-center p-0 sm:items-center sm:p-4 md:p-6"
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
-        <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden">
+        {/*
+          SIZING — the PDF pane needs a DEFINITE height, not a max.
+
+          This used to be `max-h-[92vh]` with no `h-*`. A max-height alone leaves
+          the flex column's height indefinite, so `flex-1` on the PDF pane had
+          nothing to distribute and the iframe's `h-full` resolved against
+          nothing — collapsing to the iframe intrinsic default of 150px.
+          Measured: pane was 896x150 at 1440w and 351x150 at 375w, which is the
+          cramped, half-scrolled sliver users were seeing.
+
+          `h-full` (mobile, full-bleed) and `sm:h-[90vh]` give the column a real
+          height, so flex-1 has something to fill. Keep a definite height here.
+        */}
+        <div className="bg-white shadow-2xl flex flex-col overflow-hidden min-w-0 w-full h-full rounded-none sm:h-[90vh] sm:max-h-[900px] sm:max-w-3xl sm:rounded-2xl md:max-w-5xl">
 
           {/* ── TITLE ROW ─────────────────────────────────────────────── */}
-          <div className="flex items-start justify-between gap-4 px-5 sm:px-6 pt-4 pb-3 flex-shrink-0">
-            <div>
+          <div className="flex items-start justify-between gap-3 px-4 sm:px-6 pt-4 pb-3 flex-shrink-0">
+            <div className="min-w-0">
               <h2 className="font-montserrat font-bold text-black text-base leading-tight">
                 Tailored CV Preview
               </h2>
@@ -180,18 +193,22 @@ export default function TailoredCVPreview({ jobId, onClose }) {
             <button
               onClick={onClose}
               aria-label="Close preview"
-              className="p-1.5 rounded-lg text-secondary-dark hover:bg-neutral-dark hover:text-black transition-all shrink-0"
+              /* 44x44 minimum touch target (DESIGN_GUIDE §5); negative margins
+                 keep it optically aligned with the heading despite the padding. */
+              className="-mr-1.5 -mt-1.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-secondary-dark hover:bg-neutral-dark hover:text-black transition-all"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
 
           {/* ── STYLE PICKER ──────────────────────────────────────────── */}
-          <div className="px-5 sm:px-6 pb-4 flex-shrink-0 border-b border-neutral-dark">
+          <div className="px-4 sm:px-6 pb-3 sm:pb-4 flex-shrink-0 border-b border-neutral-dark">
             <p className="text-[10px] font-bold tracking-[0.12em] uppercase text-secondary-dark mb-2">
               Choose a style · {templates.length} available
             </p>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            {/* One row of four once there is room, so the picker costs the
+                preview less vertical space on a wide screen. */}
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               {templates.map(({ id, label, description }) => {
                 const Icon = TEMPLATE_ICONS[id] || LayoutTemplate;
                 const isActive = active === id;
@@ -201,7 +218,7 @@ export default function TailoredCVPreview({ jobId, onClose }) {
                     onClick={() => setActive(id)}
                     aria-pressed={isActive}
                     className={`
-                      relative flex items-start gap-2.5 px-3 py-2.5 rounded-xl border-2 text-left
+                      relative flex items-start gap-2.5 min-h-[44px] px-3 py-2 rounded-xl border-2 text-left
                       transition-all duration-150
                       ${isActive
                         ? 'border-primary-dark bg-primary-dark/5 shadow-sm'
@@ -223,13 +240,18 @@ export default function TailoredCVPreview({ jobId, onClose }) {
           </div>
 
           {/* ── THE ACTUAL PDF ────────────────────────────────────────── */}
-          <div className="flex-1 min-h-0 bg-neutral-dark/20 relative">
+          {/* min-w-0 alongside min-h-0: a flex child defaults to min-width:auto,
+              which lets wide iframe content push the modal wider than the
+              viewport on a phone. */}
+          <div className="flex-1 min-h-0 min-w-0 bg-neutral-dark/20 relative">
             {activeEntry && (
               <iframe
                 key={active}
                 src={`${activeEntry.url}${VIEWER_PARAMS}`}
                 title={`${activeLabel} CV preview`}
-                className="w-full h-full border-0"
+                /* `block` kills the inline-element baseline gap that would
+                   otherwise leave a few stray pixels under the iframe. */
+                className="block w-full h-full border-0"
               />
             )}
 
@@ -257,14 +279,14 @@ export default function TailoredCVPreview({ jobId, onClose }) {
           </div>
 
           {/* ── ACTION BAR ────────────────────────────────────────────── */}
-          <div className="flex items-center justify-between gap-3 px-5 sm:px-6 py-3 border-t border-neutral-dark bg-neutral flex-shrink-0">
-            <p className="text-xs text-secondary-dark truncate">
+          <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3 border-t border-neutral-dark bg-neutral flex-shrink-0">
+            <p className="text-xs text-secondary-dark truncate min-w-0">
               Downloading <span className="font-semibold text-black">{activeLabel}</span>
             </p>
             <button
               onClick={handleDownload}
               disabled={downloading || loading || (!activeEntry && !!error)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 shrink-0"
+              className="inline-flex min-h-[44px] items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-dark to-primary-light text-white text-sm font-semibold rounded-lg hover:opacity-90 transition-opacity disabled:opacity-60 shrink-0"
             >
               {downloading
                 ? <ApplyDirLoader.Button variant="light" />
