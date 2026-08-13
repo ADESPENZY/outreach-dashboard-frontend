@@ -44,6 +44,27 @@ const TEMPLATE_ICONS = {
   signature: PenLine,
 };
 
+/*
+  Where each design is the right choice. Kept here rather than in the API
+  `description` because it is guidance about WHERE TO SEND the file, not a
+  description of the design, and the two read better as separate lines.
+
+  Grounded in an extraction audit (Aug 2026), not taste: the three single-column
+  designs extract in clean reading order, so a parser sees the document the way
+  a human does. Modern is the two-column one — its sidebar carries the name,
+  contact block and competencies, and a resume parser is far likelier to
+  mis-order or skip a sidebar than a single column, so it is steered towards
+  human readers rather than portals.
+
+  Keyed by template id; an unknown id from the API simply renders no caption.
+*/
+const TEMPLATE_ATS_HINT = {
+  modern:    'Best for email & direct attachments',
+  executive: 'Best for online applications (ATS)',
+  minimal:   'Best for online applications (ATS)',
+  signature: 'Best for online applications (ATS)',
+};
+
 // Used until the backend list arrives, so the switcher never renders empty.
 const FALLBACK_TEMPLATES = [
   { id: 'modern',    label: 'Modern',    description: 'Two-column with branded sidebar' },
@@ -229,6 +250,12 @@ export default function TailoredCVPreview({ jobId, onClose }) {
                     <span className="min-w-0">
                       <span className="block text-xs font-bold text-black truncate">{label}</span>
                       <span className="block text-[11px] text-secondary-dark leading-snug">{description}</span>
+                      {TEMPLATE_ATS_HINT[id] && (
+                        <span className={`mt-1 block text-[10px] font-semibold leading-snug ${
+                          isActive ? 'text-primary-dark' : 'text-secondary-dark/80'}`}>
+                          {TEMPLATE_ATS_HINT[id]}
+                        </span>
+                      )}
                     </span>
                     {isActive && (
                       <Check className="w-3.5 h-3.5 text-primary-dark shrink-0 absolute top-2 right-2" />
