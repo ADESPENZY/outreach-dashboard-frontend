@@ -168,33 +168,57 @@ const DetailRow = ({ icon: Icon, label, value }) => {
 // Desktop stat strip — the four Job Details facts as one horizontal row that
 // never scrolls away. Nulls are dropped (never "Not specified"), and the whole
 // strip disappears if all four are null.
-// Values `truncate` with a title tooltip: a JD location can be a full street
-// address, and this has to stay ONE row without ever causing horizontal scroll.
-// `grow` marks the field that absorbs slack and gives it up first. Only location
-// gets it: an equal flex-1 split truncated a perfectly short salary
-// ("$120,000 - $15…") to make room for an address. Everything else sizes to its
-// content and can still shrink if the row genuinely runs out of space.
 const STAT_FIELDS = [
   { key: 'salary',          icon: DollarSign, label: 'Salary' },
-  { key: 'location',        icon: MapPin,     label: 'Location', grow: true },
+  { key: 'location',        icon: MapPin,     label: 'Location' },
   { key: 'employment_type', icon: Briefcase,  label: 'Type' },
   { key: 'level',           icon: TrendingUp, label: 'Level' },
 ];
+
+// The extractor copies salary/location VERBATIM from the posting (Rule 0), and
+// postings routinely write them as prose rather than as values:
+//   location: "This is a fully remote position. You can be based anywhere in
+//              the UK, Amsterdam or …"
+//   salary:   "3,493 to 4,657 Euro p/m + 2000 EUR annual learning budget +
+//              Virtual Stock Options"
+// Dumped straight into a four-across strip, one of those swallows the row and
+// squeezes its neighbours to nothing. The strip is a glance-level summary, so
+// show the LEADING fact and keep the untouched original in the tooltip.
+//
+// Structural trimming only — first sentence, then the part before a trailing
+// "+ benefit" tail. Nothing is reworded or inferred.
+function condenseStat(raw) {
+  if (!raw) return '';
+  let s = String(raw).replace(/\s+/g, ' ').trim();
+  const firstSentence = s.match(/^(.+?[.!?])(?:\s|$)/);
+  // Guard the length so an abbreviation ("approx. 50k") isn't cut to nothing.
+  if (firstSentence && firstSentence[1].length >= 12) s = firstSentence[1];
+  s = s.split(/\s+\+\s+/)[0];          // "…p/m + learning budget + equity"
+  s = s.split(/\s+[·|—]\s+/)[0];       // "…  ·  Remote"
+  return s.replace(/[\s.,;:]+$/, '').trim() || String(raw).trim();
+}
 
 const StatStrip = ({ jd }) => {
   const items = STAT_FIELDS.filter((f) => jd[f.key]);
   if (!items.length) return null;
   return (
     <div className="flex items-center gap-3 py-3">
-      {items.map(({ key, icon: Icon, label, grow }, i) => (
+      {items.map(({ key, icon: Icon, label }, i) => (
         <React.Fragment key={key}>
           {i > 0 && <span className="h-8 w-px shrink-0 bg-neutral-dark" aria-hidden="true" />}
-          <div className={`flex min-w-0 items-center gap-2 ${grow ? 'flex-1' : ''}`}>
+          {/* grow (basis auto), NOT flex-1 (basis 0): items keep their natural
+              width and share the slack, so a short salary is never truncated to
+              make room for a long address — but a genuinely oversized value
+              still shrinks, longest-first, instead of pushing the row over. */}
+          <div className="flex min-w-0 grow items-center gap-2">
             <Icon className="h-4 w-4 shrink-0 text-secondary-dark/70" aria-hidden="true" />
             <div className="min-w-0">
-              <p className="text-xs leading-tight text-secondary-dark">{label}</p>
+              {/* The label truncates too. Without this it overflowed its own
+                  min-w-0 box and printed on top of the next item's label
+                  ("Locati|Level") once a long value squeezed the row. */}
+              <p className="truncate text-xs leading-tight text-secondary-dark">{label}</p>
               <p className="truncate text-sm font-medium leading-tight text-black-light" title={jd[key]}>
-                {jd[key]}
+                {condenseStat(jd[key])}
               </p>
             </div>
           </div>
