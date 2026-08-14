@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -101,6 +101,33 @@ function parseBlocks(text) {
 // so C++ and C# stay distinct.
 const skillKey = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9+#]/g, '');
 
+// ── Desktop-only layout switch ────────────────────────────────────────────
+// The desktop redesign (sticky stat strip + tabs) is a different information
+// architecture, not a restyle, so it is chosen in JS rather than by toggling two
+// duplicate DOM trees with `hidden lg:block` — that would ship every section
+// twice and read twice to a screen reader. Mobile and the md band keep the
+// stacked layout exactly as it was.
+const DESKTOP_QUERY = '(min-width: 1024px)';
+
+function useIsDesktop() {
+  // Initialised synchronously from matchMedia so the correct layout is in the
+  // first paint — no flash of the wrong one.
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia(DESKTOP_QUERY).matches,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(DESKTOP_QUERY);
+    const onChange = (e) => setIsDesktop(e.matches);
+    setIsDesktop(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isDesktop;
+}
+
 // ── Small building blocks ─────────────────────────────────────────────────
 const Section = ({ title, children }) => (
   <section className="rounded-2xl border border-neutral-dark bg-white p-4 md:p-5">
@@ -137,6 +164,80 @@ const DetailRow = ({ icon: Icon, label, value }) => {
     </div>
   );
 };
+
+// Desktop stat strip — the four Job Details facts as one horizontal row that
+// never scrolls away. Nulls are dropped (never "Not specified"), and the whole
+// strip disappears if all four are null.
+// Values `truncate` with a title tooltip: a JD location can be a full street
+// address, and this has to stay ONE row without ever causing horizontal scroll.
+// `grow` marks the field that absorbs slack and gives it up first. Only location
+// gets it: an equal flex-1 split truncated a perfectly short salary
+// ("$120,000 - $15…") to make room for an address. Everything else sizes to its
+// content and can still shrink if the row genuinely runs out of space.
+const STAT_FIELDS = [
+  { key: 'salary',          icon: DollarSign, label: 'Salary' },
+  { key: 'location',        icon: MapPin,     label: 'Location', grow: true },
+  { key: 'employment_type', icon: Briefcase,  label: 'Type' },
+  { key: 'level',           icon: TrendingUp, label: 'Level' },
+];
+
+const StatStrip = ({ jd }) => {
+  const items = STAT_FIELDS.filter((f) => jd[f.key]);
+  if (!items.length) return null;
+  return (
+    <div className="flex items-center gap-3 py-3">
+      {items.map(({ key, icon: Icon, label, grow }, i) => (
+        <React.Fragment key={key}>
+          {i > 0 && <span className="h-8 w-px shrink-0 bg-neutral-dark" aria-hidden="true" />}
+          <div className={`flex min-w-0 items-center gap-2 ${grow ? 'flex-1' : ''}`}>
+            <Icon className="h-4 w-4 shrink-0 text-secondary-dark/70" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-xs leading-tight text-secondary-dark">{label}</p>
+              <p className="truncate text-sm font-medium leading-tight text-black-light" title={jd[key]}>
+                {jd[key]}
+              </p>
+            </div>
+          </div>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
+// Segmented tabs. Styling is lifted from JobsPage's `tabButton` so the two read
+// as the same control (gradient pill when active, neutral fill when not).
+const TabBar = ({ tabs, activeTab, onSelect }) => (
+  // overflow-x-auto is a safety net for a future 4th tab / longer label; with
+  // three short labels it never triggers. (`no-scrollbar`, used in Settings.jsx,
+  // is not actually defined anywhere in the project — so it is not used here.)
+  <div className="flex gap-2 overflow-x-auto pb-3" role="tablist" aria-label="Job description sections">
+    {tabs.map((tab) => {
+      const active = activeTab === tab.key;
+      return (
+        <button
+          key={tab.key}
+          id={`jd-tab-${tab.key}`}
+          role="tab"
+          type="button"
+          aria-selected={active}
+          aria-controls={`jd-panel-${tab.key}`}
+          onClick={() => onSelect(tab.key)}
+          // Inactive pills carry a border here (Settings.jsx's variant) rather
+          // than JobsPage's bare `bg-neutral` fill: JobsPage sits on the neutral
+          // app background, but this drawer is white, where an unbordered
+          // neutral pill is all but invisible.
+          className={`inline-flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold font-montserrat transition-all ${
+            active
+              ? 'bg-gradient-to-r from-primary-light to-primary-dark text-white shadow-sm'
+              : 'bg-neutral border border-neutral-dark text-secondary-dark hover:text-black-light hover:border-primary-light/40'
+          }`}
+        >
+          {tab.label}
+        </button>
+      );
+    })}
+  </div>
+);
 
 // Skeleton body. Shown while the detail request is in flight — which on a job's
 // FIRST open includes the backend's one-off structured_jd extraction, so this
@@ -226,6 +327,53 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
   // Drives the "Apply manually" vs dead-end link choice below.
   const hasBody = !!jd || fallbackBlocks.length > 0;
 
+  // ── Desktop tabs ────────────────────────────────────────────────────────
+  const isDesktop = useIsDesktop();
+  const useTabs = isDesktop && !!jd;
+
+  // A tab only exists when it has something to show.
+  const tabs = useMemo(() => {
+    if (!jd) return [];
+    const t = [];
+    if (jdSkills.length > 0 || jd.summary) t.push({ key: 'overview', label: 'Overview' });
+    if (responsibilities.length > 0) t.push({ key: 'responsibilities', label: 'Responsibilities' });
+    if (requirements.length > 0) t.push({ key: 'requirements', label: 'Requirements' });
+    return t;
+  }, [jd, jdSkills.length, responsibilities.length, requirements.length]);
+
+  const [activeTab, setActiveTab] = useState('overview');
+  // Opens on Overview, and never leaves the user on a tab that no longer exists
+  // (different job, or a job whose sections differ).
+  useEffect(() => {
+    if (!tabs.length) return;
+    if (!tabs.some((t) => t.key === activeTab)) setActiveTab(tabs[0].key);
+  }, [tabs, activeTab]);
+  useEffect(() => { setActiveTab('overview'); }, [jobId]);
+
+  const bodyRef = useRef(null);
+  const stickyRef = useRef(null);
+  const panelRef = useRef(null);
+  // Switching tabs returns to the top of the tab's content — the panel sitting
+  // flush under the stuck bar.
+  //
+  // Measured from the PANEL, not the sticky bar: once a sticky element is stuck,
+  // its offsetTop reports the scrolled position rather than its position in
+  // flow, which silently turned this whole reset into a no-op. The panel is a
+  // static element, so rect deltas give its true offset either way (and are
+  // immune to which ancestor happens to be the offsetParent).
+  //
+  // Clamped with min() so it only ever scrolls UP: switching tabs while already
+  // at the top must not jerk the header out of view.
+  useEffect(() => {
+    const body = bodyRef.current;
+    const sticky = stickyRef.current;
+    const panel = panelRef.current;
+    if (!body || !sticky || !panel) return;
+    const delta = panel.getBoundingClientRect().top - body.getBoundingClientRect().top;
+    const target = body.scrollTop + delta - sticky.offsetHeight;
+    body.scrollTop = Math.max(0, Math.min(body.scrollTop, target));
+  }, [activeTab]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -246,7 +394,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             role="dialog"
             aria-modal="true"
             aria-label="Opportunity details"
-            className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl sm:max-w-lg sm:rounded-l-2xl font-roboto"
+            className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl sm:max-w-lg lg:max-w-2xl sm:rounded-l-2xl font-roboto"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
@@ -275,7 +423,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             ) : (
               <>
                 {/* Scrollable body */}
-                <div className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+                <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
                   {/* Identity */}
                   <div className="flex items-start gap-3">
                     <span className="w-12 h-12 shrink-0 rounded-xl bg-neutral text-secondary-dark border border-neutral-dark flex items-center justify-center font-montserrat font-bold text-lg">
@@ -310,70 +458,141 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
                     )}
                   </div>
 
-                  {/* ── Path 1: structured layout ───────────────────────── */}
-                  {jd ? (
-                    // One column on mobile, main + Job Details sidebar at md:.
-                    // grid (not space-y) so the gap applies in both directions.
-                    <div className="grid grid-cols-1 gap-5 md:grid-cols-5">
-                      {/* Reclaim the sidebar's width when every Job Details field
-                          is null — otherwise the column sits at 3/5 next to a
-                          blank gutter. */}
-                      <div className={`space-y-5 ${hasJobDetails ? 'md:col-span-3' : 'md:col-span-5'}`}>
-                        {jdSkills.length > 0 && (
-                          <Section title="Skills Match">
-                            {mySkillKeys.size > 0 && matchedCount > 0 && (
-                              <p className="-mt-1 mb-3 text-xs text-secondary-dark">
-                                {matchedCount} of {jdSkills.length} match your profile
-                              </p>
-                            )}
-                            <div className="flex flex-wrap gap-2">
-                              {jdSkills.map(({ name, matched }) => (
-                                <span
-                                  key={name}
-                                  title={matched ? 'On your profile' : undefined}
-                                  className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
-                                    matched
-                                      ? 'bg-primary-light/10 text-primary-dark border-primary-light/30 font-semibold'
-                                      : 'bg-neutral text-secondary-dark border-neutral-dark'
-                                  }`}
-                                >
-                                  {name}
-                                </span>
-                              ))}
-                            </div>
-                          </Section>
-                        )}
-
-                        {responsibilities.length > 0 && (
-                          <Section title="Core Responsibilities">
-                            <BulletList items={responsibilities} />
-                          </Section>
-                        )}
-
-                        {requirements.length > 0 && (
-                          <Section title="Requirements">
-                            <BulletList items={requirements} />
-                          </Section>
-                        )}
-
-                        {jd.summary && (
-                          <Section title="About the Role">
-                            <p className="break-words text-sm leading-relaxed text-black-light">{jd.summary}</p>
-                          </Section>
+                  {/* ── Path 1a: desktop — sticky stat strip + tabs ──────── */}
+                  {useTabs ? (
+                    <>
+                      {/* Strip and tab bar stick as ONE block, so the tab bar
+                          needs no hard-coded offset under the strip. -mx-5 px-5
+                          bleeds the background to the panel edges. */}
+                      {/* -top-5, not top-0: a sticky element's rectangle is the
+                          scrollport INSET BY the scroll container's padding, and
+                          the body has py-5 — so top-0 parks the bar 20px down and
+                          scrolled content shows through the gap above it. The
+                          matching pt-5 keeps the bar's contents visually put, and
+                          -mt-5 cancels the parent's space-y-5 so flow is unchanged. */}
+                      <div
+                        ref={stickyRef}
+                        className="sticky -top-5 z-20 -mx-5 -mt-5 border-b border-neutral-dark bg-white px-5 pt-5"
+                      >
+                        {hasJobDetails && <StatStrip jd={jd} />}
+                        {tabs.length > 1 && (
+                          <TabBar tabs={tabs} activeTab={activeTab} onSelect={setActiveTab} />
                         )}
                       </div>
 
+                      {tabs.map((tab) => (
+                        activeTab === tab.key && (
+                          <div
+                            key={tab.key}
+                            ref={panelRef}
+                            id={`jd-panel-${tab.key}`}
+                            role="tabpanel"
+                            aria-labelledby={`jd-tab-${tab.key}`}
+                            tabIndex={-1}
+                            className="space-y-5"
+                          >
+                            {tab.key === 'overview' && (
+                              <>
+                                {jdSkills.length > 0 && (
+                                  <Section title="Skills Match">
+                                    {mySkillKeys.size > 0 && matchedCount > 0 && (
+                                      <p className="-mt-1 mb-3 text-xs text-secondary-dark">
+                                        {matchedCount} of {jdSkills.length} match your profile
+                                      </p>
+                                    )}
+                                    <div className="flex flex-wrap gap-2">
+                                      {jdSkills.map(({ name, matched }) => (
+                                        <span
+                                          key={name}
+                                          title={matched ? 'On your profile' : undefined}
+                                          className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+                                            matched
+                                              ? 'bg-primary-light/10 text-primary-dark border-primary-light/30 font-semibold'
+                                              : 'bg-neutral text-secondary-dark border-neutral-dark'
+                                          }`}
+                                        >
+                                          {name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </Section>
+                                )}
+                                {jd.summary && (
+                                  <Section title="About the Role">
+                                    <p className="break-words text-sm leading-relaxed text-black-light">{jd.summary}</p>
+                                  </Section>
+                                )}
+                              </>
+                            )}
+                            {tab.key === 'responsibilities' && (
+                              <Section title="Core Responsibilities">
+                                <BulletList items={responsibilities} />
+                              </Section>
+                            )}
+                            {tab.key === 'requirements' && (
+                              <Section title="Requirements">
+                                <BulletList items={requirements} />
+                              </Section>
+                            )}
+                          </div>
+                        )
+                      ))}
+                    </>
+                  ) : jd ? (
+                    /* ── Path 1b: mobile / md — stacked sections, unchanged ── */
+                    <div className="space-y-5">
+                      {jdSkills.length > 0 && (
+                        <Section title="Skills Match">
+                          {mySkillKeys.size > 0 && matchedCount > 0 && (
+                            <p className="-mt-1 mb-3 text-xs text-secondary-dark">
+                              {matchedCount} of {jdSkills.length} match your profile
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {jdSkills.map(({ name, matched }) => (
+                              <span
+                                key={name}
+                                title={matched ? 'On your profile' : undefined}
+                                className={`inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium ${
+                                  matched
+                                    ? 'bg-primary-light/10 text-primary-dark border-primary-light/30 font-semibold'
+                                    : 'bg-neutral text-secondary-dark border-neutral-dark'
+                                }`}
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        </Section>
+                      )}
+
+                      {responsibilities.length > 0 && (
+                        <Section title="Core Responsibilities">
+                          <BulletList items={responsibilities} />
+                        </Section>
+                      )}
+
+                      {requirements.length > 0 && (
+                        <Section title="Requirements">
+                          <BulletList items={requirements} />
+                        </Section>
+                      )}
+
+                      {jd.summary && (
+                        <Section title="About the Role">
+                          <p className="break-words text-sm leading-relaxed text-black-light">{jd.summary}</p>
+                        </Section>
+                      )}
+
                       {hasJobDetails && (
-                        <div className="md:col-span-2">
-                          <Section title="Job Details">
-                            <div className="space-y-3.5">
-                              <DetailRow icon={DollarSign} label="Salary" value={jd.salary} />
-                              <DetailRow icon={MapPin} label="Location" value={jd.location} />
-                              <DetailRow icon={Briefcase} label="Employment type" value={jd.employment_type} />
-                              <DetailRow icon={TrendingUp} label="Level" value={jd.level} />
-                            </div>
-                          </Section>
-                        </div>
+                        <Section title="Job Details">
+                          <div className="space-y-3.5">
+                            <DetailRow icon={DollarSign} label="Salary" value={jd.salary} />
+                            <DetailRow icon={MapPin} label="Location" value={jd.location} />
+                            <DetailRow icon={Briefcase} label="Employment type" value={jd.employment_type} />
+                            <DetailRow icon={TrendingUp} label="Level" value={jd.level} />
+                          </div>
+                        </Section>
                       )}
                     </div>
                   ) : fallbackBlocks.length > 0 ? (
