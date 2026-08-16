@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -64,12 +64,43 @@ const DashboardPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Onboarding is only DONE once the user has both uploaded a CV AND saved
+  // their role preferences (role_types is written only by the final step). CV
+  // upload alone isn't enough — it's set at step 1, so gating on it would hide
+  // onboarding for anyone who bailed before finishing. Saved role preferences
+  // is the reliable "finished" signal (and is what activates the daily scout).
+  //
+  // Derived HERE, above the queries, rather than further down: the scrape-status
+  // poll gate below closes over it, and a const declared past one of this
+  // component's early returns is never initialised on that render — the closure
+  // would then read it from its temporal dead zone and throw.
+  const cvUploaded = !!profile?.cv_raw_text;
+  const roleTypes = profile?.job_preferences?.role_types;
+  const hasPreferences = Array.isArray(roleTypes) && roleTypes.length > 0;
+  const onboardingDone = cvUploaded && hasPreferences;
+
+  // "Is the board empty?", held in a ref so the poll gate below can read it.
+  // It CANNOT read the hasAnyCard const directly: react-query evaluates a
+  // function refetchInterval synchronously inside useQuery (QueryObserver
+  // .setOptions → computeRefetchInterval), i.e. before hasAnyCard is
+  // initialised further down — a temporal-dead-zone throw on every re-render.
+  // The ref lags by at most one render, which a 5s poll gate doesn't care about.
+  const hasAnyCardRef = useRef(false);
+
   // Is the background scrape running (e.g. right after onboarding)? Drives the
   // "AI headhunter searching" card so the user knows something is happening.
+  //
+  // The gate used to poll only while is_active was ALREADY true, which made a
+  // stale `false` self-perpetuating: this observer mounts before the onboarding
+  // PATCH that starts the first scrape, so it cached false and had no way back.
+  // A calibrated user with nothing to show yet now polls until something lands.
   const { data: scrapeStatus } = useQuery({
     queryKey: ['scrape-status'],
     queryFn: getScrapeStatus,
-    refetchInterval: (query) => (query.state.data?.is_active ? 3000 : false),
+    refetchInterval: (query) => {
+      if (query.state.data?.is_active) return 5000;
+      return onboardingDone && !hasAnyCardRef.current ? 5000 : false;
+    },
     staleTime: 0,
   });
   const scrapeActive = scrapeStatus?.is_active === true;
@@ -99,6 +130,16 @@ const DashboardPage = () => {
     staleTime: 5 * 60 * 1000,
   });
 
+  // Does anything need the user's attention? Derived here, above the early
+  // returns, so it is computed on every render path — including the ones that
+  // return before the briefing body.
+  const summary    = analytics?.summary || {};
+  const draftList  = Array.isArray(drafts) ? drafts : [];
+  const draftCount = draftList.length || (summary.total_drafts || 0);
+
+  const hasAnyCard = newOppsCount > 0 || draftCount > 0;
+  hasAnyCardRef.current = hasAnyCard;   // feeds the scrape-status poll gate above
+
   // One-time timezone backfill for users who onboarded before we captured it —
   // so their daily scrape lands at ~5 AM local. Only PATCHes when ours differs
   // from a blank/UTC stored value.
@@ -123,16 +164,6 @@ const DashboardPage = () => {
     );
   }
 
-  // Onboarding is only DONE once the user has both uploaded a CV AND saved
-  // their role preferences (role_types is written only by the final step). CV
-  // upload alone isn't enough — it's set at step 1, so gating on it would hide
-  // onboarding for anyone who bailed before finishing. Saved role preferences
-  // is the reliable "finished" signal (and is what activates the daily scout).
-  const cvUploaded = !!profile?.cv_raw_text;
-  const roleTypes = profile?.job_preferences?.role_types;
-  const hasPreferences = Array.isArray(roleTypes) && roleTypes.length > 0;
-  const onboardingDone = cvUploaded && hasPreferences;
-
   // ── ONBOARDING / RESUME — run (or resume) the Calibration flow. ActivationFlow
   // reads the profile to pick up where the user left off, and invalidates
   // ['profile'] on completion so this page re-renders out of onboarding. ──────
@@ -140,18 +171,13 @@ const DashboardPage = () => {
     return <ActivationFlow profile={profile} />;
   }
 
-  const summary       = analytics?.summary || {};
   const dailyActivity = analytics?.daily_activity || [];
   const strategyPerf  = analytics?.strategy_performance || [];
 
   // ── Derived briefing data ────────────────────────────────────────────────
   // Opportunities waiting = scored roles the user hasn't reviewed yet.
-  // (newOppsCount now comes straight from the count query above.)
-
-  const draftList  = Array.isArray(drafts) ? drafts : [];
-  const draftCount = draftList.length || (summary.total_drafts || 0);
-
-  const hasAnyCard = newOppsCount > 0 || draftCount > 0;
+  // (newOppsCount, draftCount and hasAnyCard are derived above the early
+  // returns, alongside the queries that feed them.)
 
   // ── This-week activity (windowed summary) ────────────────────────────────
   // Open tracking is off (the pixel hurt deliverability), so we show "Delivered"
@@ -216,8 +242,11 @@ const DashboardPage = () => {
         </div>
 
         {/* AI headhunter working — shown while the background scrape runs (esp.
-            right after onboarding) so the user sees something is happening. */}
-        {scrapeActive && newOppsCount === 0 && (
+            right after onboarding) so the user sees something is happening.
+            Only when the user HAS other cards below: with an empty board the
+            action-card section renders the same searching state in place of its
+            "nothing to do" card, and two identical radars would stack. */}
+        {scrapeActive && newOppsCount === 0 && hasAnyCard && (
           <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm">
             <HeadhuntingState compact />
           </div>
@@ -296,8 +325,14 @@ const DashboardPage = () => {
         )}
 
         {/* C) Someone opened your email (delight / social-proof signal) */}
-        {/* Nothing needs attention */}
-        {!hasAnyCard && (
+        {/* Nothing needs attention — but if the headhunter is mid-run, show the
+            live search instead of a static card the user can't act on. */}
+        {!hasAnyCard && scrapeActive && (
+          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm md:col-span-2">
+            <HeadhuntingState compact />
+          </div>
+        )}
+        {!hasAnyCard && !scrapeActive && (
           <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-6 flex items-center gap-4 md:col-span-2">
             <div className="relative w-12 h-12 shrink-0">
               <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />

@@ -334,6 +334,14 @@ export default function ActivationFlow({ profile = null, onComplete }) {
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       queryClient.invalidateQueries({ queryKey: ['jobs'] });
       queryClient.invalidateQueries({ queryKey: ['analytics'] });
+      // The PATCH above starts the first scrape server-side. Home's scrape-status
+      // observer mounted BEFORE that and cached is_active:false, and its own poll
+      // gate reads that cached value — so without an explicit invalidation here it
+      // can never notice the run, and the user watches a static card while their
+      // headhunter works. The opportunity count is its own key (NOT a child of
+      // ['jobs']), so it has to be named separately.
+      queryClient.invalidateQueries({ queryKey: ['scrape-status'] });
+      queryClient.invalidateQueries({ queryKey: ['jobCount', 'scraped'] });
       toast.success('Calibration complete — your headhunter is searching now, and every morning from here.');
       onComplete?.();
     } catch (err) {
