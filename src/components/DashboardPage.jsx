@@ -1,14 +1,16 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'react-toastify';
 import {
   Sparkles, MessageSquare, Send, MailCheck,
-  ArrowRight, Flame, Trophy,
+  ArrowRight, Flame, Trophy, CheckCircle2, RefreshCw, SearchX, Loader2,
 } from 'lucide-react';
 import { ApplyDirLoader } from './ui/ApplyDirLoader';
 import { useAuth } from '../context/AuthContext';
-import { getJobCount, getScrapeStatus } from '../services/apiJobs';
+import { getJobCount, getScrapeStatus, searchNow } from '../services/apiJobs';
 import HeadhuntingState from './HeadhuntingState';
+import RoleRequestModal from './RoleRequestModal';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getDraftEmails } from '../services/apiOutreach';
 import { getProfile, updateProfile } from '../services/apiProfile';
@@ -98,7 +100,12 @@ const DashboardPage = () => {
     queryKey: ['scrape-status'],
     queryFn: getScrapeStatus,
     refetchInterval: (query) => {
-      if (query.state.data?.is_active) return 5000;
+      const d = query.state.data;
+      if (d?.is_active) return 5000;
+      // BOUNDED: once a first run has finished, stop. There is nothing left to
+      // wait for — the empty state now carries a button, and that button, not a
+      // perpetual poll, is how this user moves forward.
+      if (d?.first_run_done) return false;
       return onboardingDone && !hasAnyCardRef.current ? 5000 : false;
     },
     staleTime: 0,
@@ -139,6 +146,71 @@ const DashboardPage = () => {
 
   const hasAnyCard = newOppsCount > 0 || draftCount > 0;
   hasAnyCardRef.current = hasAnyCard;   // feeds the scrape-status poll gate above
+
+  // ── Empty-state model ─────────────────────────────────────────────────────
+  // Five mutually exclusive states, resolved top-down. The old single
+  // `isSearching` boolean collapsed four very different situations into one
+  // "All caught up!" screen, which read as success to people who had never seen
+  // a single result.
+  //
+  // hasEverHadResults exists because first_run_yield describes the FIRST run and
+  // never updates: someone whose first run found 0 and whose second found 30
+  // reads first_run_yield: 0 forever.
+  //
+  // has_ever_surfaced is the authoritative answer (a job with surfaced_at set =
+  // we put it on screen). The two fallbacks behind it only matter if the field
+  // is missing — an older backend, or a cached payload from before it shipped —
+  // and each is individually wrong on its own: Approved misses cards the user
+  // skipped, first_run_yield misses everything after run one.
+  const everApproved = analytics?.funnel?.find((s) => s.stage === 'Approved')?.count ?? 0;
+  const hasEverHadResults =
+    scrapeStatus?.has_ever_surfaced === true
+    || everApproved > 0
+    || (scrapeStatus?.first_run_yield ?? 0) > 0;
+  const firstRunDone = scrapeStatus?.first_run_done === true;
+
+  // `stale` is true on the ONE response that detects a dead run and clears its
+  // lock; every later poll reports false. Latch it so the user can actually read
+  // the message, and drop the latch as soon as a new run starts.
+  const [sawInterrupted, setSawInterrupted] = useState(false);
+  useEffect(() => {
+    if (scrapeStatus?.is_active === true) setSawInterrupted(false);
+    else if (scrapeStatus?.stale === true) setSawInterrupted(true);
+  }, [scrapeStatus?.is_active, scrapeStatus?.stale]);
+
+  // hasAnyCard is tested FIRST: this models the EMPTY state only. A user who has
+  // cards AND a run in flight gets their cards plus the header searching strip —
+  // if SEARCHING outranked hasAnyCard here, both would render the radar.
+  const emptyState =
+    hasAnyCard          ? null
+    : scrapeActive      ? 'SEARCHING'
+    : sawInterrupted    ? 'INTERRUPTED'
+    : !firstRunDone     ? 'NEVER_RUN'
+    : hasEverHadResults ? 'CAUGHT_UP'
+    :                     'FIRST_RUN_EMPTY';
+
+  const [showRoleRequest, setShowRoleRequest] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const queryClient = useQueryClient();
+
+  const runSearchNow = async () => {
+    if (searching) return;
+    setSearching(true);
+    try {
+      const res = await searchNow();
+      if (res?.unavailable) {
+        toast.info('Search is busy right now — try again shortly.');
+      }
+      // Either a run just started or one was already going: both mean the UI
+      // should flip to SEARCHING, so refresh both drivers of that decision.
+      queryClient.invalidateQueries({ queryKey: ['scrape-status'] });
+      queryClient.invalidateQueries({ queryKey: ['jobCount', 'scraped'] });
+    } catch {
+      toast.error("We couldn't start a search just now. Please try again.");
+    } finally {
+      setSearching(false);
+    }
+  };
 
   // One-time timezone backfill for users who onboarded before we captured it —
   // so their daily scrape lands at ~5 AM local. Only PATCHes when ours differs
@@ -248,7 +320,7 @@ const DashboardPage = () => {
             "nothing to do" card, and two identical radars would stack. */}
         {scrapeActive && newOppsCount === 0 && hasAnyCard && (
           <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm">
-            <HeadhuntingState compact />
+            <HeadhuntingState compact phase={scrapeStatus?.phase} />
           </div>
         )}
 
@@ -324,33 +396,77 @@ const DashboardPage = () => {
           </div>
         )}
 
-        {/* C) Someone opened your email (delight / social-proof signal) */}
-        {/* Nothing needs attention — but if the headhunter is mid-run, show the
-            live search instead of a static card the user can't act on. */}
-        {!hasAnyCard && scrapeActive && (
+        {/* C) Nothing needs attention — exactly one of five states. */}
+        {emptyState === 'SEARCHING' && (
           <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm md:col-span-2">
-            <HeadhuntingState compact />
+            <HeadhuntingState compact phase={scrapeStatus?.phase} />
           </div>
         )}
-        {!hasAnyCard && !scrapeActive && (
-          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-6 flex items-center gap-4 md:col-span-2">
-            <div className="relative w-12 h-12 shrink-0">
-              <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
-              <span className="relative w-12 h-12 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
-                <Sparkles className="w-5 h-5 text-primary-light" />
+
+        {emptyState && emptyState !== 'SEARCHING' && (
+          <div className="bg-white rounded-2xl border border-neutral-dark border-l-4 border-l-primary-light shadow-sm p-6 md:col-span-2">
+            <div className="flex items-start gap-4">
+              <span className="w-12 h-12 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center shrink-0">
+                {emptyState === 'INTERRUPTED'     ? <RefreshCw className="w-5 h-5 text-primary-light" />
+                  : emptyState === 'FIRST_RUN_EMPTY' ? <SearchX className="w-5 h-5 text-primary-light" />
+                  : emptyState === 'CAUGHT_UP'       ? <CheckCircle2 className="w-5 h-5 text-primary-light" />
+                  : <Sparkles className="w-5 h-5 text-primary-light" />}
               </span>
+              <div className="min-w-0">
+                <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
+                  {emptyState === 'INTERRUPTED'      ? 'That search stopped early.'
+                    : emptyState === 'FIRST_RUN_EMPTY' ? 'No matches yet.'
+                    : emptyState === 'NEVER_RUN'       ? "Your headhunter hasn't run yet."
+                    : 'All caught up!'}
+                </h2>
+                <p className="text-sm text-secondary-dark mt-1 leading-relaxed">
+                  {emptyState === 'INTERRUPTED'      ? 'This happens occasionally. Starting again usually fixes it.'
+                    : emptyState === 'FIRST_RUN_EMPTY' ? 'We searched but nothing cleared the bar this time. Widening your roles or locations usually helps.'
+                    : emptyState === 'NEVER_RUN'       ? 'Start your first search and your matches will appear right here.'
+                    : 'Your headhunter will find more opportunities overnight. Check back tomorrow.'}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h2 className="text-base font-bold font-montserrat text-black-light leading-snug">
-                Your headhunter is searching
-              </h2>
-              <p className="text-sm text-secondary-dark mt-1">
-                There's nothing for you to do right now — check back soon.
-              </p>
-            </div>
+
+            {emptyState !== 'CAUGHT_UP' && (
+              <>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {emptyState === 'FIRST_RUN_EMPTY' && (
+                    <button
+                      onClick={() => navigate('/dashboard/settings?tab=jobs')}
+                      className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
+                    >
+                      Adjust what you're looking for
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  )}
+                  <button
+                    onClick={runSearchNow}
+                    disabled={searching}
+                    className={
+                      emptyState === 'FIRST_RUN_EMPTY'
+                        ? 'inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-5 py-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+                        : 'inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+                    }
+                  >
+                    {searching && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {emptyState === 'NEVER_RUN' ? 'Start searching' : 'Search again'}
+                  </button>
+                </div>
+
+                <button
+                  onClick={() => setShowRoleRequest(true)}
+                  className="mt-3 text-xs font-semibold text-secondary-dark hover:text-primary-dark underline underline-offset-2 transition-colors"
+                >
+                  Can't find what you're looking for?
+                </button>
+              </>
+            )}
           </div>
         )}
       </section>
+
+      {showRoleRequest && <RoleRequestModal onClose={() => setShowRoleRequest(false)} />}
 
       {/* 3 ── This week's activity ──────────────────────────────────────── */}
       <section className="space-y-3">

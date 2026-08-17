@@ -267,6 +267,26 @@ export async function getScrapeStatus() {
   }
 }
 
+/**
+ * Run this user's search NOW instead of waiting for the overnight pass.
+ *
+ * Never throws on contention or unavailability — the server answers those with
+ * 200 + a flag, because "already working" and "not right now" are normal
+ * outcomes for a button, not failures:
+ *   { already_running: true }  → a run was already in flight; nothing started
+ *   { unavailable: true }      → searching is paused platform-side
+ * plus the usual scrape-status fields (is_active, phase, stale, first_run_*).
+ * A real failure (403 out of quota, network) still rejects.
+ */
+export async function searchNow() {
+  try {
+    const response = await api.post("/api/jobs/search-now/");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function saveJobDescription(jobId, description) {
   try {
     const response = await api.post(`/api/jobs/${jobId}/refresh-description/`, { description });

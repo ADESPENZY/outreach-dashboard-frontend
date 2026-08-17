@@ -4,15 +4,16 @@ import { toast } from 'react-toastify';
 import { useSearchParams } from 'react-router';
 import {
     MapPin, ArrowRight, ArrowLeft, CheckCircle2, Search, Loader2, UserX,
-    ExternalLink, Clock, FileText, ChevronDown,
+    ExternalLink, Clock, FileText, ChevronDown, RefreshCw, SearchX, Sparkles,
 } from 'lucide-react';
 // `motion` is used only as `<motion.div>` (member-expression JSX), which this
 // eslint config's jsx-uses-vars doesn't count — silence the false positive.
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { useNavigate } from 'react-router-dom';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
-import { getOpportunityJobs, updateJobStatus, trackJob, getScrapeStatus } from '../services/apiJobs';
+import { getOpportunityJobs, updateJobStatus, trackJob, getScrapeStatus, searchNow } from '../services/apiJobs';
 import HeadhuntingState from '../components/HeadhuntingState';
+import RoleRequestModal from '../components/RoleRequestModal';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getProfile } from '../services/apiProfile';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
@@ -258,6 +259,67 @@ const JobsPage = () => {
     const reviewedTotal = analytics?.funnel?.find((s) => s.stage === 'Scraped')?.count ?? null;
 
     const trayCount = workingJobs.length + queuedJobs.length + completing.length;
+
+    // ── Empty-state model ─────────────────────────────────────────────────────
+    // Five mutually exclusive states, resolved top-down — see the matching block
+    // in DashboardPage.jsx (kept in sync by hand; the two pages render different
+    // containers, so only this derivation is duplicated).
+    //
+    // hasEverHadResults exists because first_run_yield describes the FIRST run
+    // and never updates: someone whose first run found 0 and whose second found
+    // 30 reads first_run_yield: 0 forever.
+    //
+    // has_ever_surfaced is the authoritative answer (a job with surfaced_at set =
+    // we put it on screen). The two fallbacks behind it only matter if the field
+    // is missing — an older backend, or a cached payload from before it shipped —
+    // and each is individually wrong on its own: Approved misses cards the user
+    // skipped, first_run_yield misses everything after run one.
+    const everApproved = analytics?.funnel?.find((s) => s.stage === 'Approved')?.count ?? 0;
+    const hasEverHadResults =
+        scrapeStatus?.has_ever_surfaced === true
+        || everApproved > 0
+        || (scrapeStatus?.first_run_yield ?? 0) > 0;
+    const firstRunDone = scrapeStatus?.first_run_done === true;
+
+    // `stale` is true on the ONE response that detects a dead run and clears its
+    // lock; every later poll reports false. Latch it so the user can actually
+    // read the message, and drop the latch as soon as a new run starts.
+    const [sawInterrupted, setSawInterrupted] = useState(false);
+    useEffect(() => {
+        if (scrapeStatus?.is_active === true) setSawInterrupted(false);
+        else if (scrapeStatus?.stale === true) setSawInterrupted(true);
+    }, [scrapeStatus?.is_active, scrapeStatus?.stale]);
+
+    const hasAnyCard = pickedCount > 0 || trayCount > 0;
+    const emptyState =
+        hasAnyCard          ? null
+        : isSearching       ? 'SEARCHING'
+        : sawInterrupted    ? 'INTERRUPTED'
+        : !firstRunDone     ? 'NEVER_RUN'
+        : hasEverHadResults ? 'CAUGHT_UP'
+        :                     'FIRST_RUN_EMPTY';
+
+    const [showRoleRequest, setShowRoleRequest] = useState(false);
+    const [searchingNow, setSearchingNow] = useState(false);
+
+    const runSearchNow = async () => {
+        if (searchingNow) return;
+        setSearchingNow(true);
+        try {
+            const res = await searchNow();
+            if (res?.unavailable) {
+                toast.info('Search is busy right now — try again shortly.');
+            }
+            // Either a run just started or one was already going: both mean the
+            // UI should flip to SEARCHING, so refresh both drivers of that call.
+            queryClient.invalidateQueries({ queryKey: ['scrape-status'] });
+            queryClient.invalidateQueries({ queryKey: ['jobCount', 'scraped'] });
+        } catch {
+            toast.error("We couldn't start a search just now. Please try again.");
+        } finally {
+            setSearchingNow(false);
+        }
+    };
 
     // ── Pagination over the review queue (New / All tabs) ─────────────────────
     const totalPages = Math.max(1, Math.ceil(newJobs.length / ITEMS_PER_PAGE));
@@ -734,26 +796,83 @@ const JobsPage = () => {
     };
 
     // ── Empty state ───────────────────────────────────────────────────────────
-    const allCaughtUp = (
-        <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="min-h-[40vh] flex flex-col items-center justify-center text-center py-10"
-        >
-            <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
-                <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
-                <span className="absolute inset-2 rounded-full bg-primary-light/10 animate-ping [animation-delay:600ms]" />
-                <span className="relative w-16 h-16 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
-                    <CheckCircle2 className="w-7 h-7 text-primary-light" />
-                </span>
-            </div>
-            <h2 className="text-lg md:text-xl font-bold font-montserrat text-black-light">All caught up!</h2>
-            <p className="mt-2 text-sm text-secondary-dark max-w-sm leading-relaxed">
-                Your headhunter will find more opportunities overnight. Check back tomorrow.
-            </p>
-        </motion.div>
-    );
+    // One container, four sets of words. Only CAUGHT_UP keeps the original
+    // "all caught up / check back tomorrow" copy — for everyone else that line
+    // described success they had never actually had.
+    const EMPTY_COPY = {
+        INTERRUPTED: {
+            Icon: RefreshCw,
+            title: 'That search stopped early.',
+            sub: 'This happens occasionally. Starting again usually fixes it.',
+        },
+        FIRST_RUN_EMPTY: {
+            Icon: SearchX,
+            title: 'No matches yet.',
+            sub: 'We searched but nothing cleared the bar this time. Widening your roles or locations usually helps.',
+        },
+        NEVER_RUN: {
+            Icon: Sparkles,
+            title: "Your headhunter hasn't run yet.",
+            sub: 'Start your first search and your matches will appear right here.',
+        },
+        CAUGHT_UP: {
+            Icon: CheckCircle2,
+            title: 'All caught up!',
+            sub: 'Your headhunter will find more opportunities overnight. Check back tomorrow.',
+        },
+    };
+
+    const emptyStateCard = (key) => {
+        const { Icon, title, sub } = EMPTY_COPY[key];
+        const primaryBtn = 'inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+        const secondaryBtn = 'inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-5 py-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
+        return (
+            <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, ease: 'easeOut' }}
+                className="min-h-[40vh] flex flex-col items-center justify-center text-center py-10"
+            >
+                <div className="relative w-20 h-20 mb-6 flex items-center justify-center">
+                    <span className="absolute inset-0 rounded-full bg-primary-light/20 animate-ping" />
+                    <span className="absolute inset-2 rounded-full bg-primary-light/10 animate-ping [animation-delay:600ms]" />
+                    <span className="relative w-16 h-16 rounded-full bg-primary-light/10 border border-primary-light/30 flex items-center justify-center">
+                        <Icon className="w-7 h-7 text-primary-light" />
+                    </span>
+                </div>
+                <h2 className="text-lg md:text-xl font-bold font-montserrat text-black-light">{title}</h2>
+                <p className="mt-2 text-sm text-secondary-dark max-w-sm leading-relaxed">{sub}</p>
+
+                {key !== 'CAUGHT_UP' && (
+                    <>
+                        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                            {key === 'FIRST_RUN_EMPTY' && (
+                                <button onClick={() => navigate('/dashboard/settings?tab=jobs')} className={primaryBtn}>
+                                    Adjust what you&rsquo;re looking for
+                                    <ArrowRight className="w-4 h-4" />
+                                </button>
+                            )}
+                            <button
+                                onClick={runSearchNow}
+                                disabled={searchingNow}
+                                className={key === 'FIRST_RUN_EMPTY' ? secondaryBtn : primaryBtn}
+                            >
+                                {searchingNow && <Loader2 className="w-4 h-4 animate-spin" />}
+                                {key === 'NEVER_RUN' ? 'Start searching' : 'Search again'}
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => setShowRoleRequest(true)}
+                            className="mt-4 text-xs font-semibold text-secondary-dark hover:text-primary-dark underline underline-offset-2 transition-colors"
+                        >
+                            Can&rsquo;t find what you&rsquo;re looking for?
+                        </button>
+                    </>
+                )}
+            </motion.div>
+        );
+    };
 
     const nothingAtAll = !loading && pickedCount === 0 && trayCount === 0;
 
@@ -901,9 +1020,11 @@ const JobsPage = () => {
                     ))}
                 </div>
             ) : nothingAtAll ? (
-                // A scrape is running (e.g. just after onboarding) → show the
-                // "AI headhunter searching" screen instead of "all caught up".
-                isSearching ? <HeadhuntingState /> : allCaughtUp
+                // Exactly one of five states — never the old "all caught up" for
+                // a user who has not actually caught up with anything.
+                emptyState === 'SEARCHING'
+                    ? <HeadhuntingState phase={scrapeStatus?.phase} />
+                    : emptyStateCard(emptyState || 'CAUGHT_UP')
             ) : (
                 <>
                     {/* ── Summary bar — curated-from-a-larger-pool framing ────────── */}
@@ -966,6 +1087,8 @@ const JobsPage = () => {
             {showPersonalization && (
                 <FirstTimePersonalizationModal onClose={handlePersonalizationCancel} onComplete={handlePersonalizationComplete} />
             )}
+
+            {showRoleRequest && <RoleRequestModal onClose={() => setShowRoleRequest(false)} />}
 
             <JobDetailDrawer
                 jobId={drawerJobId}
