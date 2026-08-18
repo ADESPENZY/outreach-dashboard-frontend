@@ -16,6 +16,9 @@ import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSet
 import {
   TONES, SECRET_WEAPON_MAX, differentiatorOptions, secretWeaponPlaceholder,
 } from '@/constants/personalization';
+import {
+  parseProject, serializeProject, emptyProject, projectSummary, isProjectEmpty,
+} from '@/lib/projectHighlights';
 import { getInboxStats } from '@/services/apiInboxes';
 import { deleteGmailAccount, toggleGmailAccount } from '@/services/apiGmail';
 import { toggleWarmupPool } from '@/services/apiWarmup';
@@ -233,6 +236,9 @@ function ProfileTab() {
   const [secret, setSecret] = useState('');
   const [diffs, setDiffs] = useState([]);
   const [projects, setProjects] = useState([]);
+  // Only one project card is open at a time — five expanded cards is more than
+  // fits on a phone, and the summary line is enough to find the right one.
+  const [openProject, setOpenProject] = useState(null);
   const [savingVoice, setSavingVoice] = useState(false);
   const [cvBusy, setCvBusy] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
@@ -249,7 +255,10 @@ function ProfileTab() {
     setTone(profile.job_preferences?.tone_preference || profile.tone_preference || 'professional');
     setSecret(profile.secret_weapon || '');
     setDiffs(profile.differentiators || []);
-    setProjects(profile.project_highlights || []);
+    // Stored entries are strings holding Python dict reprs (see lib/projectHighlights);
+    // parse once here so the form works with real fields, never raw text.
+    setProjects((profile.project_highlights || []).map(parseProject));
+    setOpenProject(null);
   }, [profile]);
 
   const saveIdentity = async () => {
@@ -269,7 +278,7 @@ function ProfileTab() {
         tone_preference: tone,
         secret_weapon: secret.trim(),
         differentiators: diffs,
-        project_highlights: projects.map(p => p.trim()).filter(Boolean),
+        project_highlights: projects.filter(p => !isProjectEmpty(p)).map(serializeProject),
       });
       qc.invalidateQueries({ queryKey: ['profile'] });
       toast.success('Saved ✓');
@@ -290,7 +299,13 @@ function ProfileTab() {
   };
 
   const toggleDiff = (d) => setDiffs(prev => prev.includes(d) ? prev.filter(x => x !== d) : (prev.length >= 2 ? prev : [...prev, d]));
-  const setProject = (i, v) => setProjects(p => { const n = [...p]; n[i] = v; return n; });
+  // Edit one field of one project. Key names are preserved on save — the
+  // canonical ids here are a UI concern only (see serializeProject).
+  const setProjectField = (i, field, value) => setProjects(prev => {
+    const next = [...prev];
+    next[i] = { ...next[i], fields: { ...next[i].fields, [field]: value } };
+    return next;
+  });
 
   const downloadResumePdf = async () => {
     setDownloadingPdf(true);
@@ -383,9 +398,14 @@ function ProfileTab() {
       </Collapsible>
 
       {/* Section C+D — Voice: summary, projects, secret weapon, differentiators, tone */}
-      <Collapsible title="Your Outreach Voice" description="Your summary, secret weapon, and tone — used to write every cold email." icon={Sparkles}>
+      <Collapsible
+        title="Your Outreach Voice"
+        description="This is what we draw on when we write to a hiring manager. The more real detail here, the less your introductions sound like everyone else's."
+        icon={Sparkles}
+      >
         <div>
           <Label>Your one-line summary</Label>
+          <p className="text-xs text-secondary-dark mb-1.5">How you&rsquo;d describe yourself in a sentence.</p>
           <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={2}
             placeholder="Full-stack engineer specializing in backend systems and API architecture"
             className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 resize-none" />
@@ -393,16 +413,29 @@ function ProfileTab() {
 
         <div>
           <Label>Project highlights</Label>
-          <div className="space-y-2">
+          <p className="text-xs text-secondary-dark mb-2">
+            We pick the one project that best matches each role. Give us a few to choose from.
+          </p>
+          <div className="space-y-2.5">
             {projects.map((p, i) => (
-              <div key={i} className="flex items-start gap-2">
-                <textarea value={p} onChange={e => setProject(i, e.target.value)} rows={2}
-                  placeholder="ProjectName: what you built + the challenge you solved + the stack"
-                  className="flex-1 text-sm bg-white border border-neutral-dark rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-primary-light/20 focus:border-primary-light resize-none" />
-                <button onClick={() => setProjects(projects.filter((_, x) => x !== i))} className="mt-1.5 text-red-400 hover:text-red-600 p-1"><X className="w-4 h-4" /></button>
-              </div>
+              <ProjectCard
+                key={i}
+                project={p}
+                expanded={openProject === i}
+                onToggle={() => setOpenProject(openProject === i ? null : i)}
+                onChange={(field, value) => setProjectField(i, field, value)}
+                onRemove={() => {
+                  setProjects(projects.filter((_, x) => x !== i));
+                  setOpenProject(null);
+                }}
+              />
             ))}
-            <button onClick={() => setProjects([...projects, ''])} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-dark hover:text-primary-light"><Plus className="w-3.5 h-3.5" /> Add project</button>
+            <button
+              onClick={() => { setProjects([...projects, emptyProject()]); setOpenProject(projects.length); }}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-dark hover:text-primary-light min-h-[44px]"
+            >
+              <Plus className="w-3.5 h-3.5" /> Add project
+            </button>
           </div>
         </div>
 
@@ -451,6 +484,75 @@ function ProfileTab() {
         <div className="flex justify-end"><SaveButton onClick={saveVoice} saving={savingVoice} /></div>
       </Collapsible>
     </>
+  );
+}
+
+// One project, as labelled fields rather than a stringified data structure.
+// Collapsed to a summary line by default: the user has up to five of these and
+// all five expanded does not fit on a 375px screen.
+function ProjectCard({ project, expanded, onToggle, onChange, onRemove }) {
+  const f = project.fields;
+  const input = 'w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all';
+  const area = `${input} resize-none`;
+  const fieldLabel = 'block text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-1';
+
+  return (
+    <div className="bg-white rounded-2xl border border-neutral-dark">
+      <div className="flex items-center gap-2 px-6 py-5">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={expanded}
+          className="flex-1 flex items-center gap-2 min-w-0 text-left min-h-[44px]"
+        >
+          <ChevronDown className={`w-4 h-4 shrink-0 text-secondary-dark transition-transform ${expanded ? 'rotate-180' : ''}`} />
+          <span className="text-sm font-semibold text-black-light truncate">
+            {projectSummary(f)}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={onRemove}
+          aria-label={`Remove ${projectSummary(f)}`}
+          className="shrink-0 text-red-400 hover:text-red-600 p-2 min-w-[44px] min-h-[44px] flex items-center justify-center"
+        >
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      {expanded && (
+        <div className="px-6 pb-5 space-y-3 border-t border-neutral-dark pt-4">
+          <div>
+            <label className={fieldLabel}>Project name</label>
+            <input type="text" value={f.name} onChange={e => onChange('name', e.target.value)}
+              placeholder="FumiSync" className={input} />
+          </div>
+          <div>
+            <label className={fieldLabel}>Your role</label>
+            <input type="text" value={f.role} onChange={e => onChange('role', e.target.value)}
+              placeholder="Founder & Lead Engineer" className={input} />
+          </div>
+          <div>
+            <label className={fieldLabel}>What it does</label>
+            <textarea rows={2} value={f.description} onChange={e => onChange('description', e.target.value)}
+              placeholder="Middleware that connects legacy dental systems to modern CRMs." className={area} />
+          </div>
+          <div>
+            <label className={fieldLabel}>The hard part</label>
+            <p className="text-xs text-secondary-dark mb-1">
+              What was actually difficult about it. This is the detail that makes an email land.
+            </p>
+            <textarea rows={2} value={f.challenge} onChange={e => onChange('challenge', e.target.value)}
+              placeholder="Keeping two systems in sync that were never designed to talk." className={area} />
+          </div>
+          <div>
+            <label className={fieldLabel}>Built with</label>
+            <input type="text" value={f.tools} onChange={e => onChange('tools', e.target.value)}
+              placeholder="FastAPI, Redis, PostgreSQL" className={input} />
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
