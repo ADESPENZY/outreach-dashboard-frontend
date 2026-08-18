@@ -163,9 +163,17 @@ export async function scoreAllJobs() {
   }
 }
 
-export async function updateJobStatus(id, status) {
+/**
+ * Move a job to a new status. `outreachNote` is the user's optional note about
+ * THIS company from the Reach Out modal — stored on the job so the auto-draft
+ * thread can hand it to the generator as `highlight`. Omitted when empty so an
+ * ordinary skip/approve sends exactly the payload it always did.
+ */
+export async function updateJobStatus(id, status, outreachNote = '') {
   try {
-    const response = await api.patch(`/api/jobs/${id}/status/`, { status });
+    const body = { status };
+    if (outreachNote && outreachNote.trim()) body.outreach_note = outreachNote.trim();
+    const response = await api.patch(`/api/jobs/${id}/status/`, body);
     return response.data;
   } catch (err) {
     throw new Error(parseApiError(err));

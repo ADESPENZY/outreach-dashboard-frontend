@@ -1,39 +1,40 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+// `motion` is used only as `<motion.div>` (member-expression JSX), which this
+// eslint config's jsx-uses-vars doesn't count — silence the false positive.
+import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { toast } from 'react-toastify';
 import { Check, ArrowRight } from 'lucide-react';
 import { ApplyDirLoader } from '../ui/ApplyDirLoader';
 import { updateProfile } from '../../services/apiProfile';
+import {
+  TONES, SECRET_WEAPON_MAX, MAX_DIFFERENTIATORS,
+  differentiatorOptions, secretWeaponPlaceholder,
+} from '../../constants/personalization';
 
 // ── First-time personalization (Popup 3) ──────────────────────────────────
-// Shows once — the first time a user reaches out — to capture the three things
-// that make every introduction feel human: tone, the "secret weapon" a CV
-// misses, and what makes them stand out. Saved to UserProfile, then the reach-
-// out proceeds (find contact → generate). Never asked again.
+// Shows once — the first time a user reaches out — to capture what makes their
+// introductions sound like them: tone, the "secret weapon" a CV misses, and
+// what makes them stand out. All three are per-user and saved to UserProfile.
+//
+// Deliberately NO per-company question here. This modal is gated on
+// tone_preference being empty, so it appears exactly once: a company-specific
+// answer would apply to a single company and never be asked again, while
+// implying to the user that they'd be asked every time. Per-company notes
+// belong on a surface that recurs.
+//
+// The chips are no longer a fixed list. They come from profile
+// .differentiator_options — generated from the user's own CV when it was
+// uploaded, and cached there so this modal opens with zero added latency.
 
-const TONES = [
-  { id: 'direct',       label: 'Direct and confident', example: 'I built X that does Y. Worth a conversation?' },
-  { id: 'warm',         label: 'Warm and human',       example: 'Hey Sarah, noticed what your team is building…' },
-  { id: 'professional', label: 'Professional and sharp', example: "I'm reaching out regarding the engineering role…" },
-];
-
-const DIFFERENTIATORS = [
-  'Built and shipped my own products',
-  'Strong across time zones',
-  'Fast learner with new stacks',
-  'Strong communicator and documenter',
-  'Non-traditional background',
-  'Deep domain expertise',
-];
-
-const SECRET_WEAPON_MAX = 200;
-
-export default function FirstTimePersonalizationModal({ onClose, onComplete }) {
+export default function FirstTimePersonalizationModal({ profile = null, onClose, onComplete }) {
   // Pre-selected tone so the user can submit in one tap if they're in a hurry.
   const [tone, setTone] = useState('professional');
   const [secretWeapon, setSecretWeapon] = useState('');
   const [differentiators, setDifferentiators] = useState([]);
   const [saving, setSaving] = useState(false);
+
+  const options = differentiatorOptions(profile);
+  const placeholder = secretWeaponPlaceholder(profile);
 
   // Close on Escape (cancels the reach-out).
   useEffect(() => {
@@ -45,7 +46,7 @@ export default function FirstTimePersonalizationModal({ onClose, onComplete }) {
   const toggleDiff = (value) => {
     setDifferentiators((prev) => {
       if (prev.includes(value)) return prev.filter((v) => v !== value);
-      if (prev.length >= 2) return prev; // cap at 2
+      if (prev.length >= MAX_DIFFERENTIATORS) return prev;
       return [...prev, value];
     });
   };
@@ -96,8 +97,8 @@ export default function FirstTimePersonalizationModal({ onClose, onComplete }) {
                 Let&rsquo;s make your introductions sound like you
               </h1>
               <p className="mt-1.5 text-sm text-secondary-dark leading-relaxed">
-                We&rsquo;ll only ask this once. It&rsquo;s what makes your emails feel human,
-                not AI-generated.
+                These help us write in your voice. You can change any of them later
+                in Settings &rarr; Profile.
               </p>
             </div>
 
@@ -139,13 +140,13 @@ export default function FirstTimePersonalizationModal({ onClose, onComplete }) {
                 What&rsquo;s one thing you bring that isn&rsquo;t on your CV?
               </p>
               <p className="text-xs text-secondary-dark mt-0.5 mb-2">
-                This makes your introductions feel human, not AI-generated.
+                The part of you a CV can&rsquo;t show.
               </p>
               <textarea
                 value={secretWeapon}
                 onChange={(e) => setSecretWeapon(e.target.value.slice(0, SECRET_WEAPON_MAX))}
                 rows={3}
-                placeholder="I think in systems, not just code. I ask why before I ask how."
+                placeholder={placeholder}
                 className="w-full px-3.5 py-3 rounded-xl border border-neutral-dark bg-white text-sm text-black placeholder:text-secondary-dark/50 outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all resize-none leading-relaxed"
               />
               <p className="text-xs text-secondary-dark/60 mt-1 text-right">
@@ -153,16 +154,18 @@ export default function FirstTimePersonalizationModal({ onClose, onComplete }) {
               </p>
             </div>
 
-            {/* Section 3 — Differentiators */}
+            {/* Section 3 — Differentiators (from the user's own CV) */}
             <div>
               <p className="text-sm font-bold font-montserrat text-black-light">
                 What makes you stand out?
               </p>
-              <p className="text-xs text-secondary-dark mt-0.5 mb-2.5">Pick up to 2.</p>
+              <p className="text-xs text-secondary-dark mt-0.5 mb-2.5">
+                Pick up to {MAX_DIFFERENTIATORS}.
+              </p>
               <div className="flex flex-wrap gap-2">
-                {DIFFERENTIATORS.map((d) => {
+                {options.map((d) => {
                   const active = differentiators.includes(d);
-                  const disabled = !active && differentiators.length >= 2;
+                  const disabled = !active && differentiators.length >= MAX_DIFFERENTIATORS;
                   return (
                     <button
                       key={d}

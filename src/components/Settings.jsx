@@ -13,6 +13,9 @@ import { ApplyDirLoader } from '@/components/ui/ApplyDirLoader';
 import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
 import { getProfile, updateProfile, uploadCV } from '@/services/apiProfile';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSettings';
+import {
+  TONES, SECRET_WEAPON_MAX, differentiatorOptions, secretWeaponPlaceholder,
+} from '@/constants/personalization';
 import { getInboxStats } from '@/services/apiInboxes';
 import { deleteGmailAccount, toggleGmailAccount } from '@/services/apiGmail';
 import { toggleWarmupPool } from '@/services/apiWarmup';
@@ -211,16 +214,10 @@ const Settings = () => {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 — PROFILE
 // ═══════════════════════════════════════════════════════════════════════════
-const TONES = [
-  { id: 'direct',       label: 'Direct and confident' },
-  { id: 'warm',         label: 'Warm and human' },
-  { id: 'professional', label: 'Professional and sharp' },
-];
-const DIFFERENTIATORS = [
-  'Built and shipped my own products', 'Strong across time zones', 'Fast learner with new stacks',
-  'Strong communicator and documenter', 'Non-traditional background', 'Deep domain expertise',
-];
-const SECRET_MAX = 200;
+// TONES / the differentiator options / the length cap all come from the shared
+// module now — they used to be duplicated verbatim here and in
+// FirstTimePersonalizationModal.jsx, free to drift apart.
+const SECRET_MAX = SECRET_WEAPON_MAX;
 
 function ProfileTab() {
   const qc = useQueryClient();
@@ -413,7 +410,7 @@ function ProfileTab() {
           <Label>Your secret weapon</Label>
           <p className="text-xs text-secondary-dark mb-1.5">What's one thing you bring that isn't on your CV?</p>
           <textarea value={secret} onChange={e => setSecret(e.target.value.slice(0, SECRET_MAX))} rows={2}
-            placeholder="I think in systems, not just code. I ask why before I ask how."
+            placeholder={secretWeaponPlaceholder(profile)}
             className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 resize-none" />
           <p className="text-[11px] text-secondary-dark/60 text-right mt-1">{secret.length}/{SECRET_MAX}</p>
         </div>
@@ -421,7 +418,7 @@ function ProfileTab() {
         <div>
           <Label>What makes you stand out? (pick up to 2)</Label>
           <div className="flex flex-wrap gap-2">
-            {DIFFERENTIATORS.map(d => {
+            {differentiatorOptions(profile).map(d => {
               const active = diffs.includes(d);
               const disabled = !active && diffs.length >= 2;
               return (

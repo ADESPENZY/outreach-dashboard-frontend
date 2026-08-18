@@ -396,7 +396,7 @@ const JobsPage = () => {
 
     // ── Mutation: approve / reject / expire ───────────────────────────────────
     const updateStatusMutation = useMutation({
-        mutationFn: ({ id, newStatus }) => updateJobStatus(id, newStatus),
+        mutationFn: ({ id, newStatus, outreachNote }) => updateJobStatus(id, newStatus, outreachNote),
         onMutate: async ({ id, newStatus }) => {
             await queryClient.cancelQueries({ queryKey: ['jobs-page', 'opportunities'] });
             const prev = queryClient.getQueryData(['jobs-page', 'opportunities']);
@@ -434,17 +434,20 @@ const JobsPage = () => {
         onSettled: () => queryClient.invalidateQueries({ queryKey: ['jobs-page'] }),
     });
 
-    const handleUpdateStatus = (id, newStatus, silent = false) =>
-        updateStatusMutation.mutate({ id, newStatus, silent });
+    const handleUpdateStatus = (id, newStatus, silent = false, outreachNote = '') =>
+        updateStatusMutation.mutate({ id, newStatus, silent, outreachNote });
 
     // Reach Out → approve; contact search + draft happen in the background.
-    const approveJob = (jobId) => {
+    // outreachNote is the user's note about THIS company from the personalization
+    // modal; it rides along on the approval so it is stored before the auto-draft
+    // thread starts and can reach the generator's `highlight` argument.
+    const approveJob = (jobId, outreachNote = '') => {
         setDrawerJobId(null);
         setActedOrder((prev) => [jobId, ...prev.filter((x) => x !== jobId)]);
         handledRef.current.delete(jobId);
         timedOutRef.current.delete(jobId);
         startedAtRef.current.set(jobId, Date.now());   // ceiling runs from the click
-        handleUpdateStatus(jobId, 'approved');
+        handleUpdateStatus(jobId, 'approved', false, outreachNote);
     };
     const handleReachOut = (jobId) => {
         setDrawerJobId(null);
@@ -467,6 +470,9 @@ const JobsPage = () => {
     const handlePersonalizationComplete = () => {
         queryClient.invalidateQueries({ queryKey: ['profile'] });
         setShowPersonalization(false);
+        // No note from this modal — it is shown once per user, so a per-company
+        // answer here would only ever reach one company. approveJob still takes
+        // the argument; a future per-job surface will supply it.
         if (pendingJobId != null) approveJob(pendingJobId);
         setPendingJobId(null);
     };
@@ -1085,7 +1091,11 @@ const JobsPage = () => {
             <ProfileActivationDrawer isOpen={isActivationDrawerOpen} onClose={() => setIsActivationDrawerOpen(false)} />
 
             {showPersonalization && (
-                <FirstTimePersonalizationModal onClose={handlePersonalizationCancel} onComplete={handlePersonalizationComplete} />
+                <FirstTimePersonalizationModal
+                    profile={profile}
+                    onClose={handlePersonalizationCancel}
+                    onComplete={handlePersonalizationComplete}
+                />
             )}
 
             {showRoleRequest && <RoleRequestModal onClose={() => setShowRoleRequest(false)} />}
