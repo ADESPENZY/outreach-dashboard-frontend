@@ -21,7 +21,13 @@
     <title>ApplyDir — Your AI Headhunter</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet" />
+    <!-- Bricolage Grotesque, variable on both axes: opsz 12–96, wght 200–800.
+         One family for the whole app. The optical-size axis is what makes that
+         work — see `font-optical-sizing: auto` in index.css, which lets the
+         browser pick the right optical size from the rendered font-size, so
+         display text gets the characterful cut and 12px UI text gets the
+         calmer one without us hand-tuning anything. -->
+    <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&display=swap" rel="stylesheet" />
   </head>
   <body>
     <div id="root"></div>
