@@ -8,14 +8,15 @@ export default {
   theme: {
   	extend: {
   		fontFamily: {
-  			montserrat: [
-  				'Montserrat',
-  				'sans-serif'
-  			],
-  			roboto: [
-  				'Roboto',
-  				'sans-serif'
-  			]
+  			// One typeface app-wide. The montserrat/roboto keys are kept and
+  			// repointed rather than renamed, so all 299 existing font-* classes
+  			// pick up Bricolage without a single component file being touched.
+  			// Renaming them is a separate, reviewable follow-up.
+  			montserrat: ['Bricolage Grotesque', 'system-ui', 'sans-serif'],
+  			roboto: ['Bricolage Grotesque', 'system-ui', 'sans-serif'],
+  			// Overrides Tailwind's default, which Preflight applies to <html>,
+  			// so unclassed text follows too.
+  			sans: ['Bricolage Grotesque', 'system-ui', 'sans-serif']
   		},
   		colors: {
   			primary: {
