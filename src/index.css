@@ -243,60 +243,7 @@ th {
   * {
     @apply border-border;
   }
-
-  /* ── Type ────────────────────────────────────────────────────────────────
-     Bricolage Grotesque is the only family in the app. Set once here so every
-     element inherits it; nothing needs a font-family class any more.
-
-     font-optical-sizing: auto is the important line. Bricolage carries an opsz
-     axis from 12 to 96, and this hands the browser the rendered font-size so it
-     picks the matching optical cut automatically: the characterful, tightly
-     spaced design at headline sizes, and the calmer, more open one at the 12–14px
-     that most of this UI is built from. Without it every size renders at one
-     optical master and small text picks up display quirks it cannot carry.
-
-     The tracking steps below are the other half of that. A grotesque set at
-     32px+ needs negative tracking to stop looking loose, and small UI text needs
-     a touch of positive tracking to stay legible — the optical axis handles the
-     letterforms, not the spacing between them. */
-  html {
-    font-family: 'Bricolage Grotesque';
-    font-optical-sizing: auto;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
   body {
     @apply bg-background text-foreground;
-    font-family: 'Bricolage Grotesque';
-    font-optical-sizing: auto;
-  }
-
-  /* Form controls do not inherit font-family by default in any browser. */
-  input,
-  textarea,
-  select,
-  button {
-    font-family: inherit;
-    font-optical-sizing: auto;
-  }
-
-  h1, h2, h3, h4 {
-    letter-spacing: -0.018em;
-  }
-}
-
-/* Size-keyed tracking. Applied as utilities rather than element selectors
-   because headings in this app are styled by class (text-2xl on a div is as
-   common as an h1), so the tracking has to follow the SIZE, not the tag. */
-@layer utilities {
-  .text-3xl, .text-4xl, .text-5xl, .text-6xl {
-    letter-spacing: -0.028em;
-  }
-  .text-xl, .text-2xl {
-    letter-spacing: -0.02em;
-  }
-  .text-\[11px\], .text-xs {
-    letter-spacing: 0.006em;
   }
 }

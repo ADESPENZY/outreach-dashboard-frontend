@@ -8,11 +8,14 @@ export default {
   theme: {
   	extend: {
   		fontFamily: {
-  			// One family, everywhere. `sans` is overridden too, so every
-  			// unstyled element inherits Bricolage instead of the browser
-  			// default — there is no second font left to fall back to.
-  			bricolage: ['Bricolage Grotesque'],
-  			sans: ['Bricolage Grotesque']
+  			montserrat: [
+  				'Montserrat',
+  				'sans-serif'
+  			],
+  			roboto: [
+  				'Roboto',
+  				'sans-serif'
+  			]
   		},
   		colors: {
   			primary: {
