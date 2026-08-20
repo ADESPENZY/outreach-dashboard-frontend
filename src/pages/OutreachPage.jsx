@@ -805,9 +805,18 @@ const OutreachPage = () => {
   // ── Derived lists ───────────────────────────────────────────────────────
   const pending = drafts; // status === 'draft'
   const replies = sentEmails.filter((e) => e.status === 'replied');
-  const sentList = sentEmails
-    .filter((e) => e.status !== 'replied')
-    .sort((a, b) => new Date(b.sent_at || b.scheduled_send_at || 0) - new Date(a.sent_at || a.scheduled_send_at || 0));
+  // "Sent" means it actually left the inbox. 'opened' and 'bounced' were sent;
+  // 'approved' is QUEUED (or stranded) and 'failed' never left. Counting those
+  // as sent overstated the tab by 66 on live data (150 shown vs 84 real).
+  const SENT_STATUSES = ['sent', 'opened', 'bounced'];
+  const byRecency = (a, b) =>
+    new Date(b.sent_at || b.scheduled_send_at || 0) - new Date(a.sent_at || a.scheduled_send_at || 0);
+  const sentList = sentEmails.filter((e) => SENT_STATUSES.includes(e.status)).sort(byRecency);
+  // Approved AND queued = scheduled, waiting its send slot. Approved and NOT
+  // queued is a stranded email that can never send (see the
+  // backfill_stranded_approved command) — deliberately in neither list.
+  const scheduled = sentEmails.filter((e) => e.status === 'approved' && e.is_queued).sort(byRecency);
+  const failed = sentEmails.filter((e) => e.status === 'failed');
   const reachedCount = sentList.length + replies.length;
 
   // Active tab's list + the selected email for the desktop preview panel.
@@ -855,16 +864,35 @@ const OutreachPage = () => {
   const approveAll = async () => {
     if (!canSend) { setShowConnect(true); return; }   // gate: no inbox = no send
     setBulking(true);
+    // Per-item try/catch, deliberately. This loop used to share ONE try around
+    // the whole batch, so the first rejected contact threw out of the loop and
+    // every remaining introduction was silently never approved — the user saw a
+    // single error and lost the rest of the batch. A contact the send gate
+    // refuses is an expected outcome for THAT email (its job moves to Apply
+    // Direct), never a reason to abandon the others.
+    let ok = 0;
+    const blocked = [];
     try {
       for (const email of pending) {
-        await approveEmail(email.id);
-        await queueEmail(email.id);
+        try {
+          await approveEmail(email.id);
+          await queueEmail(email.id);
+          ok += 1;
+        } catch (err) {
+          blocked.push(email);
+          console.warn('[approveAll] skipped introduction', email.id, err?.message || err);
+        }
       }
       refresh();
-      toast.success(`${pending.length} introductions approved — sending now.`);
-    } catch (err) {
-      toast.error(err?.message || 'Some introductions could not be approved.');
-      refresh();
+      if (ok > 0) {
+        toast.success(`${ok} introduction${ok === 1 ? '' : 's'} approved — sending now.`);
+      }
+      if (blocked.length > 0) {
+        toast.info(
+          `${blocked.length} couldn't be sent — no named contact was found. ` +
+          `Those roles moved to Apply Direct on Opportunities.`,
+        );
+      }
     } finally {
       setBulking(false);
     }
@@ -953,6 +981,37 @@ const OutreachPage = () => {
         </div>
       ) : (
         <>
+          {/* ── Sent tab — things that are NOT sent, surfaced above the list ──
+              Scheduled and failed emails used to be counted as "Sent". They now
+              live here instead: still visible, honestly labelled, out of the
+              count. Rendered once, above the mobile/desktop split. */}
+          {tab === 'sent' && failed.length > 0 && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <p className="text-sm text-red-800">
+                {failed.length === 1
+                  ? "1 introduction couldn't be sent."
+                  : `${failed.length} introductions couldn't be sent.`}{' '}
+                <span className="text-red-700/80">
+                  Check the inbox connection in Settings, then try again.
+                </span>
+              </p>
+            </div>
+          )}
+
+          {tab === 'sent' && scheduled.length > 0 && (
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 font-montserrat">
+                <Clock className="w-3.5 h-3.5 text-amber-600" />
+                Scheduled to send ({scheduled.length})
+              </h2>
+              <div className="space-y-4">
+                {scheduled.map((email) => <SentCard key={email.id} email={email} />)}
+              </div>
+              <div className="border-b border-neutral-dark pt-1" />
+            </section>
+          )}
+
           {/* ── MOBILE + TABLET (< lg): stacked cards ─────────────────────── */}
           <div className="lg:hidden space-y-6">
             {tab === 'pending' ? (
