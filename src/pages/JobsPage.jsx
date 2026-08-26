@@ -17,6 +17,7 @@ import RoleRequestModal from '../components/RoleRequestModal';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getProfile } from '../services/apiProfile';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
+import ActivationFlow from '../components/onboarding/ActivationFlow';
 import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePersonalizationModal';
 import JobDetailDrawer from '../components/JobDetailDrawer';
 import ApplyDirectModal from '../components/ApplyDirectModal';
@@ -188,12 +189,21 @@ const JobsPage = () => {
     const isActivateRequested = searchParams.get('activate') === '1';
 
     // ── Queries ───────────────────────────────────────────────────────────────
-    const { data: profile } = useQuery({
+    const { data: profile, isLoading: profileLoading } = useQuery({
         queryKey: ['profile'],
         queryFn: getProfile,
         staleTime: 5 * 60 * 1000,
     });
     const isActivated = !!profile?.cv_raw_text;
+    // Onboarding is DONE only with a CV *and* saved role preferences — the same
+    // two-part test Home uses (DashboardPage.jsx), deliberately not the CV alone.
+    // cv_raw_text is written at step 1 of Calibration, so gating on it by itself
+    // would strand anyone who bailed mid-flow on a page they cannot use.
+    // Derived up here, above every query and closure that reads it, for the
+    // temporal-dead-zone reason DashboardPage documents.
+    const roleTypes = profile?.job_preferences?.role_types;
+    const hasPreferences = Array.isArray(roleTypes) && roleTypes.length > 0;
+    const onboardingDone = isActivated && hasPreferences;
 
     const { data: analytics } = useQuery({
         queryKey: ['analytics', 30],
@@ -503,6 +513,32 @@ const JobsPage = () => {
     useEffect(() => {
         if (isActivateRequested && !isActivated) setIsActivationDrawerOpen(true);
     }, [isActivateRequested, isActivated]);
+
+    // ── Activation gate ───────────────────────────────────────────────────────
+    // Everything past this point assumes a calibrated user: the cards, the five
+    // empty states, the "Start searching" button, the detail drawer. Someone who
+    // hasn't finished onboarding gets the Calibration flow instead — the same
+    // component, in the same place, that Home renders (DashboardPage.jsx) —
+    // rather than an Opportunities page whose only affordance is a button the
+    // backend now refuses with 400 cv_required.
+    //
+    // This MUST sit below every hook in this component. React counts hooks per
+    // render, so returning above them would change that count the moment the
+    // profile lands and blow up the reconciler.
+    //
+    // The loading branch is not cosmetic: `profile` is undefined on the first
+    // render, and without it an already-calibrated user would see Calibration
+    // flash on every single visit before their profile resolved.
+    if (profileLoading) {
+        return (
+            <div className="p-4 md:p-8 w-full max-w-[1400px] mx-auto">
+                <ApplyDirLoader.Inline message="Loading your opportunities..." />
+            </div>
+        );
+    }
+    if (!onboardingDone) {
+        return <ActivationFlow profile={profile} />;
+    }
 
     // ── Renderers ─────────────────────────────────────────────────────────────
 
