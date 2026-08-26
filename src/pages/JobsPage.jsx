@@ -886,31 +886,37 @@ const JobsPage = () => {
                 <p className="mt-2 text-sm text-secondary-dark max-w-sm leading-relaxed">{sub}</p>
 
                 {key !== 'CAUGHT_UP' && (
-                    <>
-                        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                            {key === 'FIRST_RUN_EMPTY' && (
-                                <button onClick={() => navigate('/dashboard/settings?tab=jobs')} className={primaryBtn}>
-                                    Adjust what you&rsquo;re looking for
-                                    <ArrowRight className="w-4 h-4" />
-                                </button>
-                            )}
-                            <button
-                                onClick={runSearchNow}
-                                disabled={searchingNow}
-                                className={key === 'FIRST_RUN_EMPTY' ? secondaryBtn : primaryBtn}
-                            >
-                                {searchingNow && <Loader2 className="w-4 h-4 animate-spin" />}
-                                {key === 'NEVER_RUN' ? 'Start searching' : 'Search again'}
+                    <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                        {key === 'FIRST_RUN_EMPTY' && (
+                            <button onClick={() => navigate('/dashboard/settings?tab=jobs')} className={primaryBtn}>
+                                Adjust what you&rsquo;re looking for
+                                <ArrowRight className="w-4 h-4" />
                             </button>
-                        </div>
-
+                        )}
                         <button
-                            onClick={() => setShowRoleRequest(true)}
-                            className="mt-4 text-xs font-semibold text-secondary-dark hover:text-primary-dark underline underline-offset-2 transition-colors"
+                            onClick={runSearchNow}
+                            disabled={searchingNow}
+                            className={key === 'FIRST_RUN_EMPTY' ? secondaryBtn : primaryBtn}
                         >
-                            Can&rsquo;t find what you&rsquo;re looking for?
+                            {searchingNow && <Loader2 className="w-4 h-4 animate-spin" />}
+                            {key === 'NEVER_RUN' ? 'Start searching' : 'Search again'}
                         </button>
-                    </>
+                    </div>
+                )}
+
+                {/* FIRST_RUN_EMPTY only — the one state where a search really did
+                    complete and come back with nothing, so "we missed something"
+                    is a true statement. On NEVER_RUN it claimed a search had
+                    missed the user before any had run; on INTERRUPTED the run
+                    died rather than finished, and the honest next step there is
+                    Search again. Kept in sync with DashboardPage. */}
+                {key === 'FIRST_RUN_EMPTY' && (
+                    <button
+                        onClick={() => setShowRoleRequest(true)}
+                        className="mt-4 text-xs font-semibold text-secondary-dark hover:text-primary-dark underline underline-offset-2 transition-colors"
+                    >
+                        Can&rsquo;t find what you&rsquo;re looking for?
+                    </button>
                 )}
             </motion.div>
         );

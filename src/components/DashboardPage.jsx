@@ -429,38 +429,44 @@ const DashboardPage = () => {
             </div>
 
             {emptyState !== 'CAUGHT_UP' && (
-              <>
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  {emptyState === 'FIRST_RUN_EMPTY' && (
-                    <button
-                      onClick={() => navigate('/dashboard/settings?tab=jobs')}
-                      className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
-                    >
-                      Adjust what you're looking for
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  )}
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                {emptyState === 'FIRST_RUN_EMPTY' && (
                   <button
-                    onClick={runSearchNow}
-                    disabled={searching}
-                    className={
-                      emptyState === 'FIRST_RUN_EMPTY'
-                        ? 'inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-5 py-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
-                        : 'inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
-                    }
+                    onClick={() => navigate('/dashboard/settings?tab=jobs')}
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
                   >
-                    {searching && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {emptyState === 'NEVER_RUN' ? 'Start searching' : 'Search again'}
+                    Adjust what you're looking for
+                    <ArrowRight className="w-4 h-4" />
                   </button>
-                </div>
-
+                )}
                 <button
-                  onClick={() => setShowRoleRequest(true)}
-                  className="mt-3 text-xs font-semibold text-secondary-dark hover:text-primary-dark underline underline-offset-2 transition-colors"
+                  onClick={runSearchNow}
+                  disabled={searching}
+                  className={
+                    emptyState === 'FIRST_RUN_EMPTY'
+                      ? 'inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold rounded-xl px-5 py-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+                      : 'inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed'
+                  }
                 >
-                  Can't find what you're looking for?
+                  {searching && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {emptyState === 'NEVER_RUN' ? 'Start searching' : 'Search again'}
                 </button>
-              </>
+              </div>
+            )}
+
+            {/* FIRST_RUN_EMPTY only — the one state where a search really did
+                complete and come back with nothing, so "we missed something" is
+                a true statement. On NEVER_RUN it claimed a search had missed the
+                user before any had run; on INTERRUPTED the run died rather than
+                finished, and the honest next step there is Search again. Kept in
+                sync with JobsPage. */}
+            {emptyState === 'FIRST_RUN_EMPTY' && (
+              <button
+                onClick={() => setShowRoleRequest(true)}
+                className="mt-3 text-xs font-semibold text-secondary-dark hover:text-primary-dark underline underline-offset-2 transition-colors"
+              >
+                Can't find what you're looking for?
+              </button>
             )}
           </div>
         )}
