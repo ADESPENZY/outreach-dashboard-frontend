@@ -94,15 +94,33 @@ const Sidebar = ({ isOpen, onClose }) => {
   return (
     <aside
       className={[
-        'bg-white border-r border-neutral-dark h-screen flex flex-col py-5',
+        'bg-white border-r border-neutral-dark flex flex-col py-5',
         'shadow-[4px_0_24px_rgba(0,0,0,0.02)] font-roboto',
-        // Mobile: fixed drawer, slide in/out
+        // Mobile: fixed drawer, slide in/out.
+        //
+        // NOTE the deliberate absence of `h-screen` here. `100vh` on iOS Safari
+        // is the LARGE viewport — the height the page would have if the URL bar
+        // were collapsed — so a 100vh drawer hangs below the visible area by the
+        // toolbar's height, taking the Settings link off-screen with it. Worse,
+        // `overflow-y-auto` could not rescue it: this is a flex column whose
+        // content is laid out to fill exactly 100vh, so scrollHeight equalled
+        // clientHeight and there was nothing to scroll. The element overflowed
+        // the VIEWPORT, not its own box.
+        //
+        // Letting `inset-y-0` size the fixed element instead pins it to the
+        // visible viewport that iOS actually lays fixed elements out against, so
+        // the box always matches what the user can see — and `overflow-y-auto`
+        // below becomes a real scroll container again for short screens.
         'fixed inset-y-0 left-0 z-[60] w-[85vw] max-w-xs px-4',
-        'overflow-y-auto',
+        'overflow-y-auto overscroll-contain',
+        // viewport-fit=cover (index.html) draws under the home indicator, so the
+        // last nav row needs to clear it or it sits beneath the bar.
+        'pb-[calc(1.25rem+env(safe-area-inset-bottom))]',
         'transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : '-translate-x-full',
-        // Desktop: static sidebar
-        'md:relative md:z-40 md:translate-x-0 md:overflow-visible',
+        // Desktop: static sidebar — full height comes back here, where vh is
+        // well-behaved and the element is in normal flow.
+        'md:relative md:z-40 md:h-screen md:translate-x-0 md:overflow-visible',
         'md:transition-[width] md:duration-300 md:ease-in-out',
         isCollapsed ? 'md:w-20 md:px-2' : 'md:w-64 md:px-4',
       ].join(' ')}

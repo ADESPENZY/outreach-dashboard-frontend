@@ -179,14 +179,14 @@ const Settings = () => {
           vertical rail on desktop, with the wide content panel beside it. */}
       <div className="flex flex-col md:flex-row gap-6 items-start">
         <aside className="w-full md:w-60 shrink-0 md:sticky md:top-6">
-          <nav className="flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar -mx-1 px-1 pb-1 md:pb-0 md:mx-0 md:px-0">
+          <nav className="flex md:flex-col gap-1.5 overflow-x-auto no-scrollbar snap-x snap-mandatory md:snap-none scroll-px-1 -mx-1 px-1 pb-1 md:pb-0 md:mx-0 md:px-0">
             {TABS.map(tab => {
               const isActive = activeTab === tab.key;
               return (
                 <button
                   key={tab.key}
                   onClick={() => selectTab(tab.key)}
-                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-semibold whitespace-nowrap transition-all shrink-0 md:w-full ${
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-left text-sm font-semibold whitespace-nowrap transition-all shrink-0 snap-start md:w-full ${
                     isActive
                       ? 'bg-gradient-to-r from-primary-light to-primary-dark text-white shadow-sm'
                       : 'bg-white border border-neutral-dark text-secondary-dark hover:text-black-light hover:border-primary-light/40'

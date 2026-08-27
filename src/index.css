@@ -247,3 +247,18 @@ th {
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  /* Hide the scrollbar on a horizontally-scrolling row while keeping it
+     scrollable. Settings.jsx's sub-nav and JobDetailDrawer.jsx's section tabs
+     both already referenced `.no-scrollbar` as though it existed — it never
+     did, so those rows have been showing a raw scrollbar. Defined here rather
+     than as a plugin to sit alongside .custom-scrollbar above. */
+  .no-scrollbar {
+    -ms-overflow-style: none;  /* legacy Edge / IE */
+    scrollbar-width: none;     /* Firefox */
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;             /* Chrome, Safari, iOS Safari */
+  }
+}
