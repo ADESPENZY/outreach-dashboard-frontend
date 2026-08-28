@@ -1,6 +1,6 @@
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router';
 import Dashboard from './pages/Dashboard';
-import Settings from './components/Settings';
+import { SettingsHomeRoute, SettingsSectionRoute, SettingsTabRedirect } from './components/settings/SettingsMobile';
 import DashboardPage from './components/DashboardPage';
 import { ToastContainer } from 'react-toastify';
 import LoginPage from './pages/LoginPage';
@@ -59,7 +59,7 @@ function App() {
             {/* Onboarding wizard removed — setup is progressive (Profile page,
                 CV drawer, Auto-Scout, Inboxes). Old links redirect to Profile. */}
             <Route element={<ProtectedRoute requireOnboarding={false} />}>
-              <Route path="/onboarding" element={<Navigate to="/dashboard/settings?tab=profile" replace />} />
+              <Route path="/onboarding" element={<SettingsTabRedirect tab="profile" />} />
             </Route>
 
             {/* Dashboard — JWT only; onboarding is now optional (progressive disclosure) */}
@@ -70,10 +70,15 @@ function App() {
                 <Route path="opportunities"     element={<JobsPage />} />        {/* was Jobs */}
                 <Route path="introductions"     element={<OutreachPage />} />    {/* was Outreach */}
                 <Route path="progress"          element={<ProgressPage />} />    {/* new: merges Analytics + JobTracker + Inboxes later */}
-                <Route path="settings"          element={<Settings />} />
+                {/* Settings is two-faced by breakpoint: at md+ both routes
+                    render the unchanged tab-rail page; below md, `settings`
+                    is a grouped row list and `settings/<slug>` is one section
+                    per screen (see components/settings/SettingsMobile.jsx). */}
+                <Route path="settings"          element={<SettingsHomeRoute />} />
+                <Route path="settings/:section" element={<SettingsSectionRoute />} />
                 {/* Old standalone Profile page retired — it now lives as the
                     Profile tab inside Settings. */}
-                <Route path="profile"           element={<Navigate to="/dashboard/settings?tab=profile" replace />} />
+                <Route path="profile"           element={<SettingsTabRedirect tab="profile" />} />
 
                 {/* ── Redirects: old paths → new homes ─────────────────── */}
                 <Route path="jobs"              element={<Navigate to="/dashboard/opportunities" replace />} />

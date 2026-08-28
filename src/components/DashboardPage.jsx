@@ -15,6 +15,8 @@ import { getAnalytics } from '../services/apiAnalytics';
 import { getDraftEmails } from '../services/apiOutreach';
 import { getProfile, updateProfile } from '../services/apiProfile';
 import ActivationFlow from './onboarding/ActivationFlow';
+import { settingsLink } from '../constants/settingsSections';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 // The Home page is the returning user's daily briefing (ARCHITECTURE §1,
 // ONBOARDING phase 8). It answers, in one glance: "What happened while I was
@@ -55,6 +57,7 @@ function timeAgo(iso) {
 
 const DashboardPage = () => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { currentUser } = useAuth();
 
   const firstName = currentUser?.first_name || currentUser?.username || 'there';
@@ -432,7 +435,7 @@ const DashboardPage = () => {
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 {emptyState === 'FIRST_RUN_EMPTY' && (
                   <button
-                    onClick={() => navigate('/dashboard/settings?tab=jobs')}
+                    onClick={() => navigate(settingsLink('jobs', isMobile))}
                     className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all"
                   >
                     Adjust what you're looking for

@@ -5,6 +5,8 @@ import { useQuery } from '@tanstack/react-query';
 import { getMe } from '@/services/apiAuth';
 import { getAnalytics } from '@/services/apiAnalytics';
 import { useAuth } from '@/context/AuthContext';
+import { settingsLink } from '@/constants/settingsSections';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 // Time-of-day greeting — uses the visitor's local clock.
 function greetingFor(date = new Date()) {
@@ -15,6 +17,7 @@ function greetingFor(date = new Date()) {
 }
 
 const Header = ({ onMenuClick }) => {
+    const isMobile = useIsMobile();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const menuRef = useRef(null);
@@ -141,7 +144,7 @@ const Header = ({ onMenuClick }) => {
                     <p className="text-xs text-secondary-dark truncate">{me?.email || "No email linked"}</p>
                 </div>
                 <NavLink
-                    to="/dashboard/settings?tab=profile"
+                    to={settingsLink('profile', isMobile)}
                     onClick={closeMenus}
                     className="flex items-center px-4 py-3 text-sm text-secondary-dark hover:text-primary-dark hover:bg-primary-light/5 transition-colors"
                 >

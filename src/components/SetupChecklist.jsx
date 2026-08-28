@@ -5,6 +5,8 @@ import { FileText, Mail, Target, ChevronRight } from 'lucide-react';
 import { getGmailAccounts } from '../services/apiGmail';
 import { getAutoScoutSettings } from '../services/apiSettings';
 import { getProfile } from '../services/apiProfile';
+import { settingsLink } from '../constants/settingsSections';
+import { useIsMobile } from '../hooks/useIsMobile';
 
 // Compact, self-shrinking setup card. Completed steps collapse away, so it gets
 // smaller as the user progresses and disappears entirely once all are done —
@@ -20,7 +22,9 @@ const STEPS = [
     id: 'inbox',
     icon: Mail,
     title: 'Connect your inbox',
-    route: '/dashboard/settings?tab=sending',
+    // Breakpoint-dependent, so it is resolved at click time rather than baked
+    // in here: the Connected Inboxes screen on mobile, ?tab=sending on desktop.
+    settingsTab: 'sending',
   },
   {
     id: 'scout',
@@ -32,6 +36,7 @@ const STEPS = [
 
 export default function SetupChecklist() {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
 
   const { data: profile, isLoading: loadingProfile } = useQuery({
     queryKey: ['profile'],
@@ -92,7 +97,7 @@ export default function SetupChecklist() {
           return (
             <button
               key={step.id}
-              onClick={() => navigate(step.route)}
+              onClick={() => navigate(step.settingsTab ? settingsLink(step.settingsTab, isMobile) : step.route)}
               className="w-full flex items-center gap-3 px-4 py-2.5 text-left hover:bg-neutral/40 transition-colors group"
             >
               <span className="w-7 h-7 rounded-lg bg-neutral border border-neutral-dark flex items-center justify-center shrink-0">

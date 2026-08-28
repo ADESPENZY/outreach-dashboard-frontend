@@ -16,6 +16,8 @@ import {
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getInboxStats } from '@/services/apiInboxes';
+import { settingsLink } from '@/constants/settingsSections';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 // The 4-item product navigation. Settings is the gear pinned at the very
 // bottom; the live Connected Inboxes status sits just above it.
@@ -28,9 +30,11 @@ const NAV = [
 ];
 
 // Settings → Email & Sending is where inbox management (and the Reconnect
-// button for a revoked inbox) lives. Deep-link straight to that tab so an
-// 'Issue' inbox in the sidebar is one click from re-authorising.
-const CONNECTED_EMAILS_PATH = '/dashboard/settings?tab=sending';
+// button for a revoked inbox) lives. Deep-link straight to it so an 'Issue'
+// inbox in the sidebar is one click from re-authorising — the ?tab= view on
+// desktop, the Connected Inboxes screen on mobile. Resolved per render inside
+// the component (see connectedEmailsPath) because the target is breakpoint
+// dependent; it used to be a module constant.
 
 // Map the inbox-stats status enum to the sidebar's display. Must match the
 // Settings → Connected Inboxes card exactly: 'Issue' (revoked token, needs
@@ -56,6 +60,8 @@ function inboxStatus(acc) {
 
 const Sidebar = ({ isOpen, onClose }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const isMobile = useIsMobile();
+  const connectedEmailsPath = settingsLink('sending', isMobile);
 
   const { data: inboxData, isLoading: inboxLoading } = useQuery({
     queryKey: ['inboxStats'],
@@ -205,7 +211,7 @@ const Sidebar = ({ isOpen, onClose }) => {
                 return (
                   <li key={acc.id}>
                     <Link
-                      to={CONNECTED_EMAILS_PATH}
+                      to={connectedEmailsPath}
                       onClick={onClose}
                       title={acc.status === 'Issue'
                         ? `${acc.email} — needs reconnecting. Click to re-authorise.`
@@ -231,7 +237,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
           {totalInboxes > 2 && (
             <Link
-              to={CONNECTED_EMAILS_PATH}
+              to={connectedEmailsPath}
               onClick={onClose}
               className="block px-2 mb-1.5 text-[11px] font-semibold text-primary-dark hover:text-primary-light transition-colors"
             >
@@ -241,7 +247,7 @@ const Sidebar = ({ isOpen, onClose }) => {
 
           {canAddInbox && (
             <Link
-              to={CONNECTED_EMAILS_PATH}
+              to={connectedEmailsPath}
               onClick={onClose}
               className="w-full flex items-center justify-center gap-1.5 px-4 py-2 border-2 border-dashed border-neutral-dark text-xs font-semibold rounded-xl text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"
             >
@@ -255,7 +261,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         <div className={`pt-4 border-t border-neutral-dark flex-col items-center ${isCollapsed ? 'hidden md:flex' : 'hidden'}`}>
           {canAddInbox && (
             <Link
-              to={CONNECTED_EMAILS_PATH}
+              to={connectedEmailsPath}
               onClick={onClose}
               title="Add Email"
               className="flex items-center justify-center w-9 h-9 rounded-xl border-2 border-dashed border-neutral-dark text-secondary-dark hover:bg-primary-light/5 hover:text-primary-dark hover:border-primary-light/40 transition-all duration-200"

@@ -7,7 +7,7 @@ import {
   FileText, Upload, Sparkles, Plus, X,
   Bell, Clock, KeyRound, AtSign, LogOut, Trash2, AlertTriangle, ShieldCheck,
   Crown, Flame, CheckCircle2, Send, Download, Info, ArrowRight, HeartHandshake,
-  RefreshCw, AlertCircle,
+  RefreshCw, AlertCircle, HelpCircle,
 } from 'lucide-react';
 import { ApplyDirLoader } from '@/components/ui/ApplyDirLoader';
 import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
@@ -68,6 +68,30 @@ function Collapsible({ title, description, icon, defaultOpen = false, badge, chi
         <ChevronDown className={`w-5 h-5 text-secondary-dark/60 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && <div className="px-5 md:px-6 pb-5 md:pb-6 pt-1 space-y-4 border-t border-neutral-dark">{children}</div>}
+    </div>
+  );
+}
+
+/*
+ * The mobile stand-in for <Collapsible>. On a phone each section gets its own
+ * route (/dashboard/settings/<slug>), so there is nothing to expand — the panel
+ * is just the card body. Same props as Collapsible so the tabs can swap one for
+ * the other with a single assignment; `icon`, `badge` and `defaultOpen` are
+ * accepted and ignored (the route header already carries the title + icon).
+ *
+ * `showTitle` is only set when a screen stacks TWO panels (the merged
+ * Notifications screen), where the route header alone can't label both.
+ */
+function SectionPanel({ title, description, showTitle = false, children }) {
+  return (
+    <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 space-y-4">
+      {(showTitle || description) && (
+        <div className="space-y-0.5">
+          {showTitle && <h3 className="text-base font-bold font-montserrat text-black">{title}</h3>}
+          {description && <p className="text-sm text-secondary-dark">{description}</p>}
+        </div>
+      )}
+      {children}
     </div>
   );
 }
@@ -158,18 +182,30 @@ function Chips({ value = [], onChange, placeholder, pill = 'bg-primary-light/10 
 // ═══════════════════════════════════════════════════════════════════════════
 // Main
 // ═══════════════════════════════════════════════════════════════════════════
-const Settings = () => {
+// `initialTab` is used ONLY by the mobile section route, so that a desktop
+// browser sitting on /dashboard/settings/inboxes still opens the right tab.
+// Undefined everywhere else, which leaves the original behaviour untouched.
+const Settings = ({ initialTab }) => {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const tabFromUrl = params.get('tab');
-  const [activeTab, setActiveTab] = useState(TABS.some(t => t.key === tabFromUrl) ? tabFromUrl : 'profile');
+  const [activeTab, setActiveTab] = useState(
+    TABS.some(t => t.key === tabFromUrl) ? tabFromUrl
+      : TABS.some(t => t.key === initialTab) ? initialTab
+        : 'profile',
+  );
 
   const selectTab = (key) => { setActiveTab(key); setParams(key === 'profile' ? {} : { tab: key }, { replace: true }); };
 
   return (
     // Same page frame as Opportunities so the padding + edges line up across
     // the app: p-4 md:p-8, max-w-[1400px] mx-auto, space-y-6.
-    <div className="relative isolate p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-6 animate-fade-in font-roboto">
+    //
+    // `hidden md:block` is the ONLY change to the desktop path: below 768px the
+    // tab rail is replaced by the Level 1 row list (SettingsMobile.jsx), and at
+    // md+ `block` is the display a <div> already had, so the desktop render is
+    // unchanged.
+    <div className="hidden md:block relative isolate p-4 md:p-8 w-full max-w-[1400px] mx-auto space-y-6 animate-fade-in font-roboto">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-black to-secondary-dark font-montserrat">Settings</h1>
         <p className="text-sm text-secondary-dark mt-1">Everything about your account — profile, sending, job search, and login.</p>
@@ -222,7 +258,10 @@ const Settings = () => {
 // FirstTimePersonalizationModal.jsx, free to drift apart.
 const SECRET_MAX = SECRET_WEAPON_MAX;
 
-function ProfileTab() {
+// `only` renders a SINGLE section as a full mobile screen (see
+// constants/settingsSections.js). Undefined — every desktop render — keeps all
+// sections and the Collapsible chrome exactly as before.
+function ProfileTab({ only }) {
   const qc = useQueryClient();
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe });
   const { data: profile, isLoading } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
@@ -324,9 +363,12 @@ function ProfileTab() {
   const fitTitles = profile?.skills_extracted?.job_titles_fit || [];
   const displayName = idForm.full_name || me?.first_name || me?.username || 'You';
   const initials = displayName.trim().slice(0, 2).toUpperCase();
+  const P = only ? SectionPanel : Collapsible;
+  const show = (key) => !only || only === key;
 
   return (
     <>
+      {show('identity') && <>
       {/* Identity header (screenshot inspo) — avatar + name + email */}
       <div className="flex items-center gap-4 bg-white rounded-2xl border border-neutral-dark shadow-sm px-5 md:px-6 py-5">
         <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary-light to-primary-dark flex items-center justify-center text-white text-xl font-bold font-montserrat shadow-lg shadow-primary-light/30 shrink-0">
@@ -339,7 +381,7 @@ function ProfileTab() {
       </div>
 
       {/* Section A — Identity */}
-      <Collapsible title="Your Identity" description="Name, location, and the links in your email sign-off." icon={User} defaultOpen>
+      <P title="Your Identity" description="Name, location, and the links in your email sign-off." icon={User} defaultOpen>
         <div>
           <Label>Full name</Label>
           <Input value={idForm.full_name} onChange={e => setIdForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Your full name" />
@@ -362,10 +404,12 @@ function ProfileTab() {
           <div className="sm:col-span-2"><Label>Calendly link (optional)</Label><Input value={idForm.calendly_url} onChange={e => setIdForm(f => ({ ...f, calendly_url: e.target.value }))} placeholder="calendly.com/you/30min" /></div>
         </div>
         <div className="flex justify-end"><SaveButton onClick={saveIdentity} saving={savingId} /></div>
-      </Collapsible>
+      </P>
+      </>}
 
+      {show('cv') && <>
       {/* Section B — CV */}
-      <Collapsible title="Your CV" description="Powers job scoring, your tailored CVs, and your email voice." icon={FileText}>
+      <P title="Your CV" description="Powers job scoring, your tailored CVs, and your email voice." icon={FileText}>
         <input type="file" accept="application/pdf" id="settings-cv" className="hidden" onChange={e => { handleCv(e.target.files?.[0]); e.target.value = ''; }} />
         {profile?.cv_raw_text ? (
           <div className="flex items-center gap-2 flex-wrap">
@@ -395,10 +439,12 @@ function ProfileTab() {
             <p className="text-[11px] text-secondary-dark/60">Skills are re-extracted automatically each time you replace your CV.</p>
           </div>
         )}
-      </Collapsible>
+      </P>
+      </>}
 
+      {show('voice') && <>
       {/* Section C+D — Voice: summary, projects, secret weapon, differentiators, tone */}
-      <Collapsible
+      <P
         title="Your Outreach Voice"
         description="This is what we draw on when we write to a hiring manager. The more real detail here, the less your introductions sound like everyone else's."
         icon={Sparkles}
@@ -482,7 +528,8 @@ function ProfileTab() {
         </div>
 
         <div className="flex justify-end"><SaveButton onClick={saveVoice} saving={savingVoice} /></div>
-      </Collapsible>
+      </P>
+      </>}
     </>
   );
 }
@@ -623,7 +670,8 @@ function InfoTip({ children, label = 'What’s this?', align = 'right' }) {
   );
 }
 
-function SendingTab() {
+// See ProfileTab for what `only` does.
+function SendingTab({ only }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery({ queryKey: ['inboxes'], queryFn: getInboxStats });
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
@@ -763,11 +811,14 @@ function SendingTab() {
   const email = profile?.contact_email || me?.email || 'you@gmail.com';
   const link = profile?.calendly_url || profile?.portfolio_url || '';
   const addr = profile?.location || 'Texas, United States';
+  const P = only ? SectionPanel : Collapsible;
+  const show = (key) => !only || only === key;
 
   return (
     <>
+      {show('inboxes') && <>
       {/* Section A — Connected inboxes */}
-      <Collapsible title="Connected Inboxes" description="The inboxes your introductions send from." icon={Mail} defaultOpen>
+      <P title="Connected Inboxes" description="The inboxes your introductions send from." icon={Mail} defaultOpen>
         {isLoading ? <ApplyDirLoader.Inline /> : (
           <>
             {accounts.length === 0 ? (
@@ -958,10 +1009,12 @@ function SendingTab() {
             </p>
           </>
         )}
-      </Collapsible>
+      </P>
+      </>}
 
+      {show('preferences') && <>
       {/* Section B — Sending preferences */}
-      <Collapsible title="Sending Preferences" description="Follow-up cadence and automatic sending." icon={Send}>
+      <P title="Sending Preferences" description="Follow-up cadence and automatic sending." icon={Send}>
         <ToggleRow icon={HeartHandshake} title="Automatic follow-ups" desc="Politely nudge non-responders on the schedule below, then stop." checked={autoFollow} saving={savingAF} onChange={saveAutoFollow} />
         <div className="rounded-xl border border-neutral-dark bg-neutral/50 p-4">
           <p className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider mb-2">Follow-up cadence (in the same thread)</p>
@@ -979,10 +1032,12 @@ function SendingTab() {
           <Clock className="w-4 h-4 text-primary-dark shrink-0 mt-0.5" />
           <span>Emails send Mon–Fri during the recipient's business hours (US-East window) — so they land when hiring managers are at their desks.</span>
         </div>
-      </Collapsible>
+      </P>
+      </>}
 
+      {show('signature') && <>
       {/* Section C — Signature preview */}
-      <Collapsible title="Email Signature Preview" description="Exactly what recipients see at the bottom of every email." icon={FileText}>
+      <P title="Email Signature Preview" description="Exactly what recipients see at the bottom of every email." icon={FileText}>
         <div className="rounded-xl border border-neutral-dark bg-neutral p-4 font-mono text-xs text-secondary-dark whitespace-pre-wrap break-words leading-relaxed">
           <span>Warm regards,{'\n'}</span>
           <span className="text-black font-semibold">{name}</span>{'\n'}
@@ -993,8 +1048,11 @@ function SendingTab() {
           <span>Privacy policy: applydir.com/privacy</span>
         </div>
         <p className="text-[11px] text-secondary-dark/60 flex items-center gap-1"><Info className="w-3 h-3" /> Pulls from your Profile (name, sign-off email, Calendly, location). Edit those in the Profile tab.</p>
-      </Collapsible>
+      </P>
+      </>}
 
+      {/* Modals stay unconditional — they are already state-gated, and the
+          inbox screen needs every one of them. */}
       {confirmDelete && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6">
@@ -1034,7 +1092,8 @@ const ARRANGEMENTS = [
   { id: 'any',    label: 'Open to anything' },
 ];
 
-function JobsTab() {
+// See ProfileTab for what `only` does.
+function JobsTab({ only }) {
   const qc = useQueryClient();
   const { data: scout, isLoading } = useQuery({ queryKey: ['auto-scout-settings'], queryFn: getAutoScoutSettings });
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
@@ -1093,10 +1152,13 @@ function JobsTab() {
   };
 
   if (isLoading) return <ApplyDirLoader.Inline />;
+  const P = only ? SectionPanel : Collapsible;
+  const show = (key) => !only || only === key;
 
   return (
     <>
-      <Collapsible title="Industry & Work Arrangement" description="The kind of work you're looking for." icon={Briefcase} defaultOpen>
+      {show('industry') && (
+      <P title="Industry & Work Arrangement" description="The kind of work you're looking for." icon={Briefcase} defaultOpen>
         <div>
           <Label>Your industry</Label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -1116,9 +1178,11 @@ function JobsTab() {
           </div>
         </div>
         <div className="flex justify-end"><SaveButton onClick={savePrefs} saving={savingPrefs} /></div>
-      </Collapsible>
+      </P>
+      )}
 
-      <Collapsible title="Target Roles & Locations" description="What your headhunter searches for every morning." icon={SlidersHorizontal} defaultOpen>
+      {show('roles') && (
+      <P title="Target Roles & Locations" description="What your headhunter searches for every morning." icon={SlidersHorizontal} defaultOpen>
         <div>
           <Label>Target roles</Label>
           <Chips value={roles} onChange={setRoles} placeholder="Backend Engineer, Django Developer…" />
@@ -1140,7 +1204,8 @@ function JobsTab() {
           <p className="text-[11px] text-secondary-dark/70 mt-1.5">Added to your role-based search for more precise matches.</p>
         </div>
         <div className="flex justify-end"><SaveButton onClick={saveSearch} saving={savingScout} /></div>
-      </Collapsible>
+      </P>
+      )}
     </>
   );
 }
@@ -1148,14 +1213,71 @@ function JobsTab() {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 4 — ACCOUNT
 // ═══════════════════════════════════════════════════════════════════════════
+/*
+ * Help & FAQ copy.
+ *
+ * Voice follows ARCHITECTURE.md §4 (the language transformation table) — plain
+ * outcomes, no internal vocabulary. Every claim is grounded in behaviour that
+ * exists today; see the notes where a nuance is worth knowing:
+ *
+ *  • Follow-up cadence matches the 3/7/14 tiles in Sending Preferences and
+ *    stops on any reply.
+ *  • The inbox scopes wording matches the consent line in Connected Inboxes.
+ *  • The auto-apply contrast is VISION.md's own framing (§ "What they do":
+ *    mass-fill application forms vs email the hiring manager directly).
+ *  • The "disconnect" answer covers BOTH paths, because they differ: pausing
+ *    just stops sending, while removing is refused (409 from
+ *    gmail_account_delete) while follow-ups are still pinned to that inbox.
+ */
+const FAQ = [
+  {
+    q: 'How does ApplyDir find hiring managers?',
+    a: 'Once you approve a role, we search for the actual decision-maker — not a generic careers inbox — using verified contact sources. You’ll see their name and title before we write anything.',
+  },
+  {
+    q: 'Is it safe to connect my email?',
+    a: 'Yes. We only send the introductions you approve and read the replies to them — nothing else in your inbox. We never see your password directly (Google/Outlook sign-in) or store it in plain text.',
+  },
+  {
+    q: 'Why do introductions send from my own email instead of ApplyDir’s?',
+    a: 'Hiring managers reply to real people, not company addresses. Sending from your own inbox is why our reply rates are meaningfully higher than mass-apply tools.',
+  },
+  {
+    q: 'What is warm-up, and why does my daily limit start low?',
+    a: 'New inboxes can land in spam if they suddenly send a lot of email. We start conservatively and grow your sending volume over about two weeks, which protects your reply rate long-term.',
+  },
+  {
+    q: 'What happens if a hiring manager doesn’t reply?',
+    a: 'We follow up automatically on day 3, 7, and 14 in the same email thread, then stop. Any reply — even a “not right now” — ends the sequence immediately.',
+  },
+  {
+    q: 'Can I edit an introduction before it sends?',
+    a: 'Yes. Every introduction is drafted for your review — you can edit any part of it before approving.',
+  },
+  {
+    q: 'What happens if I disconnect my email?',
+    a: 'Pausing an inbox stops it sending; anything in progress simply waits. Removing an inbox is blocked while it still has follow-ups scheduled in live conversations — pause it instead, or wait for those to send. Either way, nothing sends without a connected, active inbox.',
+  },
+  {
+    q: 'How is this different from auto-apply tools?',
+    a: 'Auto-apply tools fill out application forms in bulk. We reach the actual hiring manager directly with a personal introduction — different channel, different result.',
+  },
+  {
+    q: 'How do I deactivate my account?',
+    a: 'Go to Settings → Danger Zone. This is permanent, so we ask you to confirm before anything is removed.',
+  },
+];
+
 function tzOptions() {
   try { if (typeof Intl.supportedValuesOf === 'function') return Intl.supportedValuesOf('timeZone'); } catch { /* older browser */ }
   return ['UTC', 'Africa/Lagos', 'Europe/London', 'America/New_York', 'America/Los_Angeles', 'Asia/Kolkata', 'Asia/Dubai'];
 }
 
-function AccountTab({ navigate }) {
+// See ProfileTab for what `only` does. Note the Danger Zone is NOT part of
+// `only` — on mobile it lives inline at the bottom of the Level 1 list rather
+// than behind a row, so it can't be reached by a stray tap.
+function AccountTab({ navigate, only }) {
   const qc = useQueryClient();
-  const { logout } = useAuth();
   const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe });
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
 
@@ -1174,8 +1296,6 @@ function AccountTab({ navigate }) {
   const [pushHere] = useState(() => pushAvailableHere());
   const [pReply, setPReply] = useState(true); const [pInbox, setPInbox] = useState(true);
   const [pOpps, setPOpps] = useState(true); const [pSends, setPSends] = useState(true);
-  // Delete
-  const [confirmText, setConfirmText] = useState(''); const [delPw, setDelPw] = useState(''); const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { if (me?.username) setUname(me.username); }, [me?.username]);
   useEffect(() => {
@@ -1251,24 +1371,18 @@ function AccountTab({ navigate }) {
     toast.success('Your data downloaded.');
   };
 
-  const handleLogout = async () => { await logout(); toast.success('Signed out.'); setTimeout(() => navigate('/', { replace: true }), 400); };
-  const handleDelete = async () => {
-    setDeleting(true);
-    try {
-      await deleteAccount({ password: delPw, confirm: confirmText });
-      toast.success('Your account and all data have been deleted.');
-      try { await logout(); } catch { /* token may be gone */ }
-      localStorage.clear();
-      setTimeout(() => navigate('/', { replace: true }), 600);
-    } catch (e) { toast.error(e.message); } finally { setDeleting(false); }
-  };
-
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const P = only ? SectionPanel : Collapsible;
+  const show = (key) => !only || only === key;
+  // The merged mobile Notifications screen stacks two panels, so each needs its
+  // own heading — the route header alone can't label both.
+  const dual = only === 'notifications';
 
   return (
     <>
-      {/* Subscription */}
-      <Collapsible title="Subscription" description="Your current plan." icon={Crown} defaultOpen
+      {show('subscription') && (
+      /* Subscription */
+      <P title="Subscription" description="Your current plan." icon={Crown} defaultOpen
         badge={<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-neutral text-secondary-dark text-[10px] font-bold uppercase tracking-wider border border-neutral-dark">Free</span>}>
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -1279,10 +1393,12 @@ function AccountTab({ navigate }) {
             <Crown className="w-4 h-4" /> Upgrade to Pro — $29/mo <span className="text-[10px] font-bold uppercase bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded">Soon</span>
           </button>
         </div>
-      </Collapsible>
+      </P>
+      )}
 
-      {/* Login */}
-      <Collapsible title="Login & Password" description="Your sign-in details." icon={KeyRound}>
+      {show('login') && (
+      /* Login */
+      <P title="Login & Password" description="Your sign-in details." icon={KeyRound}>
         <div className="flex items-end gap-3 flex-wrap">
           <div className="flex-1 min-w-[200px]">
             <Label>Username</Label>
@@ -1314,10 +1430,12 @@ function AccountTab({ navigate }) {
             </div>
           </>
         )}
-      </Collapsible>
+      </P>
+      )}
 
-      {/* Notifications */}
-      <Collapsible title="Notifications" description="Optional emails and your timezone." icon={Bell}>
+      {show('notifications') && (
+      /* Notifications */
+      <P title="Notifications" description="Optional emails and your timezone." icon={Bell} showTitle={dual}>
         <ToggleRow icon={Bell} title="Daily scout digest" desc="A morning summary of new roles matched to your CV." checked={scout} saving={savingPref} onChange={v => { setScout(v); saveProfilePref({ notify_scout_digest: v }, () => setScout(!v)); }} />
         <div className="h-px bg-neutral-dark/60" />
         <ToggleRow icon={HeartHandshake} title="Reply notifications" desc="Get emailed the moment a hiring manager replies." checked={replyNotif} saving={savingPref} onChange={v => { setReplyNotif(v); saveJobPref('notify_replies', v, () => setReplyNotif(!v)); }} />
@@ -1335,10 +1453,13 @@ function AccountTab({ navigate }) {
           </div>
           {browserTz && tz !== browserTz && <button onClick={() => saveTz(browserTz)} className="text-xs font-semibold text-primary-dark hover:underline mt-1.5">Use my device timezone ({browserTz.replace(/_/g, ' ')})</button>}
         </div>
-      </Collapsible>
+      </P>
+      )}
 
-      {/* Push notifications (this device) */}
-      <Collapsible title="Push notifications" description="Get pinged on your phone or desktop." icon={Bell}>
+      {show('notifications') && (
+      /* Push notifications (this device) — merged onto the same mobile screen
+         as the email notifications above. */
+      <P title="Push notifications" description="Get pinged on your phone or desktop." icon={Bell} showTitle={dual}>
         {!pushHere ? (
           <div className="text-sm text-secondary-dark bg-neutral/50 rounded-xl border border-neutral-dark p-4">
             {isIOS() && !isStandalone()
@@ -1374,57 +1495,118 @@ function AccountTab({ navigate }) {
             )}
           </>
         )}
-      </Collapsible>
+      </P>
+      )}
 
-      {/* Data & privacy */}
-      <Collapsible title="Data & Privacy" description="Export your data or view our policies." icon={ShieldCheck}>
+      {show('privacy') && (
+      /* Data & privacy */
+      <P title="Data & Privacy" description="Export your data or view our policies." icon={ShieldCheck}>
         <div className="flex flex-wrap gap-2">
           <button onClick={downloadData} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-neutral hover:bg-neutral-dark text-black-light text-sm font-semibold transition-all"><Download className="w-4 h-4" /> Download my data</button>
           <a href="/privacy" target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-neutral-dark text-secondary-dark text-sm font-semibold hover:text-black-light transition-all"><ShieldCheck className="w-4 h-4" /> Privacy policy</a>
         </div>
         <div className="pt-2"><LegalSections /></div>
-      </Collapsible>
+      </P>
+      )}
 
-      {/* About */}
-      <Collapsible title="About" description="App version and support." icon={Info}>
+      {show('about') && (
+      /* About */
+      <P title="About" description="App version and support." icon={Info}>
         <div className="text-sm text-secondary-dark space-y-1">
           <p>ApplyDir <span className="text-black-light font-semibold">v1.0</span></p>
           <p><a href="mailto:atoyebijoshua095@gmail.com" className="text-primary-dark font-semibold hover:underline">Support & feedback</a></p>
           <p className="text-xs text-secondary-dark/60 pt-1">Built with <span className="text-red-500">♥</span> by Jatotech</p>
         </div>
-      </Collapsible>
+      </P>
+      )}
 
-      {/* Danger zone */}
-      <div className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
-        <div className="px-5 md:px-6 py-4 md:py-5 border-b border-red-100 bg-red-50/40">
-          <h3 className="text-base md:text-lg font-bold font-montserrat text-red-700">Danger Zone</h3>
-          <p className="text-xs md:text-sm text-red-600/70 mt-0.5">Sign out or permanently delete your account.</p>
+      {show('help') && (
+      /* Help & FAQ — one Collapsible per question, all closed by default. */
+      <P title="Help & FAQ" description="How ApplyDir works, answered." icon={HelpCircle}>
+        <div className="space-y-2.5">
+          {FAQ.map(({ q, a }) => (
+            <Collapsible key={q} title={q}>
+              <p className="text-sm text-secondary-dark leading-relaxed">{a}</p>
+            </Collapsible>
+          ))}
         </div>
-        <div className="px-5 md:px-6 py-5 space-y-4">
-          <div className="flex items-center justify-between gap-4 flex-wrap">
-            <p className="text-sm text-secondary-dark">End your session on this device.</p>
-            <button onClick={handleLogout} className="inline-flex items-center gap-2 px-5 py-2.5 bg-neutral hover:bg-neutral-dark text-black-light text-sm font-semibold rounded-xl transition-all"><LogOut className="w-4 h-4" /> Sign Out</button>
-          </div>
-          <div className="h-px bg-red-100" />
-          <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> Deleting is permanent — profile, jobs, contacts, emails, and inboxes are all erased. Connected inboxes stop sending immediately.
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className={me?.has_password === false ? 'sm:col-span-2' : ''}><Label>Type DELETE to confirm</Label><Input value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="DELETE" /></div>
-            {me?.has_password !== false && (
-              <div><Label>Your password</Label><Input type="password" value={delPw} onChange={e => setDelPw(e.target.value)} placeholder="Required to delete your account" autoComplete="current-password" /></div>
-            )}
-          </div>
-          <div className="flex justify-end">
-            <button onClick={handleDelete} disabled={deleting || confirmText.trim().toUpperCase() !== 'DELETE' || (me?.has_password !== false && !delPw)}
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-red-200 transition-all disabled:opacity-50">
-              {deleting ? <ApplyDirLoader.Button variant="light" /> : <Trash2 className="w-4 h-4" />} Permanently delete my account
-            </button>
-          </div>
+        <div className="text-sm text-secondary-dark pt-1">
+          <p>Still stuck? <a href="mailto:atoyebijoshua095@gmail.com" className="text-primary-dark font-semibold hover:underline">Email us</a> — a real person answers.</p>
         </div>
-      </div>
+      </P>
+      )}
+
+      {/* Danger zone — desktop only from here. On mobile it is rendered inline
+          at the bottom of the Level 1 list instead of behind a row. */}
+      {!only && <DangerZone navigate={navigate} />}
     </>
   );
 }
+
+/*
+ * DangerZone — sign out + permanent account deletion.
+ *
+ * Extracted from AccountTab verbatim so the mobile Level 1 list can render it
+ * at its bottom without a route of its own. Markup is byte-for-byte what
+ * AccountTab used to render; `showSignOut` (default true, i.e. desktop) is the
+ * only addition — mobile hides the inline sign-out row because the list already
+ * carries a standalone "Sign out" row above this card.
+ */
+export function DangerZone({ navigate, showSignOut = true }) {
+  const { logout } = useAuth();
+  const { data: me } = useQuery({ queryKey: ['me'], queryFn: getMe });
+  const [confirmText, setConfirmText] = useState(''); const [delPw, setDelPw] = useState(''); const [deleting, setDeleting] = useState(false);
+
+  const handleLogout = async () => { await logout(); toast.success('Signed out.'); setTimeout(() => navigate('/', { replace: true }), 400); };
+  const handleDelete = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccount({ password: delPw, confirm: confirmText });
+      toast.success('Your account and all data have been deleted.');
+      try { await logout(); } catch { /* token may be gone */ }
+      localStorage.clear();
+      setTimeout(() => navigate('/', { replace: true }), 600);
+    } catch (e) { toast.error(e.message); } finally { setDeleting(false); }
+  };
+
+  return (
+    <div className="bg-white rounded-2xl border border-red-200 shadow-sm overflow-hidden">
+      <div className="px-5 md:px-6 py-4 md:py-5 border-b border-red-100 bg-red-50/40">
+        <h3 className="text-base md:text-lg font-bold font-montserrat text-red-700">Danger Zone</h3>
+        <p className="text-xs md:text-sm text-red-600/70 mt-0.5">{showSignOut ? 'Sign out or permanently delete your account.' : 'Permanently delete your account.'}</p>
+      </div>
+      <div className="px-5 md:px-6 py-5 space-y-4">
+        {showSignOut && (
+          <>
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <p className="text-sm text-secondary-dark">End your session on this device.</p>
+              <button onClick={handleLogout} className="inline-flex items-center gap-2 px-5 py-2.5 bg-neutral hover:bg-neutral-dark text-black-light text-sm font-semibold rounded-xl transition-all"><LogOut className="w-4 h-4" /> Sign Out</button>
+            </div>
+            <div className="h-px bg-red-100" />
+          </>
+        )}
+        <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" /> Deleting is permanent — profile, jobs, contacts, emails, and inboxes are all erased. Connected inboxes stop sending immediately.
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className={me?.has_password === false ? 'sm:col-span-2' : ''}><Label>Type DELETE to confirm</Label><Input value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="DELETE" /></div>
+          {me?.has_password !== false && (
+            <div><Label>Your password</Label><Input type="password" value={delPw} onChange={e => setDelPw(e.target.value)} placeholder="Required to delete your account" autoComplete="current-password" /></div>
+          )}
+        </div>
+        <div className="flex justify-end">
+          <button onClick={handleDelete} disabled={deleting || confirmText.trim().toUpperCase() !== 'DELETE' || (me?.has_password !== false && !delPw)}
+            className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-xl shadow-sm shadow-red-200 transition-all disabled:opacity-50">
+            {deleting ? <ApplyDirLoader.Button variant="light" /> : <Trash2 className="w-4 h-4" />} Permanently delete my account
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// The four tab bodies are exported so the mobile route can render ONE section
+// of one of them per screen (see SettingsMobile.jsx).
+export { ProfileTab, SendingTab, JobsTab, AccountTab };
 
 export default Settings;

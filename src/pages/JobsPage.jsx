@@ -16,6 +16,8 @@ import HeadhuntingState from '../components/HeadhuntingState';
 import RoleRequestModal from '../components/RoleRequestModal';
 import { getAnalytics } from '../services/apiAnalytics';
 import { getProfile } from '../services/apiProfile';
+import { settingsLink } from '../constants/settingsSections';
+import { useIsMobile } from '../hooks/useIsMobile';
 import ProfileActivationDrawer from '../components/ProfileActivationDrawer';
 import ActivationFlow from '../components/onboarding/ActivationFlow';
 import FirstTimePersonalizationModal from '../components/onboarding/FirstTimePersonalizationModal';
@@ -163,6 +165,7 @@ const cardState = (job) => {
 const JobsPage = () => {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
+    const isMobile = useIsMobile();
 
     const [isActivationDrawerOpen, setIsActivationDrawerOpen] = useState(false);
     const [currentPage, setCurrentPage] = useState(1);
@@ -888,7 +891,7 @@ const JobsPage = () => {
                 {key !== 'CAUGHT_UP' && (
                     <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                         {key === 'FIRST_RUN_EMPTY' && (
-                            <button onClick={() => navigate('/dashboard/settings?tab=jobs')} className={primaryBtn}>
+                            <button onClick={() => navigate(settingsLink('jobs', isMobile))} className={primaryBtn}>
                                 Adjust what you&rsquo;re looking for
                                 <ArrowRight className="w-4 h-4" />
                             </button>
