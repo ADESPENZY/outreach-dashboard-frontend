@@ -36,7 +36,7 @@ const Dashboard = () => {
       <Sidebar isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)} />
 
       {/* ── Main content ────────────────────────────────────────────── */}
-      <main className="flex-1 w-full flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-300 relative">
+      <main className="flex-1 min-w-0 w-full flex flex-col overflow-y-auto overflow-x-hidden transition-all duration-300 relative">
         <Header onMenuClick={() => setIsMobileMenuOpen(true)} />
         <Outlet />
       </main>

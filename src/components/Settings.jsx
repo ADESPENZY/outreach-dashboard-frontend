@@ -983,10 +983,10 @@ function SendingTab() {
 
       {/* Section C — Signature preview */}
       <Collapsible title="Email Signature Preview" description="Exactly what recipients see at the bottom of every email." icon={FileText}>
-        <div className="rounded-xl border border-neutral-dark bg-neutral p-4 font-mono text-xs text-secondary-dark whitespace-pre-wrap leading-relaxed">
+        <div className="rounded-xl border border-neutral-dark bg-neutral p-4 font-mono text-xs text-secondary-dark whitespace-pre-wrap break-words leading-relaxed">
           <span>Warm regards,{'\n'}</span>
           <span className="text-black font-semibold">{name}</span>{'\n'}
-          <span className="text-black">{email}</span>{link ? <>{'\n'}<span className="text-primary-dark">{link}</span></> : null}
+          <span className="text-black break-all">{email}</span>{link ? <>{'\n'}<span className="text-primary-dark break-all">{link}</span></> : null}
           {'\n\n'}
           <span>{addr}</span>{'\n'}
           <span>Not the right time? Just reply 'stop' and you won't hear from me again.</span>{'\n'}
