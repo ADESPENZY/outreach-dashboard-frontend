@@ -623,9 +623,17 @@ const INBOX_STATUS = {
   // 'Paused' = the user paused it (resume any time). 'Issue' = the token was
   // revoked and the inbox needs re-authorising (Reconnect) — a stronger, more
   // alarming red so it reads as "needs your action", not "resting".
-  Paused:  { cls: 'bg-neutral-light text-secondary-dark border-neutral-dark', dot: 'bg-neutral-dark', icon: AlertTriangle },
+  // `bg-neutral` (#F9FAFB), not `bg-neutral-light` — the latter is not a real
+  // token (tailwind.config.js defines neutral as DEFAULT + dark only), so it
+  // emitted no CSS rule and this badge rendered with no fill at all.
+  Paused:  { cls: 'bg-neutral text-secondary-dark border-neutral-dark', dot: 'bg-neutral-dark', icon: AlertTriangle },
   Issue:   { cls: 'bg-red-50 text-red-700 border-red-300',             dot: 'bg-red-500',     icon: AlertCircle },
 };
+
+// The ghost/text-button recipe from DESIGN_GUIDE §4, with an explicit
+// min-h-[44px] so it clears the §5 touch floor. Shared by the quiet inbox
+// actions (Pause / Resume / Turn off) that used to be bare unpadded text.
+const GHOST_ACTION = 'shrink-0 inline-flex items-center justify-center min-h-[44px] px-3 py-2 text-xs font-semibold text-secondary-dark hover:text-black-light hover:bg-neutral rounded-lg transition-colors disabled:opacity-50';
 
 // Small provider mark for a connected inbox — brand-colored inline SVG so no
 // external asset/CSP dependency. Gmail = red envelope 'M', Outlook = blue 'O'.
@@ -650,22 +658,56 @@ function ProviderBadge({ provider }) {
   );
 }
 
-// Tiny hover/focus info affordance — an (i) that reveals a short explainer.
-// Right-anchored so it stays inside the card even near the right edge; `title`
-// gives the same text to keyboard/touch users as a fallback.
+/*
+ * Tiny info affordance — an (i) that reveals a short explainer.
+ *
+ * TAP to toggle, not hover. It used to open on `hover:`/`focus-within:` with a
+ * `title` attribute as the touch fallback, which meant it was effectively
+ * unreachable on a phone — DESIGN_GUIDE §5/§10 forbid hover-only interactions,
+ * and `title` is unreliable on mobile Safari/Chrome. Now a click opens it on
+ * every device, and an outside tap or Escape closes it.
+ *
+ * The trigger icon is 12px, well under the 44px touch floor, so a transparent
+ * `before:-inset-4` pseudo-element extends the hit area to ~44px WITHOUT
+ * affecting layout — these sit inline inside a line of text, where a real 44px
+ * box would break the line box.
+ */
 function InfoTip({ children, label = 'What’s this?', align = 'right' }) {
-  const text = typeof children === 'string' ? children : undefined;
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef(null);
   const pos = align === 'left' ? 'left-0' : 'right-0';
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onPointerDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('pointerdown', onPointerDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
   return (
-    <span className="relative inline-flex group align-middle">
-      <button type="button" aria-label={label} title={text}
-        className="text-secondary-dark/50 hover:text-secondary-dark focus:outline-none">
+    <span ref={wrapRef} className="relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setOpen(o => !o); }}
+        className={`relative inline-flex items-center justify-center before:absolute before:-inset-4 before:content-[''] focus:outline-none focus-visible:ring-2 focus-visible:ring-primary-light/40 rounded-full transition-colors ${open ? 'text-primary-dark' : 'text-secondary-dark/60 hover:text-secondary-dark'}`}
+      >
         <Info className="w-3 h-3" />
       </button>
-      <span role="tooltip"
-        className={`pointer-events-none absolute bottom-full ${pos} mb-1.5 w-56 z-50 rounded-lg bg-black text-white text-[11px] font-normal leading-snug px-2.5 py-1.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity shadow-lg`}>
-        {children}
-      </span>
+      {open && (
+        <span role="tooltip"
+          className={`absolute bottom-full ${pos} mb-1.5 w-56 z-50 rounded-lg bg-black text-white text-xs font-normal leading-snug px-2.5 py-2 shadow-lg`}>
+          {children}
+        </span>
+      )}
     </span>
   );
 }
@@ -836,7 +878,14 @@ function SendingTab({ only }) {
                   const quotaPct = enforced ? (acc.sent_today / enforced) * 100 : 0;
                   const wp = acc.warmup;
                   return (
-                    <div key={acc.id} className="rounded-2xl border border-neutral-dark p-4 space-y-3">
+                    // Card recipe (DESIGN_GUIDE §4) with one deliberate
+                    // deviation: no `shadow-sm`. This is a card nested inside
+                    // the section card, and stacking resting shadows reads as
+                    // muddy rather than layered. Padding is p-4 on phones and
+                    // the guide's 20px at md+ — at 375px this card sits inside
+                    // the section's own p-5, so px-6 here would spend 44px of a
+                    // 375px screen on horizontal chrome alone.
+                    <div key={acc.id} className="bg-white rounded-2xl border border-neutral-dark p-4 md:p-5 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="flex items-center gap-2 min-w-0">
                           <ProviderBadge provider={acc.provider} />
@@ -861,8 +910,9 @@ function SendingTab({ only }) {
                             </span>
                           )}
                         </span>
-                        <span className="text-secondary-dark">Sent today</span>
-                        <span className="text-black-light font-semibold text-right">{acc.sent_today}/{enforced}</span>
+                        {/* "Sent today" is NOT a row here — it labels the quota
+                            bar below, so the number appears once rather than
+                            twice. */}
                         {/* Both numbers come from allocate_daily_budget, so this
                             is exactly what the send path will allow today. */}
                         {acc.original_budget != null && (
@@ -882,25 +932,41 @@ function SendingTab({ only }) {
                       </div>
 
                       {acc.status === 'Issue' && (
-                        <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-1.5 leading-snug">
+                        <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-lg px-2.5 py-2 leading-snug">
                           <strong>{acc.provider === 'outlook' ? 'Microsoft' : 'Google'} disconnected this inbox</strong> — its access was revoked (a password change or security update usually does it), so sending has stopped. Click <strong>Reconnect</strong> to sign in again and resume; nothing else is lost.
                         </p>
                       )}
 
                       {warming && acc.status !== 'Issue' && (
-                        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-1.5 leading-snug">
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2.5 py-2 leading-snug">
                           Building your reputation — new inboxes start at 5 introductions a day and grow to 20 over about two weeks. Sending slowly at first is what keeps you out of spam later.
                         </p>
                       )}
 
-                      <div className="w-full h-1.5 bg-neutral-dark rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${(acc.status === 'Paused' || acc.status === 'Issue') ? 'bg-neutral-dark' : 'bg-primary-light'}`} style={{ width: `${Math.min(quotaPct, 100)}%` }} />
+                      {/* Quota bar — KEPT, but labelled. Unlabelled it was
+                          ambiguous next to three other numeric rows, and it
+                          restated "Sent today" silently. It now carries that
+                          label and number itself (the grid row above was
+                          dropped), so nothing is shown twice and the bar adds
+                          the at-a-glance "how close to the cap" read that a
+                          bare fraction doesn't give.
+                          Track was bg-neutral-dark (#F3F4F6) on white — all but
+                          invisible; secondary-dark/20 is a real token at real
+                          contrast. */}
+                      <div>
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <span className="text-secondary-dark">Sent today</span>
+                          <span className="text-black-light font-semibold">{acc.sent_today}/{enforced}</span>
+                        </div>
+                        <div className="w-full h-2 bg-secondary-dark/20 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${(acc.status === 'Paused' || acc.status === 'Issue') ? 'bg-secondary-dark/50' : 'bg-primary-light'}`} style={{ width: `${Math.min(quotaPct, 100)}%` }} />
+                        </div>
                       </div>
 
                       {acc.status === 'Warming' && wp && (
                         <div>
-                          <div className="flex justify-between text-[11px] text-secondary-dark mb-1"><span>Warmup progress</span><span className="font-semibold text-amber-700">Day {wp.days_running}</span></div>
-                          <div className="w-full h-1.5 bg-neutral-dark rounded-full overflow-hidden"><div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(wp.progress || 0, 100)}%` }} /></div>
+                          <div className="flex justify-between text-xs text-secondary-dark mb-1"><span>Warm-up progress</span><span className="font-semibold text-amber-700">Day {wp.days_running}</span></div>
+                          <div className="w-full h-2 bg-secondary-dark/20 rounded-full overflow-hidden"><div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(wp.progress || 0, 100)}%` }} /></div>
                         </div>
                       )}
 
@@ -911,7 +977,7 @@ function SendingTab({ only }) {
                         const pool = acc.warmup_pool || {};
                         const busy = warmupBusyId === acc.id;
                         return (
-                          <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-dark bg-neutral-light px-3 py-2">
+                          <div className="flex items-center justify-between gap-3 rounded-xl border border-neutral-dark bg-neutral px-3 py-2">
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5 text-xs font-semibold text-black-light">
                                 <Flame className="w-3.5 h-3.5 text-primary-dark" /> Warm-up
@@ -922,7 +988,7 @@ function SendingTab({ only }) {
                                   automatic “warming up” limit ramp shown above.
                                 </InfoTip>
                               </div>
-                              <p className="text-[11px] text-secondary-dark mt-0.5 leading-snug">
+                              <p className="text-xs text-secondary-dark mt-0.5 leading-snug">
                                 {pool.is_enabled
                                   ? `Active · day ${pool.days_running ?? 0}${pool.messages_sent ? ` · ${pool.messages_sent} sent` : ''}`
                                   : 'Off — build reputation so you land in inbox, not spam.'}
@@ -930,12 +996,12 @@ function SendingTab({ only }) {
                             </div>
                             {pool.is_enabled ? (
                               <button onClick={() => disableWarmup(acc)} disabled={busy}
-                                className="shrink-0 text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
+                                className={GHOST_ACTION}>
                                 {busy ? 'Updating…' : 'Turn off'}
                               </button>
                             ) : (
                               <button onClick={() => setWarmupModalAcc(acc)} disabled={busy}
-                                className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-white bg-gradient-to-r from-primary-light to-primary-dark rounded-lg hover:opacity-90 disabled:opacity-60">
+                                className="shrink-0 inline-flex items-center justify-center gap-1 min-h-[44px] px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-primary-light to-primary-dark rounded-lg hover:opacity-90 transition-all disabled:opacity-60">
                                 {busy ? 'Updating…' : 'Turn on'}
                               </button>
                             )}
@@ -943,15 +1009,20 @@ function SendingTab({ only }) {
                         );
                       })()}
 
-                      <div className="flex items-center justify-between pt-1">
-                        <div className="flex items-center gap-3">
+                      {/* Actions. Every control here is a real 44px target now
+                          (DESIGN_GUIDE §5) — they used to be bare text-xs links
+                          with no padding. `flex-wrap` + the -mx-3 bleed keeps
+                          three padded buttons on one line at 375px while the
+                          labels stay optically flush with the card edge. */}
+                      <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1 pt-1 -mx-3">
+                        <div className="flex flex-wrap items-center gap-x-1">
                           {acc.status === 'Issue' ? (
                             // Revoked token: Reconnect is the ONLY sensible action.
                             // Resume flips is_active true without a fresh token, so
                             // the next send re-fails and it bounces back to Issue.
                             <button onClick={() => reconnect(acc)}
                               disabled={connectingGoogle || connectingOutlook}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
+                              className="mx-3 inline-flex items-center justify-center gap-1.5 min-h-[44px] px-4 py-2 bg-gradient-to-r from-primary-light to-primary-dark text-white text-xs font-semibold rounded-lg hover:opacity-90 transition-all shadow-sm disabled:opacity-60">
                               {(connectingGoogle || connectingOutlook)
                                 ? <ApplyDirLoader.Button variant="light" />
                                 : <RefreshCw className="w-3.5 h-3.5" />} Reconnect
@@ -959,7 +1030,7 @@ function SendingTab({ only }) {
                           ) : (
                             <>
                               <button onClick={() => handleToggle(acc.id)} disabled={togglingId === acc.id}
-                                className="text-xs font-semibold text-secondary-dark hover:text-black-light disabled:opacity-50">
+                                className={GHOST_ACTION}>
                                 {togglingId === acc.id ? 'Updating…' : acc.status === 'Paused' ? 'Resume sending' : 'Pause'}
                               </button>
                               {/* A paused inbox may also be stale — always let the
@@ -968,14 +1039,14 @@ function SendingTab({ only }) {
                               {acc.status === 'Paused' && (
                                 <button onClick={() => reconnect(acc)}
                                   disabled={connectingGoogle || connectingOutlook}
-                                  className="inline-flex items-center gap-1 text-xs font-semibold text-primary-dark hover:text-primary-light disabled:opacity-50">
+                                  className="inline-flex items-center justify-center gap-1 min-h-[44px] px-3 py-2 text-xs font-semibold text-primary-dark hover:text-primary-light hover:bg-neutral rounded-lg transition-colors disabled:opacity-50">
                                   <RefreshCw className="w-3.5 h-3.5" /> Reconnect
                                 </button>
                               )}
                             </>
                           )}
                         </div>
-                        <button onClick={() => setConfirmDelete(acc)} className="inline-flex items-center gap-1 text-xs font-semibold text-red-500 hover:text-red-700"><Trash2 className="w-3.5 h-3.5" /> Remove</button>
+                        <button onClick={() => setConfirmDelete(acc)} className="inline-flex items-center justify-center gap-1 min-h-[44px] px-3 py-2 text-xs font-semibold text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-3.5 h-3.5" /> Remove</button>
                       </div>
                     </div>
                   );
@@ -986,7 +1057,7 @@ function SendingTab({ only }) {
             {isPendingActivation ? (
               <PendingActivationCard />
             ) : (hasGmail && hasOutlook) ? (
-              <p className="text-xs font-semibold text-secondary-dark bg-neutral-light border border-neutral-dark rounded-xl px-3 py-2.5">
+              <p className="text-xs font-semibold text-secondary-dark bg-neutral border border-neutral-dark rounded-xl px-3 py-2.5">
                 Gmail and Outlook both connected — that's the max during the pilot. Remove one to switch to a different account.
               </p>
             ) : (
@@ -1003,7 +1074,7 @@ function SendingTab({ only }) {
                 )}
               </div>
             )}
-            <p className="text-[11px] text-secondary-dark/70 flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> One click, no passwords, ever. We can only send introductions you approve and read the replies to them; nothing else in your inbox.</p>
+            <p className="text-xs text-secondary-dark/70 flex items-start gap-1.5"><ShieldCheck className="w-3.5 h-3.5 shrink-0 mt-0.5" /> One click, no passwords, ever. We can only send introductions you approve and read the replies to them; nothing else in your inbox.</p>
             <p className="text-xs text-secondary-dark leading-relaxed">
               20 introductions a day — about 5 new ones, with the rest going to follow-ups. Most replies come from follow-ups, so that's where the room is reserved.
             </p>

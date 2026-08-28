@@ -56,7 +56,7 @@ export default function WarmupConsentModal({ open, account, busy, onConfirm, onC
           ))}
         </ul>
 
-        <p className="mt-4 text-[12px] text-secondary-dark/80 bg-neutral-light border border-neutral-dark rounded-xl px-3 py-2 leading-snug">
+        <p className="mt-4 text-xs text-secondary-dark/80 bg-neutral border border-neutral-dark rounded-xl px-3 py-2 leading-snug">
           By turning this on you agree that ApplyDir may send a small number of
           reputation-building emails from this inbox. You can turn it off at any
           time in Settings.
