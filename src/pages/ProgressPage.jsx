@@ -159,8 +159,16 @@ function HeroMetrics({ hero, weeks }) {
       animate="show"
       className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5"
     >
+      {/* New introductions headline the tile; follow-ups are named separately in
+          the sub-line rather than folded into one number, because reaching a new
+          person and re-touching one you already emailed are different results.
+          The delta still compares total send volume week over week. */}
       <HeroTile
-        icon={Send} label="Sent" value={hero.sent_week} sub="this week"
+        icon={Send} label="Introductions"
+        value={hero.sent_new_week ?? hero.sent_week}
+        sub={hero.sent_followups_week > 0
+          ? `this week · +${hero.sent_followups_week} follow-up${hero.sent_followups_week === 1 ? '' : 's'}`
+          : 'new contacts this week'}
         accent="bg-blue-400/40" chip="bg-blue-50 text-blue-500"
         delta={weeks.has_last ? pctChange(weeks.this.sent, weeks.last.sent) : null}
       />
@@ -718,9 +726,10 @@ function StreakMomentum({ streak, weeks, community }) {
           </p>
           {weeks.has_last ? (
             <div className="divide-y divide-neutral-dark">
-              <WeekRow label="Sent"      thisVal={weeks.this.sent}      lastVal={weeks.last.sent} />
-              <WeekRow label="Delivered" thisVal={weeks.this.delivered} lastVal={weeks.last.delivered} />
-              <WeekRow label="Replied"   thisVal={weeks.this.replied}   lastVal={weeks.last.replied} />
+              <WeekRow label="New intros" thisVal={weeks.this.sent_new}       lastVal={weeks.last.sent_new} />
+              <WeekRow label="Follow-ups" thisVal={weeks.this.sent_followups} lastVal={weeks.last.sent_followups} />
+              <WeekRow label="Delivered"  thisVal={weeks.this.delivered}      lastVal={weeks.last.delivered} />
+              <WeekRow label="Replied"    thisVal={weeks.this.replied}        lastVal={weeks.last.replied} />
             </div>
           ) : (
             <p className="text-sm text-secondary-dark py-1.5">Your first week — let's set the baseline!</p>

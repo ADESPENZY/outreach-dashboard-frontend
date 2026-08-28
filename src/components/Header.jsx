@@ -1,4 +1,4 @@
-import { Bell, ChevronDown, HelpCircle, LogOut, Menu, MessageSquare, Send, Settings as SettingsIcon, User, UserCog } from 'lucide-react';
+import { Bell, ChevronDown, HelpCircle, LogOut, Menu, MessageSquare, RefreshCw, Send, Settings as SettingsIcon, User, UserCog } from 'lucide-react';
 import React, { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
@@ -28,8 +28,12 @@ const Header = ({ onMenuClick }) => {
     queryFn: getMe,
   });
 
-  // Live "this week" stat for the greeting line — last 7 days, reuses the
-  // analytics endpoint (cached, shared with the dashboard overview).
+  // Live "this week" stat for the greeting line. Reuses the analytics endpoint
+  // (cached, shared with the dashboard overview) but reads its `week` block,
+  // NOT the `summary` — summary is the rolling `days` window, and a rolling
+  // 168 hours ending at this instant is not the week this line claims to show.
+  // `week` is Monday 00:00 in the user's own timezone, the same boundary the
+  // Progress page uses, so the two screens can no longer disagree.
   const { data: analytics } = useQuery({
     queryKey: ['analytics', 7],
     queryFn: () => getAnalytics(7),
@@ -41,8 +45,17 @@ const Header = ({ onMenuClick }) => {
     : me?.username;
 
   const firstName = me?.first_name || me?.username || 'there';
-  const sent    = analytics?.summary?.total_sent ?? 0;
-  const replied = analytics?.summary?.total_replied ?? 0;
+  // New introductions are the headline: reaching someone who has never heard
+  // from you is the achievement. Follow-ups are automated re-touches of people
+  // already contacted — real work, but not the same thing, so they get their
+  // own segment instead of being silently folded into one inflated total.
+  const week      = analytics?.week;
+  const sentNew   = week?.sent_new ?? 0;
+  const sentFups  = week?.sent_followups ?? 0;
+  const replied   = week?.replied ?? 0;
+  const weekLabel = week
+    ? `Week of ${new Date(week.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}`
+    : 'This week';
 
   const { logout } = useAuth();
 
@@ -80,7 +93,10 @@ const Header = ({ onMenuClick }) => {
                 <h1 className="text-lg md:text-2xl font-bold text-black-light tracking-tight font-montserrat truncate">
                     {greetingFor()}, {isLoading ? '…' : firstName} <span className="hidden sm:inline">👋</span>
                 </h1>
-                <p className="hidden sm:flex items-center gap-3 text-xs text-secondary-dark mt-0.5">
+                <p
+                    className="hidden sm:flex items-center gap-3 text-xs text-secondary-dark mt-0.5"
+                    title={`${weekLabel} — ${sentNew} new introduction${sentNew === 1 ? '' : 's'}, ${sentFups} follow-up${sentFups === 1 ? '' : 's'}, ${replied} repl${replied === 1 ? 'y' : 'ies'}`}
+                >
                     <span className="inline-flex items-center gap-1">
                         <MessageSquare className="w-3.5 h-3.5 text-emerald-500" />
                         <b className="text-black-light">{replied}</b> {replied === 1 ? 'reply' : 'replies'}
@@ -88,8 +104,18 @@ const Header = ({ onMenuClick }) => {
                     <span className="text-secondary-dark/40">·</span>
                     <span className="inline-flex items-center gap-1">
                         <Send className="w-3.5 h-3.5 text-primary-light" />
-                        <b className="text-black-light">{sent}</b> sent this week
+                        <b className="text-black-light">{sentNew}</b> {sentNew === 1 ? 'introduction' : 'introductions'} this week
                     </span>
+                    {/* Only when there are any — an inert "0 follow-ups" is noise. */}
+                    {sentFups > 0 && (
+                        <>
+                            <span className="text-secondary-dark/40">·</span>
+                            <span className="inline-flex items-center gap-1 text-secondary-dark/80">
+                                <RefreshCw className="w-3.5 h-3.5 text-secondary-dark/60" />
+                                <b className="text-secondary-dark">{sentFups}</b> {sentFups === 1 ? 'follow-up' : 'follow-ups'}
+                            </span>
+                        </>
+                    )}
                 </p>
             </div>
         </div>

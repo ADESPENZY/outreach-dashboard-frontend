@@ -269,7 +269,17 @@ const JobsPage = () => {
     const reviewCount   = newJobs.length;
     const contactReady  = contactJobs.length;
     const pickedCount    = newJobs.length + contactJobs.length + applyJobs.length;
-    const reviewedTotal = analytics?.funnel?.find((s) => s.stage === 'Scraped')?.count ?? null;
+    // ALL-TIME, and deliberately a different scope from the three counts above:
+    // it includes the release-valve buffer (scored + shortlisted, not surfaced
+    // yet), roles the scorer rejected, ones this user skipped, and ones that have
+    // since expired — none of which are on this page. The copy below therefore
+    // states both scopes ("so far" vs "on your board now") instead of implying
+    // one funnel, which is what made the summary read as self-contradictory.
+    //
+    // Reads `curation.reviewed` (jobs the scorer actually judged), NOT the
+    // funnel's Scraped stage: that stage is every Job row ever, so it also
+    // counted rows ingested but never scored — which nothing reviewed.
+    const reviewedTotal = analytics?.curation?.reviewed ?? null;
 
     const trayCount = workingJobs.length + queuedJobs.length + completing.length;
 
@@ -1081,14 +1091,21 @@ const JobsPage = () => {
                     {/* ── Summary bar — curated-from-a-larger-pool framing ────────── */}
                     {pickedCount > 0 && (
                         <div className="rounded-2xl border border-neutral-dark bg-white shadow-sm px-4 py-3 md:px-5 md:py-4">
+                            {/* Each number names its own scope. They are NOT one
+                                funnel: "reviewed" is every role scored for this
+                                user since day one, while the other two describe
+                                only what is on this page right now. */}
                             <p className="text-sm text-black-light leading-relaxed">
                                 Your headhunter{' '}
                                 {reviewedTotal && reviewedTotal > pickedCount
-                                    ? <>reviewed <span className="font-bold">{reviewedTotal}</span> roles and picked{' '}</>
-                                    : <>picked{' '}</>}
-                                <span className="font-bold text-primary-dark">{pickedCount}</span> for you
+                                    ? <>has reviewed <span className="font-bold">{reviewedTotal}</span> roles for you so far · </>
+                                    : <>picked </>}
+                                <span className="font-bold text-primary-dark">{pickedCount}</span>{' '}
+                                {reviewedTotal && reviewedTotal > pickedCount
+                                    ? <>{pickedCount === 1 ? 'is' : 'are'} on your board now</>
+                                    : <>for you</>}
                                 {contactReady > 0 && (
-                                    <> · <span className="font-bold text-emerald-600">{contactReady}</span> {contactReady === 1 ? 'has' : 'have'} a hiring manager ready</>
+                                    <> · <span className="font-bold text-emerald-600">{contactReady}</span> of them {contactReady === 1 ? 'has' : 'have'} a hiring manager ready</>
                                 )}
                             </p>
                         </div>

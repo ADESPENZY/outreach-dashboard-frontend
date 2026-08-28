@@ -254,17 +254,30 @@ const DashboardPage = () => {
   // (newOppsCount, draftCount and hasAnyCard are derived above the early
   // returns, alongside the queries that feed them.)
 
-  // ── This-week activity (windowed summary) ────────────────────────────────
+  // ── This-week activity ───────────────────────────────────────────────────
+  // Reads the `week` block, NOT `summary`: summary is the rolling 7×24h window
+  // ending at this instant, which is not the week these labels claim. `week` is
+  // Monday 00:00 in the user's timezone — the same boundary the Header and the
+  // Progress page use, so all three now agree.
+  //
+  // Sent is split by touch type. A follow-up is its own email row, so bundling
+  // the two inflated "introductions this week" with automated re-touches of
+  // people who had already been contacted.
+  //
   // Open tracking is off (the pixel hurt deliverability), so we show "Delivered"
   // — a real, pixel-free signal: emails that left the outbox and didn't bounce.
-  const weekSent      = summary.total_sent      || 0;
-  const weekDelivered = summary.total_delivered || 0;
-  const weekReplied   = summary.total_replied   || 0;
+  const week          = analytics?.week || {};
+  const weekNew       = week.sent_new       || 0;
+  const weekFollowups = week.sent_followups || 0;
+  const weekSent      = week.sent_total     || 0;
+  const weekDelivered = week.delivered      || 0;
+  const weekReplied   = week.replied        || 0;
   const barMax = Math.max(weekSent, weekDelivered, weekReplied, 1);
   const bars = [
-    { label: 'Sent',      value: weekSent,      color: 'bg-blue-500' },
-    { label: 'Delivered', value: weekDelivered, color: 'bg-teal-500' },
-    { label: 'Replied',   value: weekReplied,   color: 'bg-emerald-500' },
+    { label: 'New introductions', value: weekNew,       color: 'bg-blue-500' },
+    { label: 'Follow-ups',        value: weekFollowups, color: 'bg-indigo-400' },
+    { label: 'Delivered',         value: weekDelivered, color: 'bg-teal-500' },
+    { label: 'Replied',           value: weekReplied,   color: 'bg-emerald-500' },
   ];
 
   // ── Streak: consecutive recent days with any activity. Today counting 0
@@ -291,9 +304,12 @@ const DashboardPage = () => {
   const showStrategy = allTimeSent >= 20 && bestStrategy && bestStrategy.reply_rate > 0;
 
   // ── Status-bar chips (this week) ─────────────────────────────────────────
+  // "Introductions" counts NEW people reached only; follow-ups get their own
+  // chip so neither number has to carry two meanings.
   const statChips = [
     { label: 'Replies this week',       value: weekReplied,    Icon: MessageSquare, color: 'bg-emerald-50 text-emerald-600' },
-    { label: 'Introductions this week', value: weekSent,       Icon: Send,          color: 'bg-blue-50 text-blue-500' },
+    { label: 'New introductions',       value: weekNew,        Icon: Send,          color: 'bg-blue-50 text-blue-500' },
+    { label: 'Follow-ups sent',         value: weekFollowups,  Icon: RefreshCw,     color: 'bg-indigo-50 text-indigo-500' },
     { label: 'Delivered this week',     value: weekDelivered,  Icon: MailCheck,     color: 'bg-teal-50 text-teal-600' },
   ];
 
@@ -481,11 +497,18 @@ const DashboardPage = () => {
       <section className="space-y-3">
         <h2 className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
           This week's activity
+          {/* Name the window. "This week" alone left people guessing whether it
+              meant the last seven days or since Monday — it is since Monday. */}
+          {week.start && (
+            <span className="ml-2 normal-case tracking-normal font-medium text-secondary-dark/50">
+              since Mon {new Date(week.start).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}
+            </span>
+          )}
         </h2>
         <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 space-y-4">
           {bars.map((b) => (
             <div key={b.label} className="flex items-center gap-3">
-              <span className="w-16 shrink-0 text-sm text-secondary-dark">{b.label}</span>
+              <span className="w-32 shrink-0 text-sm text-secondary-dark">{b.label}</span>
               <span className="w-7 shrink-0 text-sm font-bold font-montserrat text-black-light tabular-nums text-right">
                 {b.value}
               </span>
