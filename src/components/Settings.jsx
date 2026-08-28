@@ -8,6 +8,7 @@ import {
   Bell, Clock, KeyRound, AtSign, LogOut, Trash2, AlertTriangle, ShieldCheck,
   Crown, Flame, CheckCircle2, Send, Download, Info, ArrowRight, HeartHandshake,
   RefreshCw, AlertCircle, HelpCircle,
+  MapPin, Phone, Linkedin, Github, Globe, Calendar,
 } from 'lucide-react';
 import { ApplyDirLoader } from '@/components/ui/ApplyDirLoader';
 import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } from '@/services/apiAuth';
@@ -107,6 +108,59 @@ function Input(props) {
 
 function Label({ children }) {
   return <label className="block text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider mb-1">{children}</label>;
+}
+
+/*
+ * Form-section heading — a micro-label with a rule running to the edge, so two
+ * groups of inputs read as two groups rather than one long list.
+ */
+function GroupHeading({ children, hint }) {
+  return (
+    <div className="pt-1">
+      <div className="flex items-center gap-3">
+        <p className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider shrink-0">{children}</p>
+        <span className="h-px bg-neutral-dark flex-1" />
+      </div>
+      {hint && <p className="text-xs text-secondary-dark/70 mt-1">{hint}</p>}
+    </div>
+  );
+}
+
+/*
+ * A labelled input carrying the same icon-chip language as the Level 1 settings
+ * list (w-9 h-9 rounded-xl bg-primary-light/10 + primary-dark glyph). Used for
+ * the Contact group — the fields that matter most.
+ */
+function ChipField({ icon, label, ...props }) {
+  return (
+    <div className="flex items-end gap-3">
+      <span className="w-9 h-9 rounded-xl bg-primary-light/10 flex items-center justify-center shrink-0 mb-0.5">
+        {React.createElement(icon, { className: 'w-4 h-4 text-primary-dark' })}
+      </span>
+      <div className="min-w-0 flex-1">
+        <Label>{label}</Label>
+        <Input {...props} />
+      </div>
+    </div>
+  );
+}
+
+/*
+ * The lighter sibling of ChipField for the Public Links group: every one of
+ * those is optional, so the icon sits inside the input as a quiet prefix (the
+ * pattern already used by the locked Email field and the username field) and
+ * the label drops to normal weight. Same language, less visual weight.
+ */
+function LinkField({ icon, label, ...props }) {
+  return (
+    <div>
+      <label className="block text-[11px] font-medium text-secondary-dark/70 uppercase tracking-wider mb-1">{label}</label>
+      <div className="relative">
+        {React.createElement(icon, { className: 'w-3.5 h-3.5 text-secondary-dark/60 absolute left-3 top-1/2 -translate-y-1/2' })}
+        <Input {...props} className="pl-9" />
+      </div>
+    </div>
+  );
 }
 
 function SaveButton({ onClick, saving, disabled, children = 'Save', className = '' }) {
@@ -382,28 +436,44 @@ function ProfileTab({ only }) {
 
       {/* Section A — Identity */}
       <P title="Your Identity" description="Name, location, and the links in your email sign-off." icon={User} defaultOpen>
-        <div>
-          <Label>Full name</Label>
-          <Input value={idForm.full_name} onChange={e => setIdForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Your full name" />
-        </div>
+        {/* Account-level, not editable contact info — so it sits above both
+            groups rather than inside either. */}
         <div>
           <Label>Email address</Label>
           <div className="relative">
-            <Lock className="w-3.5 h-3.5 text-secondary-dark/40 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Lock className="w-3.5 h-3.5 text-secondary-dark/60 absolute left-3 top-1/2 -translate-y-1/2" />
             <Input value={me?.email || ''} disabled className="pl-9" />
           </div>
-          <p className="text-[11px] text-secondary-dark/60 mt-1">Your login email can't be changed here.</p>
+          <p className="text-xs text-secondary-dark/70 mt-1">Your login email can't be changed here.</p>
         </div>
+
+        <GroupHeading>Contact</GroupHeading>
+        <ChipField icon={User} label="Full name" value={idForm.full_name}
+          onChange={e => setIdForm(f => ({ ...f, full_name: e.target.value }))} placeholder="Your full name" />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div><Label>Location / mailing address</Label><Input value={idForm.location} onChange={e => setIdForm(f => ({ ...f, location: e.target.value }))} placeholder="Lagos, Nigeria" /></div>
-          <div><Label>Phone</Label><Input value={idForm.phone} onChange={e => setIdForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" /></div>
-          <div><Label>Sign-off email</Label><Input value={idForm.contact_email} onChange={e => setIdForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="Defaults to account email" /></div>
-          <div><Label>LinkedIn URL</Label><Input value={idForm.linkedin_url} onChange={e => setIdForm(f => ({ ...f, linkedin_url: e.target.value }))} placeholder="linkedin.com/in/…" /></div>
-          <div><Label>GitHub URL</Label><Input value={idForm.github_url} onChange={e => setIdForm(f => ({ ...f, github_url: e.target.value }))} placeholder="github.com/…" /></div>
-          <div><Label>Portfolio / website</Label><Input value={idForm.portfolio_url} onChange={e => setIdForm(f => ({ ...f, portfolio_url: e.target.value }))} placeholder="yoursite.com" /></div>
-          <div className="sm:col-span-2"><Label>Calendly link (optional)</Label><Input value={idForm.calendly_url} onChange={e => setIdForm(f => ({ ...f, calendly_url: e.target.value }))} placeholder="calendly.com/you/30min" /></div>
+          <ChipField icon={MapPin} label="Location / mailing address" value={idForm.location}
+            onChange={e => setIdForm(f => ({ ...f, location: e.target.value }))} placeholder="Lagos, Nigeria" />
+          <ChipField icon={Phone} label="Phone" value={idForm.phone}
+            onChange={e => setIdForm(f => ({ ...f, phone: e.target.value }))} placeholder="+1 555 000 0000" />
         </div>
-        <div className="flex justify-end"><SaveButton onClick={saveIdentity} saving={savingId} /></div>
+
+        <GroupHeading hint="All optional — these appear in your email sign-off.">Public Links</GroupHeading>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <LinkField icon={AtSign} label="Sign-off email" value={idForm.contact_email}
+            onChange={e => setIdForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="Defaults to account email" />
+          <LinkField icon={Linkedin} label="LinkedIn URL" value={idForm.linkedin_url}
+            onChange={e => setIdForm(f => ({ ...f, linkedin_url: e.target.value }))} placeholder="linkedin.com/in/…" />
+          <LinkField icon={Github} label="GitHub URL" value={idForm.github_url}
+            onChange={e => setIdForm(f => ({ ...f, github_url: e.target.value }))} placeholder="github.com/…" />
+          <LinkField icon={Globe} label="Portfolio / website" value={idForm.portfolio_url}
+            onChange={e => setIdForm(f => ({ ...f, portfolio_url: e.target.value }))} placeholder="yoursite.com" />
+          <div className="sm:col-span-2">
+            <LinkField icon={Calendar} label="Calendly link" value={idForm.calendly_url}
+              onChange={e => setIdForm(f => ({ ...f, calendly_url: e.target.value }))} placeholder="calendly.com/you/30min" />
+          </div>
+        </div>
+
+        <div className="flex justify-end pt-1"><SaveButton onClick={saveIdentity} saving={savingId} /></div>
       </P>
       </>}
 
@@ -449,19 +519,14 @@ function ProfileTab({ only }) {
         description="This is what we draw on when we write to a hiring manager. The more real detail here, the less your introductions sound like everyone else's."
         icon={Sparkles}
       >
-        <div>
-          <Label>Your one-line summary</Label>
-          <p className="text-xs text-secondary-dark mb-1.5">How you&rsquo;d describe yourself in a sentence.</p>
+        <div className="space-y-6">
+        <VoiceCard title="Summary" hint="How you’d describe yourself in a sentence.">
           <textarea value={summary} onChange={e => setSummary(e.target.value)} rows={2}
             placeholder="Full-stack engineer specializing in backend systems and API architecture"
             className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 resize-none" />
-        </div>
+        </VoiceCard>
 
-        <div>
-          <Label>Project highlights</Label>
-          <p className="text-xs text-secondary-dark mb-2">
-            We pick the one project that best matches each role. Give us a few to choose from.
-          </p>
+        <VoiceCard title="Project Highlights" hint="We pick the one project that best matches each role. Give us a few to choose from.">
           <div className="space-y-2.5">
             {projects.map((p, i) => (
               <ProjectCard
@@ -483,48 +548,55 @@ function ProfileTab({ only }) {
               <Plus className="w-3.5 h-3.5" /> Add project
             </button>
           </div>
-        </div>
+        </VoiceCard>
 
-        <div>
-          <Label>Your secret weapon</Label>
-          <p className="text-xs text-secondary-dark mb-1.5">What's one thing you bring that isn't on your CV?</p>
+        <VoiceCard title="Secret Weapon" hint="What's one thing you bring that isn't on your CV?">
           <textarea value={secret} onChange={e => setSecret(e.target.value.slice(0, SECRET_MAX))} rows={2}
             placeholder={secretWeaponPlaceholder(profile)}
             className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 resize-none" />
-          <p className="text-[11px] text-secondary-dark/60 text-right mt-1">{secret.length}/{SECRET_MAX}</p>
-        </div>
+          <p className="text-xs text-secondary-dark/70 text-right">{secret.length}/{SECRET_MAX}</p>
+        </VoiceCard>
 
-        <div>
-          <Label>What makes you stand out? (pick up to 2)</Label>
+        <VoiceCard title="What Makes You Stand Out" hint="Pick up to 2.">
           <div className="flex flex-wrap gap-2">
             {differentiatorOptions(profile).map(d => {
               const active = diffs.includes(d);
               const disabled = !active && diffs.length >= 2;
+              // Unselected chips used `border-neutral-dark` (#F3F4F6) on white,
+              // which is the app's card-border token and all but invisible at
+              // chip scale — the pill read as floating text. Unpickable chips
+              // were worse still at text-secondary-dark/40, under the §8 floor
+              // of /60 for anything readable.
               return (
                 <button key={d} type="button" onClick={() => toggleDiff(d)} disabled={disabled}
-                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border transition-all ${
-                    active ? 'bg-primary-light text-white border-primary-light'
-                    : disabled ? 'bg-white text-secondary-dark/40 border-neutral-dark cursor-not-allowed'
-                    : 'bg-white text-black-light border-neutral-dark hover:border-primary-light/40'}`}>
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-2 min-h-[44px] text-xs font-medium border transition-all ${
+                    active ? 'bg-primary-light text-white border-primary-light shadow-sm'
+                    : disabled ? 'bg-neutral text-secondary-dark/60 border-neutral-dark cursor-not-allowed'
+                    : 'bg-white text-black-light border-secondary-dark/30 hover:border-primary-light hover:text-primary-dark'}`}>
                   {active && <CheckCircle2 className="w-3.5 h-3.5" />}{d}
                 </button>
               );
             })}
           </div>
-        </div>
+        </VoiceCard>
 
-        <div>
-          <Label>Communication tone</Label>
+        <VoiceCard title="Communication Tone">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {/* Selected was `bg-black text-white border-black`, the only
+                near-black selection state in the app — every other primary
+                selection is the orange gradient (§1/§4). */}
             {TONES.map(t => (
               <button key={t.id} type="button" onClick={() => setTone(t.id)}
                 className={`py-2.5 px-3 rounded-xl text-sm font-semibold border transition-all ${
-                  tone === t.id ? 'bg-black text-white border-black' : 'bg-white text-secondary-dark border-neutral-dark hover:bg-neutral'}`}>
+                  tone === t.id
+                    ? 'bg-gradient-to-r from-primary-light to-primary-dark text-white border-transparent shadow-sm'
+                    : 'bg-white text-secondary-dark border-neutral-dark hover:bg-neutral hover:text-black-light'}`}>
                 {t.label}
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-secondary-dark/60 mt-1.5 flex items-center gap-1"><Info className="w-3 h-3" /> Affects future emails only — drafts already written won't change.</p>
+          <p className="text-xs text-secondary-dark/70 flex items-start gap-1.5"><Info className="w-3.5 h-3.5 shrink-0 mt-0.5" /> Affects future emails only — drafts already written won't change.</p>
+        </VoiceCard>
         </div>
 
         <div className="flex justify-end"><SaveButton onClick={saveVoice} saving={savingVoice} /></div>
@@ -532,6 +604,55 @@ function ProfileTab({ only }) {
       </>}
     </>
   );
+}
+
+/*
+ * One idea per card. The Voice page used to be five blocks in a single
+ * continuous scroll with nothing between them, so Summary ran into Projects ran
+ * into Tone. Card recipe is DESIGN_GUIDE §4; the caller spaces them with
+ * space-y-6.
+ */
+function VoiceCard({ title, hint, children }) {
+  return (
+    <section className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 space-y-3">
+      <div>
+        <h3 className="text-base font-bold font-montserrat text-black">{title}</h3>
+        {hint && <p className="text-xs text-secondary-dark mt-0.5 leading-relaxed">{hint}</p>}
+      </div>
+      {children}
+    </section>
+  );
+}
+
+/*
+ * Initials for a project avatar, same rule as the identity avatar: first letter
+ * of the first two words, or the first two characters of a single word.
+ */
+function projectInitials(name) {
+  const clean = (name || '').trim();
+  if (!clean) return '—';
+  const words = clean.split(/\s+/).filter(Boolean);
+  return (words.length > 1 ? words[0][0] + words[1][0] : clean.slice(0, 2)).toUpperCase();
+}
+
+/*
+ * A stable tint per project so five collapsed rows read as five distinct
+ * entries. Chosen by hashing the name, NOT by list position, so removing one
+ * project doesn't recolour the rest. Palette reuses the decorative tints already
+ * used by TagGroup in this file — these carry no status meaning here.
+ */
+const PROJECT_TINTS = [
+  'bg-primary-light/10 text-primary-dark',
+  'bg-blue-50 text-blue-700',
+  'bg-emerald-50 text-emerald-700',
+  'bg-amber-50 text-amber-700',
+  'bg-accent-teal/10 text-accent-teal',
+];
+function projectTint(name) {
+  const s = (name || '').trim();
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 9973;
+  return PROJECT_TINTS[h % PROJECT_TINTS.length];
 }
 
 // One project, as labelled fields rather than a stringified data structure.
@@ -550,8 +671,15 @@ function ProjectCard({ project, expanded, onToggle, onChange, onRemove }) {
           type="button"
           onClick={onToggle}
           aria-expanded={expanded}
-          className="flex-1 flex items-center gap-2 min-w-0 text-left min-h-[44px]"
+          className="flex-1 flex items-center gap-2.5 min-w-0 text-left min-h-[44px]"
         >
+          {/* Identity-avatar language at list scale, so five collapsed rows are
+              telling apart at a glance. Deliberately carries NO ranking — the
+              system picks the best-matching project per role, so every card
+              here is equal weight. */}
+          <span className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-[11px] font-bold font-montserrat ${projectTint(f.name)}`}>
+            {projectInitials(f.name)}
+          </span>
           <ChevronDown className={`w-4 h-4 shrink-0 text-secondary-dark transition-transform ${expanded ? 'rotate-180' : ''}`} />
           <span className="text-sm font-semibold text-black-light truncate">
             {projectSummary(f)}
