@@ -298,12 +298,24 @@ const JdSkeleton = () => (
 );
 
 const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showActions = true, actionPending = false }) => {
-  // Escape to close.
+  // Escape closes, and the page behind does not scroll while the drawer is up.
+  //
+  // The missing scroll lock is why the close bar appeared to scroll away on
+  // mobile: with the page still scrollable underneath, a swipe that the drawer
+  // did not consume scrolled the document instead, and a scrolling document is
+  // what makes a mobile browser collapse its URL bar — which shifts every
+  // position:fixed element, this panel included. Same lock as RoleRequestModal
+  // and TailoredCVPreview; this was the only overlay without one.
   useEffect(() => {
     if (!isOpen) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prev;
+    };
   }, [isOpen, onClose]);
 
   const { data: job, isLoading } = useQuery({
@@ -437,7 +449,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
                 Sized to the 44×44 minimum in DESIGN_GUIDE §5 (h-11/w-11);
                 colours and hover are the house close-button treatment from
                 RoleRequestModal / ApplyDirectModal. */}
-            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-neutral-dark shrink-0">
+            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-3 border-b border-neutral-dark bg-white/85 backdrop-blur-xl shrink-0">
               <span className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
                 Opportunity details
               </span>
@@ -460,7 +472,13 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             ) : (
               <>
                 {/* Scrollable body */}
-                <div ref={bodyRef} className="flex-1 overflow-y-auto px-5 py-5 space-y-5">
+                {/* min-h-0 is load-bearing, not tidying. A flex item defaults to
+                    min-height:auto, so without it this div refuses to shrink
+                    below its content: `flex-1 overflow-y-auto` never starts
+                    scrolling, the panel grows taller than the viewport instead,
+                    and the close bar above gets pushed out of sight. That is the
+                    bug — the bar was never scrolling, the panel was stretching. */}
+                <div ref={bodyRef} className="min-h-0 flex-1 overflow-y-auto px-5 py-5 space-y-5">
                   {/* Identity */}
                   <div className="flex items-start gap-3">
                     <span className="w-12 h-12 shrink-0 rounded-xl bg-neutral text-secondary-dark border border-neutral-dark flex items-center justify-center font-montserrat font-bold text-lg">
