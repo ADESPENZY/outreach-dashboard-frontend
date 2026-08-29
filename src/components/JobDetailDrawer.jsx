@@ -424,15 +424,28 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 32, stiffness: 320 }}
           >
-            {/* Top close bar */}
-            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-neutral-dark shrink-0">
+            {/* Top close bar.
+
+                The X is the ONLY way out on mobile, which is why it is sized
+                and weighted more strongly than the same control in the other
+                modals. Desktop has three exits — this button, Escape, and
+                tapping the backdrop — but the panel is `w-full` below `sm`, so
+                on a phone it covers the backdrop completely and there is
+                nothing beside it to tap. A 36px, half-opacity glyph was the
+                whole escape route, and people did not find it.
+
+                Sized to the 44×44 minimum in DESIGN_GUIDE §5 (h-11/w-11);
+                colours and hover are the house close-button treatment from
+                RoleRequestModal / ApplyDirectModal. */}
+            <div className="flex items-center justify-between gap-3 px-5 py-3 border-b border-neutral-dark shrink-0">
               <span className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
                 Opportunity details
               </span>
               <button
+                type="button"
                 onClick={onClose}
                 aria-label="Close"
-                className="p-2 rounded-lg text-secondary-dark/70 hover:text-black-light hover:bg-neutral transition-colors"
+                className="-mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-secondary-dark hover:text-black-light hover:bg-neutral transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
