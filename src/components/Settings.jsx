@@ -408,7 +408,20 @@ function ProfileTab({ only }) {
       const a = document.createElement('a');
       a.href = url; a.download = `${(profile?.full_name || 'resume').replace(/\s+/g, '_')}_resume.pdf`;
       document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-    } catch { toast.error('Could not generate the PDF.'); } finally { setDownloadingPdf(false); }
+    } catch (err) {
+      // The response is a Blob (responseType above), so an error body arrives as
+      // a Blob too and has to be read back before it can be shown. Worth doing:
+      // the 422 tells the user their CV was unreadable and what to do about it,
+      // which a generic "could not generate" hides.
+      let message = 'Could not generate the PDF.';
+      try {
+        const body = err?.response?.data;
+        const raw = body instanceof Blob ? await body.text() : body;
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (parsed?.error) message = parsed.error;
+      } catch { /* keep the generic message */ }
+      toast.error(message);
+    } finally { setDownloadingPdf(false); }
   };
 
   if (isLoading || !idForm) return <ApplyDirLoader.Inline />;
