@@ -416,7 +416,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
         <>
           {/* Overlay — outside click closes */}
           <motion.div
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+            className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -425,12 +425,22 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             aria-hidden="true"
           />
 
-          {/* Panel — full-screen on mobile, right-side drawer on desktop */}
+          {/* Panel — full-screen on mobile, right-side drawer on desktop.
+
+              z-[60] over a z-[55] scrim, matching the mobile sidebar exactly.
+              Dashboard.jsx states the rule these layers must keep — "header <
+              backdrop < drawer" — and records what happens when something ties
+              with the header at z-50: paint order falls to DOM order and
+              compositing, and the header, promoted to its own layer by
+              `backdrop-blur-xl`, drew on top. This drawer was sitting at z-50
+              on both its scrim and its panel, i.e. exactly that tie. An
+              aria-modal dialog should cover the app chrome outright, not
+              negotiate with it. */}
           <motion.aside
             role="dialog"
             aria-modal="true"
             aria-label="Opportunity details"
-            className="fixed inset-y-0 right-0 z-50 flex w-full flex-col bg-white shadow-2xl sm:max-w-lg lg:max-w-2xl sm:rounded-l-2xl font-roboto"
+            className="fixed inset-y-0 right-0 z-[60] flex w-full flex-col bg-white shadow-2xl sm:max-w-lg lg:max-w-2xl sm:rounded-l-2xl font-roboto"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
