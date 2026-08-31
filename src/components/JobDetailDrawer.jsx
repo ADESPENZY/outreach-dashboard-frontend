@@ -385,11 +385,21 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
     if (!isOpen) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
-    const prev = document.body.style.overflow;
+    // BOTH, because the body is not the scroll container. The dashboard scrolls
+    // inside <main class="overflow-y-auto"> (Dashboard.jsx), so locking the body
+    // alone changed nothing and the page behind kept scrolling under the drawer
+    // — measured: main.scrollTop moved 0 -> 400 with the drawer open and
+    // body.overflow already 'hidden'. The body lock stays for the routes that do
+    // scroll the document.
+    const scroller = document.querySelector('main');
+    const prevBody = document.body.style.overflow;
+    const prevScroller = scroller ? scroller.style.overflow : null;
     document.body.style.overflow = 'hidden';
+    if (scroller) scroller.style.overflow = 'hidden';
     return () => {
       window.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevBody;
+      if (scroller) scroller.style.overflow = prevScroller;
     };
   }, [isOpen, onClose]);
 
@@ -500,7 +510,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             // Starts below the app header on a phone too, so the header is not
             // dimmed — it stays exactly as it looks with no drawer open.
             style={{ top: topOffset }}
-            className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
+            className="!mt-0 fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -525,7 +535,15 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             aria-modal="true"
             aria-label="Opportunity details"
             style={{ top: topOffset }}
-            className="fixed inset-y-0 right-0 z-[60] flex w-full flex-col bg-white shadow-2xl sm:max-w-lg lg:max-w-2xl sm:rounded-l-2xl font-roboto"
+            // !mt-0 is load-bearing. This drawer renders inside JobsPage's root
+            // `div.space-y-6`, whose rule
+            //   .space-y-6>:not([hidden])~:not([hidden]) { margin-top: 1.5rem }
+            // applies to EVERY child after the first — a fixed one included. The
+            // panel was inheriting a 24px top margin, so `top: 75px` painted at
+            // 99px and left exactly a 24px strip of the page visible between the
+            // app header and this bar. Specificity there is (0,3,0), so a plain
+            // mt-0 loses; the important modifier is what makes it stick.
+            className="!mt-0 fixed inset-y-0 right-0 z-[60] flex w-full flex-col bg-white shadow-2xl sm:max-w-lg lg:max-w-2xl sm:rounded-l-2xl font-roboto"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
