@@ -153,7 +153,7 @@ function useIsPhone() {
   return isPhone;
 }
 
-// How far down the phone layout starts: the live height of the app header.
+// How far down the phone layout starts: the live BOTTOM EDGE of the app header.
 //
 // MEASURED, not a constant. The header's height is the sum of its padding, its
 // title's line box and its border, and it changes with the breakpoint (`py-3
@@ -162,20 +162,45 @@ function useIsPhone() {
 // element keeps the two in sync without this component reaching into the
 // header's implementation. 0 when there is no header, which restores the
 // original full-height behaviour.
-function useAppHeaderHeight(active) {
-  const [height, setHeight] = useState(0);
+function useAppHeaderBottom(active) {
+  const [bottom, setBottom] = useState(0);
   useEffect(() => {
-    if (!active || typeof document === 'undefined') { setHeight(0); return undefined; }
+    if (!active || typeof document === 'undefined') { setBottom(0); return undefined; }
     const el = document.querySelector('header');
-    if (!el) { setHeight(0); return undefined; }
-    const measure = () => setHeight(Math.round(el.getBoundingClientRect().height));
+    if (!el) { setBottom(0); return undefined; }
+
+    // .bottom, NOT .height. Height is only the right answer when the header
+    // starts at exactly viewport y=0, and it does not always: index.html sets
+    // viewport-fit=cover, so an installed PWA draws under the notch, and
+    // InstallPrompt / PushPrompt can occupy space above the header too. The
+    // bottom edge in viewport coordinates IS "flush against the header",
+    // whatever sits above it. Clamped at 0 for when it is scrolled out of view.
+    const measure = () => setBottom(Math.max(0, Math.round(el.getBoundingClientRect().bottom)));
     measure();
-    if (typeof ResizeObserver === 'undefined') return undefined;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    return () => ro.disconnect();
+
+    // A ResizeObserver alone is not enough: it fires when the header changes
+    // SIZE, and the value we need is a POSITION. The header moves without
+    // resizing — a banner above it is dismissed, the device rotates, mobile
+    // browser chrome collapses — and a stale offset then leaves the drawer
+    // hanging below the header with a strip of the page showing through.
+    const onViewportChange = () => measure();
+    window.addEventListener('resize', onViewportChange);
+    window.addEventListener('orientationchange', onViewportChange);
+    // Capture phase: the page scrolls inside <main>, not on window, so this has
+    // to catch scroll events as they descend rather than wait for them to bubble.
+    window.addEventListener('scroll', onViewportChange, true);
+
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    if (ro) ro.observe(el);
+
+    return () => {
+      window.removeEventListener('resize', onViewportChange);
+      window.removeEventListener('orientationchange', onViewportChange);
+      window.removeEventListener('scroll', onViewportChange, true);
+      if (ro) ro.disconnect();
+    };
   }, [active]);
-  return height;
+  return bottom;
 }
 
 // ── Small building blocks ─────────────────────────────────────────────────
@@ -421,7 +446,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
   // so the greeting, bell and avatar stay reachable while a role is open. On
   // anything wider this is 0 and the panel keeps its full-height inset-y-0.
   const isPhone = useIsPhone();
-  const topOffset = useAppHeaderHeight(isOpen && isPhone);
+  const topOffset = useAppHeaderBottom(isOpen && isPhone);
 
   // A tab only exists when it has something to show.
   const tabs = useMemo(() => {
