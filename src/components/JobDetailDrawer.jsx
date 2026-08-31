@@ -128,6 +128,56 @@ function useIsDesktop() {
   return isDesktop;
 }
 
+// ── Phone layout switch ───────────────────────────────────────────────────
+// 639px, not the 768px used elsewhere, because this is the width at which the
+// PANEL changes shape: `w-full sm:max-w-lg`. Below it the drawer is full-bleed
+// and shares the screen with the app header; at and above it the drawer is a
+// right-hand panel with the header beside it, and none of the offsetting below
+// applies.
+const PHONE_QUERY = '(max-width: 639px)';
+
+function useIsPhone() {
+  const [isPhone, setIsPhone] = useState(
+    () => typeof window !== 'undefined'
+      && typeof window.matchMedia === 'function'
+      && window.matchMedia(PHONE_QUERY).matches,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return undefined;
+    const mq = window.matchMedia(PHONE_QUERY);
+    const onChange = (e) => setIsPhone(e.matches);
+    setIsPhone(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return isPhone;
+}
+
+// How far down the phone layout starts: the live height of the app header.
+//
+// MEASURED, not a constant. The header's height is the sum of its padding, its
+// title's line box and its border, and it changes with the breakpoint (`py-3
+// md:py-4`, `text-lg md:text-2xl`) — so any number written here would be a
+// guess that silently drifts the first time Header.jsx is touched. Reading the
+// element keeps the two in sync without this component reaching into the
+// header's implementation. 0 when there is no header, which restores the
+// original full-height behaviour.
+function useAppHeaderHeight(active) {
+  const [height, setHeight] = useState(0);
+  useEffect(() => {
+    if (!active || typeof document === 'undefined') { setHeight(0); return undefined; }
+    const el = document.querySelector('header');
+    if (!el) { setHeight(0); return undefined; }
+    const measure = () => setHeight(Math.round(el.getBoundingClientRect().height));
+    measure();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [active]);
+  return height;
+}
+
 // ── Small building blocks ─────────────────────────────────────────────────
 const Section = ({ title, children }) => (
   <section className="rounded-2xl border border-neutral-dark bg-white p-4 md:p-5">
@@ -367,6 +417,12 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
   const isDesktop = useIsDesktop();
   const useTabs = isDesktop && !!jd;
 
+  // On a phone the drawer starts BELOW the app header rather than covering it,
+  // so the greeting, bell and avatar stay reachable while a role is open. On
+  // anything wider this is 0 and the panel keeps its full-height inset-y-0.
+  const isPhone = useIsPhone();
+  const topOffset = useAppHeaderHeight(isOpen && isPhone);
+
   // A tab only exists when it has something to show.
   const tabs = useMemo(() => {
     if (!jd) return [];
@@ -416,6 +472,9 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
         <>
           {/* Overlay — outside click closes */}
           <motion.div
+            // Starts below the app header on a phone too, so the header is not
+            // dimmed — it stays exactly as it looks with no drawer open.
+            style={{ top: topOffset }}
             className="fixed inset-0 z-[55] bg-black/50 backdrop-blur-sm"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -440,6 +499,7 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
             role="dialog"
             aria-modal="true"
             aria-label="Opportunity details"
+            style={{ top: topOffset }}
             className="fixed inset-y-0 right-0 z-[60] flex w-full flex-col bg-white shadow-2xl sm:max-w-lg lg:max-w-2xl sm:rounded-l-2xl font-roboto"
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
@@ -459,18 +519,18 @@ const JobDetailDrawer = ({ jobId, isOpen, onClose, onSkip, onWriteIntro, showAct
                 Sized to the 44×44 minimum in DESIGN_GUIDE §5 (h-11/w-11);
                 colours and hover are the house close-button treatment from
                 RoleRequestModal / ApplyDirectModal. */}
-            <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-3 border-b border-neutral-dark bg-white/85 backdrop-blur-xl shrink-0">
-              <span className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
-                Opportunity details
-              </span>
+            <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-3 border-b border-neutral-dark bg-white/95 backdrop-blur-xl shrink-0">
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Close"
-                className="-mr-2 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-secondary-dark hover:text-black-light hover:bg-neutral transition-colors"
+                className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-secondary-dark hover:text-black-light hover:bg-neutral transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
+              <span className="text-[11px] font-bold font-montserrat uppercase tracking-widest text-secondary-dark/60">
+                Opportunity details
+              </span>
             </div>
 
             {isLoading ? (
