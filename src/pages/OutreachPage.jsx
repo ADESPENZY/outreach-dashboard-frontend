@@ -98,7 +98,9 @@ const CARD_ITEM = { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, tra
 const timeAgo = (iso) => {
   if (!iso) return '';
   const diffSec = Math.round((new Date(iso) - new Date()) / 1000);
-  const future = diffSec < 0;
+  // diffSec = target - now, so a FUTURE time is POSITIVE. (This was `< 0`,
+  // which inverted every label — future shown as "ago", past shown as "in".)
+  const future = diffSec > 0;
   const abs = Math.abs(diffSec);
   const phrase = (n, unit) => `${future ? 'in ' : ''}${n} ${unit}${n === 1 ? '' : 's'}${future ? '' : ' ago'}`;
   if (abs < 60)    return future ? 'shortly' : 'just now';
@@ -396,8 +398,15 @@ function SentCard({ email }) {
   const r = recipientOf(email);
   const who = r.name || r.email || 'the team';
   const st = sentStatus(email);
+  // Scheduled label splits on whether the slot is still ahead or already
+  // overdue (branch on the raw time, not timeAgo's phrasing):
+  //   future  → "Scheduled to send in 10 minutes"
+  //   overdue → "Scheduled 10 minutes ago"  (still queued, just past-due)
   const when = email.sent_at ? `Sent ${timeAgo(email.sent_at)}`
-    : (email.is_queued && email.scheduled_send_at) ? `Sending ${timeAgo(email.scheduled_send_at)}`
+    : (email.is_queued && email.scheduled_send_at)
+      ? (new Date(email.scheduled_send_at) > new Date()
+          ? `Scheduled to send ${timeAgo(email.scheduled_send_at)}`
+          : `Scheduled ${timeAgo(email.scheduled_send_at)}`)
     : 'Queued';
 
   return (
