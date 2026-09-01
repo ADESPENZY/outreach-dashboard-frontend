@@ -448,6 +448,23 @@ function SentCard({ email }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 3 — Reply (the celebration)
 // ═══════════════════════════════════════════════════════════════════════════
+
+// Deep-link straight into the Gmail conversation for a replied email. Uses the
+// stored gmail_thread_id (the outbound thread — which also holds the reply);
+// falls back to a from:<contact> search for legacy/SMTP rows with no thread id.
+// ?authuser=<sending address> opens the correct account when several Googles
+// are logged in (without it, Gmail defaults to u/0, which may be the wrong one).
+function gmailThreadUrl(email) {
+  const acct = email.sent_from_email
+    ? `?authuser=${encodeURIComponent(email.sent_from_email)}`
+    : '0/';
+  const base = `https://mail.google.com/mail/u/${acct}`;
+  if (email.gmail_thread_id) return `${base}#all/${email.gmail_thread_id}`;
+  const to = recipientOf(email);
+  if (to?.email) return `${base}#search/${encodeURIComponent('from:' + to.email)}`;
+  return base; // last resort: at least the right account's inbox
+}
+
 function ReplyCard({ email, reachedCount }) {
   const r = recipientOf(email);
   const who = r.name || r.email || 'They';
@@ -475,14 +492,25 @@ function ReplyCard({ email, reachedCount }) {
         </div>
       </div>
 
-      {/* We don't store the reply text — point them to Gmail to read it. */}
-      <p className="mt-3 text-sm text-emerald-900/80 leading-relaxed">
-        They wrote back. Open your inbox to read it and keep the conversation going.
-      </p>
+      {email.reply_body ? (
+        <div className="mt-3">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5">Their reply</p>
+          <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line max-h-60 overflow-y-auto pr-1">
+            {email.reply_body}
+          </p>
+          {email.reply_received_at && (
+            <p className="text-[11px] text-emerald-700/60 mt-1.5">Received {timeAgo(email.reply_received_at)}</p>
+          )}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-emerald-900/80 leading-relaxed">
+          They wrote back. Open your inbox to read it and keep the conversation going.
+        </p>
+      )}
 
       <div className="mt-4 flex items-center gap-3 flex-wrap">
         <a
-          href="https://mail.google.com/"
+          href={gmailThreadUrl(email)}
           target="_blank"
           rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors"
@@ -699,9 +727,21 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
         {tab === 'replies' && (
           <div className="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-5 lg:p-6">
             <p className="text-sm font-bold text-emerald-900 flex items-center gap-2"><PartyPopper className="w-4 h-4" /> They replied!</p>
-            <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
+            {email.reply_body ? (
+              <div className="mt-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5">Their reply</p>
+                <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line max-h-72 overflow-y-auto pr-1">
+                  {email.reply_body}
+                </p>
+                {email.reply_received_at && (
+                  <p className="text-[11px] text-emerald-700/60 mt-1.5">Received {timeAgo(email.reply_received_at)}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
+            )}
             <div className="mt-4 flex items-center gap-2 flex-wrap">
-              <a href="https://mail.google.com/" target="_blank" rel="noopener noreferrer"
+              <a href={gmailThreadUrl(email)} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
                 Open in Gmail <ExternalLink className="w-4 h-4" />
               </a>
