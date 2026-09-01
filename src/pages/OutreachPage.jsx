@@ -1034,19 +1034,43 @@ const OutreachPage = () => {
               Scheduled and failed emails used to be counted as "Sent". They now
               live here instead: still visible, honestly labelled, out of the
               count. Rendered once, above the mobile/desktop split. */}
-          {tab === 'sent' && failed.length > 0 && (
-            <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
-              <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-              <p className="text-sm text-red-800">
-                {failed.length === 1
-                  ? "1 introduction couldn't be sent."
-                  : `${failed.length} introductions couldn't be sent.`}{' '}
-                <span className="text-red-700/80">
-                  Check the inbox connection in Settings, then try again.
-                </span>
-              </p>
-            </div>
-          )}
+          {/* Two distinct failure modes, keyed off the mailbox's live health —
+              a delivery/threading failure on a healthy inbox is NOT a
+              connection problem, so we don't send the user to reconnect it.
+              Both banners show when both kinds are present. */}
+          {tab === 'sent' && (() => {
+            const needReconnect = failed.filter((e) => e.mailbox_needs_reconnect === true);
+            const deliveryErr   = failed.filter((e) => e.mailbox_needs_reconnect !== true);
+            if (failed.length === 0) return null;
+            return (
+              <div className="space-y-2">
+                {needReconnect.length > 0 && (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                    <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <p className="text-sm text-red-800">
+                      {needReconnect.length === 1
+                        ? "1 introduction couldn't be sent because an inbox needs to be reconnected."
+                        : `${needReconnect.length} introductions couldn't be sent because an inbox needs to be reconnected.`}{' '}
+                      <span className="text-red-700/80">Check Settings, then try again.</span>
+                    </p>
+                  </div>
+                )}
+                {deliveryErr.length > 0 && (
+                  <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800">
+                      {deliveryErr.length === 1
+                        ? "1 introduction failed to send due to a delivery error."
+                        : `${deliveryErr.length} introductions failed to send due to a delivery error.`}{' '}
+                      <span className="text-amber-700/80">
+                        These won't retry automatically — review them below. Your inbox connection is fine.
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           {tab === 'sent' && scheduled.length > 0 && (
             <section className="space-y-3">
