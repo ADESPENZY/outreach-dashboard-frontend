@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { motion } from 'framer-motion';
 import {
@@ -22,6 +22,25 @@ import { getProfile } from '../services/apiProfile';
 // An assistant presenting polished letters for approval, not an email editor.
 // Three tabs: Pending Review → Sent → Got Replies. Narrow column (emails read
 // better that way). All data + actions reuse the existing /api/outreach/ layer.
+
+// Wraps a company/role label in a link back to the job's Opportunities entry
+// (opens its detail drawer via ?job=<id>). Renders its children unchanged when
+// no job id is present, so it never produces a dead link. stopPropagation keeps
+// a click from also triggering an enclosing card's select handler. OutreachEmail
+// → Job is a CASCADE FK, so a shown introduction always has a live job.
+function JobLink({ jobId, className = '', children }) {
+  if (!jobId) return children;
+  return (
+    <Link
+      to={`/dashboard/opportunities?job=${jobId}`}
+      onClick={(e) => e.stopPropagation()}
+      title="View this job in Opportunities"
+      className={`hover:underline hover:text-primary-dark transition-colors ${className}`}
+    >
+      {children}
+    </Link>
+  );
+}
 
 // Friendly names for the cold-email strategies (model keys → human label).
 const STRATEGY_LABELS = {
@@ -249,7 +268,7 @@ function IntroCard({ email, onApprove, onDiscard, onSaveEdit, busy }) {
             </span>
             <div className="min-w-0">
               <h3 className="font-montserrat text-base font-bold text-black-light leading-snug truncate">
-                {email.company_name || 'Company'}
+                <JobLink jobId={email.job_id}>{email.company_name || 'Company'}</JobLink>
               </h3>
               {email.job_title && <p className="text-xs text-secondary-dark leading-snug line-clamp-2">{email.job_title}</p>}
             </div>
@@ -417,7 +436,7 @@ function SentCard({ email }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-black-light truncate">
-            {who} <span className="text-secondary-dark font-normal">· {email.company_name || email.job_title || '—'}</span>
+            {who} <span className="text-secondary-dark font-normal">· <JobLink jobId={email.job_id}>{email.company_name || email.job_title || '—'}</JobLink></span>
           </p>
           <p className="text-xs text-secondary-dark">{when}</p>
           {email.subject && <p className="text-sm text-black-light truncate mt-1">Subject: {email.subject}</p>}
@@ -614,7 +633,9 @@ function PreviewListItem({ email, tab, active, onClick }) {
           {initial}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-bold text-black-light truncate">{email.company_name || 'Company'}</p>
+          <p className="text-sm font-bold text-black-light truncate">
+            <JobLink jobId={email.job_id}>{email.company_name || 'Company'}</JobLink>
+          </p>
           {email.job_title && <p className="text-xs text-secondary-dark truncate mt-0.5">{email.job_title}</p>}
           {(email.job_location || email.job_salary_info) && (
             <p className="text-xs text-secondary-dark/80 truncate mt-1">
@@ -687,7 +708,12 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
               {(email.company_name || '?').trim().charAt(0).toUpperCase()}
             </span>
             <div className="min-w-0">
-              <h2 className="font-montserrat text-xl font-bold text-black-light leading-snug">{email.company_name || 'Company'}</h2>
+              <h2 className="font-montserrat text-xl font-bold text-black-light leading-snug">
+                <JobLink jobId={email.job_id} className="inline-flex items-center gap-1">
+                  {email.company_name || 'Company'}
+                  {email.job_id && <ExternalLink className="w-4 h-4 text-secondary-dark" />}
+                </JobLink>
+              </h2>
               {email.job_title && <p className="text-sm text-secondary-dark">{email.job_title}</p>}
             </div>
           </div>

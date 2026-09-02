@@ -1015,9 +1015,20 @@ function SendingTab({ only }) {
                   const st = INBOX_STATUS[acc.status] || INBOX_STATUS.Active;
                   // Show the ENFORCED limit (age-ramped), not the raw ceiling.
                   const enforced = acc.effective_daily_limit ?? acc.daily_send_limit ?? 0;
-                  const warming = acc.warmup_stage && acc.warmup_stage !== 'fully_warmed';
+                  // "Warming" = still climbing the 5→20 ramp, i.e. stages 'new'
+                  // (cap 5) / 'warming' (cap 10). Once at 'warmed' (20) the 5→20
+                  // journey is done, so we DON'T show the ramp copy — the old
+                  // check (stage !== 'fully_warmed') wrongly kept it on at 20.
+                  const warming = ['new', 'warming'].includes(acc.warmup_stage);
                   const quotaPct = enforced ? (acc.sent_today / enforced) * 100 : 0;
-                  const wp = acc.warmup;
+                  // The REAL ramp age (compute_ramp's input), not the deprecated
+                  // WarmupSession's days-since-connect. Progress toward the 28-day
+                  // 'warmed' mark (full 20/day). Formatted years past a year.
+                  const rampAge = acc.ramp_age_days;
+                  const rampAgeLabel = rampAge == null ? null
+                    : rampAge >= 365 ? `${(rampAge / 365).toFixed(rampAge >= 730 ? 0 : 1)} yrs`
+                    : `${rampAge} days`;
+                  const rampPct = rampAge == null ? 0 : Math.min(Math.round((rampAge / 28) * 100), 100);
                   return (
                     // Card recipe (DESIGN_GUIDE §4) with one deliberate
                     // deviation: no `shadow-sm`. This is a card nested inside
@@ -1040,7 +1051,7 @@ function SendingTab({ only }) {
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
                         <span className="text-secondary-dark">Daily limit</span>
                         <span className="text-black-light font-semibold text-right">
-                          {enforced} / day{warming && (
+                          {enforced} / day{warming ? (
                             <span className="text-amber-600 font-normal"> · warming up{' '}
                               <InfoTip label="What does “warming up” mean?">
                                 Automatic: a new inbox's daily send limit starts low and
@@ -1049,7 +1060,9 @@ function SendingTab({ only }) {
                                 reputation by exchanging mail with our network.
                               </InfoTip>
                             </span>
-                          )}
+                          ) : (acc.warmup_stage && (
+                            <span className="text-emerald-600 font-normal"> · fully warmed</span>
+                          ))}
                         </span>
                         {/* "Sent today" is NOT a row here — it labels the quota
                             bar below, so the number appears once rather than
@@ -1069,7 +1082,7 @@ function SendingTab({ only }) {
                             </span>
                           </>
                         )}
-                        {wp?.days_running != null && (<><span className="text-secondary-dark">Account age</span><span className="text-black-light font-semibold text-right">{wp.days_running} days</span></>)}
+                        {rampAgeLabel && (<><span className="text-secondary-dark">Mailbox age</span><span className="text-black-light font-semibold text-right">{rampAgeLabel}</span></>)}
                       </div>
 
                       {acc.status === 'Issue' && (
@@ -1104,10 +1117,10 @@ function SendingTab({ only }) {
                         </div>
                       </div>
 
-                      {acc.status === 'Warming' && wp && (
+                      {warming && acc.status !== 'Issue' && rampAge != null && (
                         <div>
-                          <div className="flex justify-between text-xs text-secondary-dark mb-1"><span>Warm-up progress</span><span className="font-semibold text-amber-700">Day {wp.days_running}</span></div>
-                          <div className="w-full h-2 bg-secondary-dark/20 rounded-full overflow-hidden"><div className="h-full rounded-full bg-amber-400" style={{ width: `${Math.min(wp.progress || 0, 100)}%` }} /></div>
+                          <div className="flex justify-between text-xs text-secondary-dark mb-1"><span>Warm-up progress</span><span className="font-semibold text-amber-700">Day {rampAge}</span></div>
+                          <div className="w-full h-2 bg-secondary-dark/20 rounded-full overflow-hidden"><div className="h-full rounded-full bg-amber-400" style={{ width: `${rampPct}%` }} /></div>
                         </div>
                       )}
 

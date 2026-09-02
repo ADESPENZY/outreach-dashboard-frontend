@@ -188,7 +188,7 @@ const JobsPage = () => {
     const timedOutRef  = useRef(new Set());   // sync mirror of `timedOut`
     const startedAtRef = useRef(new Map());   // jobId -> ms when its spinner began
 
-    const [searchParams] = useSearchParams();
+    const [searchParams, setSearchParams] = useSearchParams();
     const isActivateRequested = searchParams.get('activate') === '1';
 
     // ── Queries ───────────────────────────────────────────────────────────────
@@ -526,6 +526,20 @@ const JobsPage = () => {
     useEffect(() => {
         if (isActivateRequested && !isActivated) setIsActivationDrawerOpen(true);
     }, [isActivateRequested, isActivated]);
+
+    // Deep-link from the Introductions page (?job=<id>): open that job's detail
+    // drawer. The drawer fetches the job by id on its own, so it resolves even
+    // when the job isn't in the current Opportunities list (already contacted /
+    // expired). We strip the param after opening so a later click re-triggers.
+    useEffect(() => {
+        const jobParam = searchParams.get('job');
+        if (!jobParam) return;
+        const id = Number(jobParam);
+        if (!Number.isNaN(id)) setDrawerJobId(id);
+        const next = new URLSearchParams(searchParams);
+        next.delete('job');
+        setSearchParams(next, { replace: true });
+    }, [searchParams, setSearchParams]);
 
     // ── Activation gate ───────────────────────────────────────────────────────
     // Everything past this point assumes a calibrated user: the cards, the five
