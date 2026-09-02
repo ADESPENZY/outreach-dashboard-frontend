@@ -432,6 +432,28 @@ function SentCard({ email }) {
         </div>
       </div>
 
+      {/* Auto-reply (OOO) capture — the recipient is away. Surfaces the
+          message and any alternate contact it named, for the user to act on
+          manually (follow-ups still continue; snoozing is a later pass). */}
+      {email.reply_body && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700/80 mb-1">
+            Auto-reply received{email.reply_received_at ? ` · ${timeAgo(email.reply_received_at)}` : ''}
+          </p>
+          <p className="text-xs text-amber-900/90 leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto pr-1">
+            {email.reply_body}
+          </p>
+          {email.reply_redirect_email && (
+            <p className="mt-2 text-xs font-semibold text-amber-900">
+              Alternate contact mentioned:{' '}
+              <a href={`mailto:${email.reply_redirect_email}`} className="underline hover:text-amber-700">
+                {email.reply_redirect_name ? `${email.reply_redirect_name} · ` : ''}{email.reply_redirect_email}
+              </a>
+            </p>
+          )}
+        </div>
+      )}
+
       {open && email.body && (
         <div className="mt-3 pt-3 border-t border-neutral-dark">
           <p className="text-sm text-black-light leading-relaxed whitespace-pre-line max-h-80 overflow-y-auto pr-1">{email.body}</p>
