@@ -8,7 +8,7 @@ import { ApplyDirLoader } from '../ui/ApplyDirLoader';
 import { updateProfile } from '../../services/apiProfile';
 import {
   TONES, SECRET_WEAPON_MAX, MAX_DIFFERENTIATORS,
-  differentiatorOptions, secretWeaponPlaceholder,
+  differentiatorOptions, STORY_PLACEHOLDERS,
 } from '../../constants/personalization';
 
 // ── First-time personalization (Popup 3) ──────────────────────────────────
@@ -29,12 +29,13 @@ import {
 export default function FirstTimePersonalizationModal({ profile = null, onClose, onComplete }) {
   // Pre-selected tone so the user can submit in one tap if they're in a hurry.
   const [tone, setTone] = useState('professional');
-  const [secretWeapon, setSecretWeapon] = useState('');
+  const [storyBuilt, setStoryBuilt] = useState('');
+  const [storyProud, setStoryProud] = useState('');
+  const [storyKnownFor, setStoryKnownFor] = useState('');
   const [differentiators, setDifferentiators] = useState([]);
   const [saving, setSaving] = useState(false);
 
   const options = differentiatorOptions(profile);
-  const placeholder = secretWeaponPlaceholder(profile);
 
   // Close on Escape (cancels the reach-out).
   useEffect(() => {
@@ -56,7 +57,9 @@ export default function FirstTimePersonalizationModal({ profile = null, onClose,
     try {
       await updateProfile({
         tone_preference: tone,
-        secret_weapon: secretWeapon.trim(),
+        story_built: storyBuilt.trim(),
+        story_proud: storyProud.trim(),
+        story_known_for: storyKnownFor.trim(),
         differentiators,
       });
       onComplete();
@@ -134,24 +137,33 @@ export default function FirstTimePersonalizationModal({ profile = null, onClose,
               </div>
             </div>
 
-            {/* Section 2 — Secret weapon */}
+            {/* Section 2 — Your story (three prompts; the specifics make intros
+                sound human). All optional — answer what you can. */}
             <div>
               <p className="text-sm font-bold font-montserrat text-black-light">
-                What&rsquo;s one thing you bring that isn&rsquo;t on your CV?
+                Your story
               </p>
-              <p className="text-xs text-secondary-dark mt-0.5 mb-2">
-                The part of you a CV can&rsquo;t show.
+              <p className="text-xs text-secondary-dark mt-0.5 mb-2.5">
+                The specifics here are what make your intros sound like you. Answer what you can &mdash; blanks are fine.
               </p>
-              <textarea
-                value={secretWeapon}
-                onChange={(e) => setSecretWeapon(e.target.value.slice(0, SECRET_WEAPON_MAX))}
-                rows={3}
-                placeholder={placeholder}
-                className="w-full px-3.5 py-3 rounded-xl border border-neutral-dark bg-white text-sm text-black placeholder:text-secondary-dark/50 outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all resize-none leading-relaxed"
-              />
-              <p className="text-xs text-secondary-dark/60 mt-1 text-right">
-                {secretWeapon.length}/{SECRET_WEAPON_MAX}
-              </p>
+              <div className="space-y-3">
+                {[
+                  { v: storyBuilt, set: setStoryBuilt, q: 'One thing you built or fixed that you cared about — and what went wrong along the way?', ph: STORY_PLACEHOLDERS.built },
+                  { v: storyProud, set: setStoryProud, q: "A moment you're quietly proud of that a CV would never show.", ph: STORY_PLACEHOLDERS.proud },
+                  { v: storyKnownFor, set: setStoryKnownFor, q: 'What do people come to you for?', ph: STORY_PLACEHOLDERS.knownFor },
+                ].map((s, i) => (
+                  <div key={i}>
+                    <label className="block text-xs font-medium text-black-light mb-1">{s.q}</label>
+                    <textarea
+                      value={s.v}
+                      onChange={(e) => s.set(e.target.value.slice(0, SECRET_WEAPON_MAX))}
+                      rows={2}
+                      placeholder={s.ph}
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-neutral-dark bg-white text-sm text-black placeholder:text-secondary-dark/50 outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 transition-all resize-none leading-relaxed"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Section 3 — Differentiators (from the user's own CV) */}

@@ -15,7 +15,7 @@ import { getMe, changePassword, deleteAccount, forgotPassword, setUsername } fro
 import { getProfile, updateProfile, uploadCV } from '@/services/apiProfile';
 import { getAutoScoutSettings, updateAutoScoutSettings } from '@/services/apiSettings';
 import {
-  TONES, SECRET_WEAPON_MAX, differentiatorOptions, secretWeaponPlaceholder,
+  TONES, SECRET_WEAPON_MAX, differentiatorOptions, STORY_PLACEHOLDERS,
 } from '@/constants/personalization';
 import {
   parseProject, serializeProject, emptyProject, projectSummary, isProjectEmpty,
@@ -326,7 +326,10 @@ function ProfileTab({ only }) {
   // Voice form (summary + tone + secret weapon + differentiators)
   const [summary, setSummary] = useState('');
   const [tone, setTone] = useState('professional');
-  const [secret, setSecret] = useState('');
+  // Three story-eliciting answers that replaced the single "Secret Weapon" box.
+  const [storyBuilt, setStoryBuilt] = useState('');
+  const [storyProud, setStoryProud] = useState('');
+  const [storyKnownFor, setStoryKnownFor] = useState('');
   const [diffs, setDiffs] = useState([]);
   const [projects, setProjects] = useState([]);
   // Only one project card is open at a time — five expanded cards is more than
@@ -346,7 +349,11 @@ function ProfileTab({ only }) {
     });
     setSummary(profile.experience_summary || '');
     setTone(profile.job_preferences?.tone_preference || profile.tone_preference || 'professional');
-    setSecret(profile.secret_weapon || '');
+    // story_known_for is seeded from the old secret_weapon by the backend
+    // migration, so an existing answer shows up under the fitting question.
+    setStoryBuilt(profile.story_built || '');
+    setStoryProud(profile.story_proud || '');
+    setStoryKnownFor(profile.story_known_for || profile.secret_weapon || '');
     setDiffs(profile.differentiators || []);
     // Stored entries are strings holding Python dict reprs (see lib/projectHighlights);
     // parse once here so the form works with real fields, never raw text.
@@ -369,7 +376,9 @@ function ProfileTab({ only }) {
       await updateProfile({
         experience_summary: summary,
         tone_preference: tone,
-        secret_weapon: secret.trim(),
+        story_built: storyBuilt.trim(),
+        story_proud: storyProud.trim(),
+        story_known_for: storyKnownFor.trim(),
         differentiators: diffs,
         project_highlights: projects.filter(p => !isProjectEmpty(p)).map(serializeProject),
       });
@@ -563,11 +572,22 @@ function ProfileTab({ only }) {
           </div>
         </VoiceCard>
 
-        <VoiceCard title="Secret Weapon" hint="What's one thing you bring that isn't on your CV?">
-          <textarea value={secret} onChange={e => setSecret(e.target.value.slice(0, SECRET_MAX))} rows={2}
-            placeholder={secretWeaponPlaceholder(profile)}
-            className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 resize-none" />
-          <p className="text-xs text-secondary-dark/70 text-right">{secret.length}/{SECRET_MAX}</p>
+        <VoiceCard title="Your Story" hint="Three quick questions. The specifics here are what make your intros sound like a person wrote them, not a template. Answer what you can — blanks are fine.">
+          <div className="space-y-4">
+            {[
+              { v: storyBuilt, set: setStoryBuilt, q: 'One thing you built or fixed that you actually cared about — what was it, and what went wrong along the way?', ph: STORY_PLACEHOLDERS.built },
+              { v: storyProud, set: setStoryProud, q: "A moment at work you're quietly proud of — something a CV would never show.", ph: STORY_PLACEHOLDERS.proud },
+              { v: storyKnownFor, set: setStoryKnownFor, q: 'What do people who’ve worked with you come to you for?', ph: STORY_PLACEHOLDERS.knownFor },
+            ].map((s, i) => (
+              <div key={i}>
+                <label className="block text-sm font-medium text-black-light mb-1.5">{s.q}</label>
+                <textarea value={s.v} onChange={e => s.set(e.target.value.slice(0, SECRET_MAX))} rows={2}
+                  placeholder={s.ph}
+                  className="w-full px-3 py-2 rounded-xl border border-neutral-dark bg-white text-sm text-black outline-none focus:border-primary-light focus:ring-2 focus:ring-primary-light/20 resize-none" />
+                <p className="text-xs text-secondary-dark/70 text-right">{s.v.length}/{SECRET_MAX}</p>
+              </div>
+            ))}
+          </div>
         </VoiceCard>
 
         <VoiceCard title="What Makes You Stand Out" hint="Pick up to 2.">

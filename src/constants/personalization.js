@@ -60,6 +60,18 @@ export function secretWeaponPlaceholder(profile) {
   return SECRET_WEAPON_EXAMPLES[primary] || DEFAULT_SECRET_WEAPON_EXAMPLE;
 }
 
+// Depth-showing example answers for the three story questions. Concrete on
+// purpose — they teach the user to write a specific story (a project with a
+// scar, an invisible win, a reputation), not a one-line platitude.
+export const STORY_PLACEHOLDERS = {
+  built:
+    'e.g. At FumiSync I built middleware syncing legacy dental systems to a CRM. One dropped webhook silently double-charged a clinic; I spent a night tracing it across three APIs before I found the missing retry.',
+  proud:
+    "e.g. Onboarding was quietly failing for users on slow connections and nobody had flagged it. I rebuilt it to resume where it dropped, and the support tickets stopped.",
+  knownFor:
+    'e.g. The one people hand the gnarly integration nobody else wants to touch.',
+};
+
 /** The chips to show: the user's CV-derived options, else the shared fallback. */
 export function differentiatorOptions(profile) {
   const opts = profile?.differentiator_options;
