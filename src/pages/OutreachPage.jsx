@@ -42,6 +42,15 @@ function JobLink({ jobId, className = '', children }) {
   );
 }
 
+// Friendly labels for classified reply intents (backend reply_intent → human).
+const REPLY_INTENT_LABEL = {
+  cv_request:       'Asked for your CV',
+  apply_via_portal: 'Apply via their portal',
+  wrong_person:     'Wrong contact',
+  not_a_fit:        'Not a fit / declined',
+  wants_to_talk:    'Wants to talk',
+};
+
 // Friendly names for the cold-email strategies (model keys → human label).
 const STRATEGY_LABELS = {
   story:           'The Mirror',
@@ -796,6 +805,36 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
               </div>
             ) : (
               <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
+            )}
+
+            {/* Classified reply intent + (for a CV request) a drafted reply to
+                review. Never auto-sent — the user copies it, attaches the ready
+                CV, and sends from their own inbox. */}
+            {email.reply_intent && email.reply_intent !== 'unclear' && (
+              <div className="mt-3">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                  {REPLY_INTENT_LABEL[email.reply_intent] || email.reply_intent}
+                  {email.reply_intent_confidence != null && (
+                    <span className="text-emerald-600/70 font-normal">{Math.round(email.reply_intent_confidence * 100)}%</span>
+                  )}
+                </span>
+              </div>
+            )}
+            {email.reply_intent === 'cv_request' && email.suggested_reply && (
+              <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5 flex items-center gap-1.5 flex-wrap">
+                  Suggested reply · review before sending
+                  {email.suggested_reply_cv_ready && (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">Tailored CV ready</span>
+                  )}
+                </p>
+                <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line">{email.suggested_reply}</p>
+                <button
+                  onClick={() => { navigator.clipboard?.writeText(email.suggested_reply); toast.success('Reply copied — review it, attach your CV, and send from your inbox.'); }}
+                  className="mt-2 inline-flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-emerald-100">
+                  Copy reply
+                </button>
+              </div>
             )}
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               <a href={gmailThreadUrl(email)} target="_blank" rel="noopener noreferrer"
