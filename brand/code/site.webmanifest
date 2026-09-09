@@ -1,18 +1,35 @@
 {
-  "name": "ApplyDir — your AI headhunter",
+  "name": "ApplyDir",
   "short_name": "ApplyDir",
-  "description": "ApplyDir finds who is hiring, identifies the person who does the hiring, and sends your introduction from your own inbox.",
-  "id": "/",
+  "description": "Your AI headhunter. It finds who's hiring and introduces you.",
   "start_url": "/",
-  "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "background_color": "#101010",
   "theme_color": "#FF5B2E",
-  "background_color": "#FFFFFF",
   "icons": [
-    { "src": "/applydir-app-icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/applydir-app-icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/applydir-app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "/applydir-favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+    {
+      "src": "/applydir-app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/applydir-app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/applydir-maskable-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/applydir-maskable-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
