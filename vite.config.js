@@ -21,7 +21,7 @@ export default defineConfig({
       registerType: "autoUpdate",
       // Emit the SW registration ourselves is unnecessary — 'auto' injects it.
       injectRegister: "auto",
-      includeAssets: ["favicon.ico", "apple-touch-icon-180x180.png", "logo.svg"],
+      includeAssets: ["favicon.ico", "applydir-apple-touch-icon-180.png", "applydir-favicon.svg"],
       manifest: {
         name: "ApplyDir — Your AI Headhunter",
         short_name: "ApplyDir",
@@ -34,10 +34,10 @@ export default defineConfig({
         scope: "/",
         start_url: "/",
         icons: [
-          { src: "pwa-192x192.png", sizes: "192x192", type: "image/png" },
-          { src: "pwa-512x512.png", sizes: "512x512", type: "image/png" },
+          { src: "applydir-app-icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "applydir-app-icon-512.png", sizes: "512x512", type: "image/png" },
           {
-            src: "maskable-icon-512x512.png",
+            src: "applydir-maskable-512.png",
             sizes: "512x512",
             type: "image/png",
             purpose: "maskable",

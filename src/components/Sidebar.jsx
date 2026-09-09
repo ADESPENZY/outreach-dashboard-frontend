@@ -1,6 +1,5 @@
 import { Link, NavLink } from 'react-router-dom';
 import {
-  Rocket,
   Home,
   Briefcase,
   Mail,
@@ -18,6 +17,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getInboxStats } from '@/services/apiInboxes';
 import { settingsLink } from '@/constants/settingsSections';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import Logo from './brand/Logo';
 
 // The 4-item product navigation. Settings is the gear pinned at the very
 // bottom; the live Connected Inboxes status sits just above it.
@@ -138,12 +138,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         isCollapsed ? 'md:justify-center' : '',
       ].join(' ')}>
         <div className={`flex items-center gap-2.5 ${isCollapsed ? 'md:hidden' : ''}`}>
-          <div className="bg-gradient-to-br from-primary-light to-primary-dark p-2 rounded-xl shadow-lg shadow-primary-light/30 shrink-0">
-            <Rocket className="text-white w-5 h-5" />
-          </div>
-          <h2 className="text-xl font-bold tracking-tight font-montserrat text-black">
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Apply</span>DIR
-          </h2>
+          <Logo height={26} />
         </div>
 
         <button

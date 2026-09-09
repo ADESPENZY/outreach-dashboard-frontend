@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Rocket, Mail } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { forgotPassword } from '../services/apiAuth';
 import SmallSpinner from '../components/SmallSpinner';
+import Logo from '../components/brand/Logo';
 
 const ForgotPasswordPage = () => {
   const [email, setEmail] = useState('');
@@ -28,10 +29,7 @@ const ForgotPasswordPage = () => {
   return (
     <section className="min-h-screen flex flex-col items-center justify-center bg-[#0B0C10] text-white p-6">
       <div className="flex items-center gap-2 mb-8">
-        <Rocket size={18} className="rotate-45" style={{ color: '#FF5B2E' }} />
-        <span className="font-montserrat font-semibold text-lg">
-          Apply<span className="font-extrabold bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent">DIR</span>
-        </span>
+        <Logo tone="reversed" height={24} />
       </div>
 
       <div className="w-full max-w-md bg-[#12131C]/60 backdrop-blur-md border border-white/5 rounded-2xl p-8 shadow-2xl">

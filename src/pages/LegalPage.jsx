@@ -1,7 +1,8 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Rocket, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { PrivacyPolicy, TermsOfService, LegalDisclaimer } from '@/components/legal/PolicyContent';
+import Logo from '../components/brand/Logo';
 
 // Public, unauthenticated policy page. `doc` selects which sections to show so
 // /privacy and /terms reuse the exact text from Settings → Legal.
@@ -16,12 +17,7 @@ export default function LegalPage({ doc = 'privacy' }) {
       <header className="sticky top-0 z-10 bg-white/85 backdrop-blur-xl border-b border-neutral-dark">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <Link to="/register" className="flex items-center gap-2.5">
-            <div className="bg-gradient-to-br from-primary-light to-primary-dark p-1.5 rounded-xl shadow-lg shadow-primary-light/30">
-              <Rocket className="text-white w-4 h-4" />
-            </div>
-            <span className="text-lg font-bold tracking-tight font-montserrat text-black">
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary-light to-primary-dark">Apply</span>DIR
-            </span>
+            <Logo height={24} />
           </Link>
           <Link
             to="/register"

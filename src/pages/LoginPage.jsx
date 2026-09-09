@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { useLocation, useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
-  Rocket, Eye, EyeOff, FileText, Mail,
+  Eye, EyeOff, FileText, Mail,
   Briefcase, TrendingUp, Zap
 } from 'lucide-react';
 import {
@@ -17,6 +17,7 @@ import InstallButton from '../components/InstallButton';
 import SmallSpinner from '../components/SmallSpinner';
 import UsernamePickerModal from '../components/UsernamePickerModal';
 import { useAuth } from '../context/AuthContext';
+import Logo from '../components/brand/Logo';
 
 /* ─── ACTIVITY LOG DATA ─── */
 const LOGS = [
@@ -547,17 +548,7 @@ const LoginPage = () => {
           className="flex items-center justify-between gap-2"
         >
           <div className="flex items-center gap-2">
-            <Rocket
-              size={18}
-              className="rotate-45"
-              style={{ color: '#FF5B2E', filter: 'drop-shadow(0 0 6px rgba(255,91,46,0.50))' }}
-            />
-            <span className="font-montserrat font-semibold text-white text-lg">
-              Apply
-              <span className="font-extrabold bg-gradient-to-r from-[#B82E07] to-[#FF5B2E] bg-clip-text text-transparent">
-                DIR
-              </span>
-            </span>
+            <Logo tone="reversed" height={24} />
           </div>
           <InstallButton />
         </motion.div>
