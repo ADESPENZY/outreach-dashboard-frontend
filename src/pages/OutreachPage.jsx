@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { toast } from 'react-toastify';
@@ -150,6 +150,57 @@ const linkedinPost = (reached) => {
     `Sometimes it's not about applying more — it's about reaching the right person.`
   );
 };
+
+// Collapses the 'replied' rows into ONE row per conversation.
+//
+// A reply marks the WHOLE thread 'replied' server-side (original + every
+// follow-up), which is deliberate — the reply scanner and the strategy bandit
+// both depend on it. But that means N rows describe a single reply, and showing
+// each as its own card duplicated the same message N times (and inflated the
+// tab count). So group here, at display time only.
+//
+// Thread key: the contact's email, which is exactly what the backend threads on
+// (`contact__email__iexact` in _mark_replied). Falls back to contact id, then
+// job id, then the row's own id, so an orphaned row still shows once rather
+// than colliding with unrelated rows under a shared null key.
+//
+// Chosen row, in priority order: the one carrying the classified intent, then
+// the one carrying the reply body, then the ORIGINAL (lowest followup_count).
+// After the reply-intent write was fixed to target the frozen thread ids, every
+// row in a thread carries the same intent and body — so in practice this lands
+// on the original, which is also the row whose `body` is the intro the card
+// shows. The first two keys are for legacy rows written before that fix.
+function groupRepliesByThread(emails) {
+  const threads = new Map();
+  for (const e of emails) {
+    if (e.status !== 'replied') continue;
+    const key = e.contact?.email
+      ? `c:${String(e.contact.email).toLowerCase()}`
+      : e.contact?.id  ? `i:${e.contact.id}`
+      : e.job_id       ? `j:${e.job_id}`
+      : `e:${e.id}`;
+    const prev = threads.get(key);
+    if (!prev || betterReplyRow(e, prev)) threads.set(key, e);
+  }
+  return [...threads.values()].sort(
+    (a, b) => new Date(b.replied_at || b.reply_received_at || 0)
+            - new Date(a.replied_at || a.reply_received_at || 0)
+  );
+}
+
+// True when `a` is the better card row for a thread than `b`.
+function betterReplyRow(a, b) {
+  const rank = (e) => [
+    e.reply_intent ? 1 : 0,          // carries the classification
+    e.reply_body ? 1 : 0,            // carries what they wrote
+    -(e.followup_count || 0),        // prefer the original over a follow-up
+  ];
+  const ra = rank(a), rb = rank(b);
+  for (let i = 0; i < ra.length; i++) {
+    if (ra[i] !== rb[i]) return ra[i] > rb[i];
+  }
+  return false;
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Tab button
@@ -524,6 +575,59 @@ function gmailThreadUrl(email) {
   return base; // last resort: at least the right account's inbox
 }
 
+// The classified reply intent, plus (for a CV request) the drafted reply to
+// review. Shared by BOTH reply surfaces — the mobile ReplyCard and the desktop
+// PreviewPane. It lives in one place on purpose: this block was originally
+// inlined in the desktop pane only, so mobile silently never got it. One
+// component means the two can't drift apart again.
+//
+// Never auto-sent: the user copies it, attaches the ready CV, and sends from
+// their own inbox. Renders nothing when there's no usable classification.
+function ReplyIntentBlock({ email }) {
+  const showIntent = email.reply_intent && email.reply_intent !== 'unclear';
+  const showDraft  = email.reply_intent === 'cv_request' && email.suggested_reply;
+  if (!showIntent && !showDraft) return null;
+
+  return (
+    <>
+      {showIntent && (
+        <div className="mt-3">
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+            {REPLY_INTENT_LABEL[email.reply_intent] || email.reply_intent}
+            {email.reply_intent_confidence != null && (
+              <span className="text-emerald-600/70 font-normal">{Math.round(email.reply_intent_confidence * 100)}%</span>
+            )}
+          </span>
+        </div>
+      )}
+      {showDraft && (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5 flex items-center gap-1.5 flex-wrap">
+            Suggested reply · review before sending
+            {email.suggested_reply_cv_ready && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">Tailored CV ready</span>
+            )}
+          </p>
+          <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line">{email.suggested_reply}</p>
+          <div className="mt-2 flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => { navigator.clipboard?.writeText(email.suggested_reply); toast.success('Reply copied — review it, attach your CV, and send from your inbox.'); }}
+              className="inline-flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-emerald-100">
+              Copy reply
+            </button>
+            {/* The CV they asked for, right next to the ask — not buried in a
+                footer several sections away. */}
+            <GenerateCvButton
+              job={{ id: email.job_id, title: email.job_title, company_name: email.company_name }}
+              hasCv={email.job_has_cv}
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 function ReplyCard({ email, reachedCount }) {
   const r = recipientOf(email);
   const who = r.name || r.email || 'They';
@@ -544,9 +648,17 @@ function ReplyCard({ email, reachedCount }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-emerald-900">{who} replied!</p>
+          {/* Company links back to the job in Opportunities, matching IntroCard
+              and SentCard. JobLink degrades to plain text without a job_id. */}
           <p className="text-xs text-emerald-700/90 truncate">
-            {[r.title, email.company_name].filter(Boolean).join(' · ') || email.job_title}
+            {r.title && <>{r.title} · </>}
+            <JobLink jobId={email.job_id}>
+              {email.company_name || email.job_title || '—'}
+            </JobLink>
           </p>
+          {email.job_title && email.company_name && (
+            <p className="text-xs text-emerald-700/70 truncate">{email.job_title}</p>
+          )}
           {email.replied_at && <p className="text-xs text-emerald-700/70 mt-0.5">Replied {timeAgo(email.replied_at)}</p>}
         </div>
       </div>
@@ -566,6 +678,8 @@ function ReplyCard({ email, reachedCount }) {
           They wrote back. Open your inbox to read it and keep the conversation going.
         </p>
       )}
+
+      <ReplyIntentBlock email={email} />
 
       <div className="mt-4 flex items-center gap-3 flex-wrap">
         <a
@@ -807,35 +921,8 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
               <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
             )}
 
-            {/* Classified reply intent + (for a CV request) a drafted reply to
-                review. Never auto-sent — the user copies it, attaches the ready
-                CV, and sends from their own inbox. */}
-            {email.reply_intent && email.reply_intent !== 'unclear' && (
-              <div className="mt-3">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-white border border-emerald-200 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
-                  {REPLY_INTENT_LABEL[email.reply_intent] || email.reply_intent}
-                  {email.reply_intent_confidence != null && (
-                    <span className="text-emerald-600/70 font-normal">{Math.round(email.reply_intent_confidence * 100)}%</span>
-                  )}
-                </span>
-              </div>
-            )}
-            {email.reply_intent === 'cv_request' && email.suggested_reply && (
-              <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5 flex items-center gap-1.5 flex-wrap">
-                  Suggested reply · review before sending
-                  {email.suggested_reply_cv_ready && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">Tailored CV ready</span>
-                  )}
-                </p>
-                <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line">{email.suggested_reply}</p>
-                <button
-                  onClick={() => { navigator.clipboard?.writeText(email.suggested_reply); toast.success('Reply copied — review it, attach your CV, and send from your inbox.'); }}
-                  className="mt-2 inline-flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-emerald-100">
-                  Copy reply
-                </button>
-              </div>
-            )}
+            {/* Shared with the mobile ReplyCard — see ReplyIntentBlock. */}
+            <ReplyIntentBlock email={email} />
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               <a href={gmailThreadUrl(email)} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
@@ -940,7 +1027,12 @@ const OutreachPage = () => {
 
   // ── Derived lists ───────────────────────────────────────────────────────
   const pending = drafts; // status === 'draft'
-  const replies = sentEmails.filter((e) => e.status === 'replied');
+  // One card per THREAD, not per row. `_mark_replied` deliberately flips every
+  // sent/opened row in a thread to 'replied' (reply detection depends on that —
+  // don't change it), so a reply to a thread with three follow-ups arrives as
+  // four rows carrying the same reply_body. Grouping is display-only: it picks
+  // the single most useful row per thread and leaves the data untouched.
+  const replies = useMemo(() => groupRepliesByThread(sentEmails), [sentEmails]);
   // "Sent" means it actually left the inbox. 'opened' and 'bounced' were sent;
   // 'approved' is QUEUED (or stranded) and 'failed' never left. Counting those
   // as sent overstated the tab by 66 on live data (150 shown vs 84 real).
