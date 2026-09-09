@@ -15,7 +15,7 @@ const ProtectedRoute = ({ requireOnboarding = false }) => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/" state={{ from: location }} replace />;
+    return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
   // Onboarding is progressive now — there's no standalone wizard. Any caller

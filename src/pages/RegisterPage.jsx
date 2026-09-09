@@ -689,7 +689,7 @@ const RegisterPage = () => {
 
             <p className="text-[rgba(255,255,255,0.35)] text-sm font-roboto text-center mt-6">
               Already have an account?{' '}
-              <Link to="/" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold transition-colors">
+              <Link to="/login" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold transition-colors">
                 Sign in
               </Link>
             </p>

@@ -71,7 +71,7 @@ const ForgotPasswordPage = () => {
           </>
         )}
         <p className="text-[rgba(255,255,255,0.35)] text-sm font-roboto text-center mt-6">
-          <Link to="/" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold">Back to sign in</Link>
+          <Link to="/login" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold">Back to sign in</Link>
         </p>
       </div>
     </section>

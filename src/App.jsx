@@ -1,19 +1,33 @@
 import { BrowserRouter, Route, Routes, Navigate } from 'react-router';
-import Dashboard from './pages/Dashboard';
-import { SettingsHomeRoute, SettingsSectionRoute, SettingsTabRedirect } from './components/settings/SettingsMobile';
-import DashboardPage from './components/DashboardPage';
+import { lazy, Suspense } from 'react';
 import { ToastContainer } from 'react-toastify';
-import LoginPage from './pages/LoginPage';
+import LandingPage from './pages/LandingPage';
 import ProtectedRoute from './components/ProtectedRoute';
-import JobsPage from './pages/JobsPage';
-import OutreachPage from './pages/OutreachPage';
-import ProgressPage from './pages/ProgressPage';
-import RegisterPage from './pages/RegisterPage';
-import ForgotPasswordPage from './pages/ForgotPasswordPage';
-import ResetPasswordPage from './pages/ResetPasswordPage';
-import NotFoundPage from './pages/NotFoundPage';
-import LegalPage from './pages/LegalPage';
 import { AuthProvider } from './context/AuthContext';
+
+// Everything below the marketing page is code-split. "/" is now a public
+// landing page, and a visitor who never signs in should not be made to
+// download the dashboard, the charts, or the settings tree to read it.
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const DashboardPage = lazy(() => import('./components/DashboardPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const RegisterPage = lazy(() => import('./pages/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const JobsPage = lazy(() => import('./pages/JobsPage'));
+const OutreachPage = lazy(() => import('./pages/OutreachPage'));
+const ProgressPage = lazy(() => import('./pages/ProgressPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+const LegalPage = lazy(() => import('./pages/LegalPage'));
+const SettingsHomeRoute = lazy(() =>
+  import('./components/settings/SettingsMobile').then((m) => ({ default: m.SettingsHomeRoute })),
+);
+const SettingsSectionRoute = lazy(() =>
+  import('./components/settings/SettingsMobile').then((m) => ({ default: m.SettingsSectionRoute })),
+);
+const SettingsTabRedirect = lazy(() =>
+  import('./components/settings/SettingsMobile').then((m) => ({ default: m.SettingsTabRedirect })),
+);
 import ErrorBoundary from './components/ErrorBoundary';
 import AppBootLoader from './components/AppBootLoader';
 import VersionCheck from './components/VersionCheck';
@@ -47,9 +61,11 @@ function App() {
             branded fallback while the toasts/version/install prompts below
             keep working. */}
         <ErrorBoundary>
+          <Suspense fallback={null}>
           <Routes>
             {/* Public */}
-            <Route index element={<LoginPage />} />
+            <Route index element={<LandingPage />} />
+            <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPasswordPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
@@ -99,6 +115,7 @@ function App() {
                 shadow a real path. */}
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
+          </Suspense>
         </ErrorBoundary>
 
         <ToastContainer

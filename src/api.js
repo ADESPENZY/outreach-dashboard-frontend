@@ -2,6 +2,13 @@ import axios from "axios";
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000";
 
+// Public routes. A 401 on one of these is expected (nobody is signed in yet)
+// and must never redirect, or the landing page bounces visitors to /login.
+const PUBLIC_PATHS = new Set([
+    '/', '/login', '/register', '/forgot-password', '/reset-password',
+    '/privacy', '/terms',
+]);
+
 const api = axios.create({
   baseURL: BASE_URL,
   withCredentials: true,
@@ -79,7 +86,7 @@ api.interceptors.response.use(
         }
 
         if (error.response?.status === 401) {
-            const isAuthPage = window.location.pathname === '/' || window.location.pathname === '/register';
+            const isAuthPage = PUBLIC_PATHS.has(window.location.pathname);
 
             // Guard 0: Auth endpoints that issue tokens can never benefit from a
             // refresh cycle — let the original error propagate immediately so that
@@ -95,14 +102,14 @@ api.interceptors.response.use(
             // Guard 1: Don't refresh the refresh endpoint itself
             if (originalRequest.url?.includes('/auth/refresh/')) {
                 clearClientAuthState();
-                if (!isAuthPage) window.location.href = '/';
+                if (!isAuthPage) window.location.href = '/login';
                 return Promise.reject(error);
             }
 
             // Guard 2: Don't retry the same request forever
             if (originalRequest._retry) {
                 clearClientAuthState();
-                if (!isAuthPage) window.location.href = '/';
+                if (!isAuthPage) window.location.href = '/login';
                 return Promise.reject(error);
             }
 
@@ -135,7 +142,7 @@ api.interceptors.response.use(
             } catch (refreshError) {
                 processQueue(refreshError, null);
                 clearClientAuthState();
-                if (!isAuthPage) window.location.href = '/';
+                if (!isAuthPage) window.location.href = '/login';
                 return Promise.reject(refreshError);
             } finally {
                 _isRefreshing = false;

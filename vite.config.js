@@ -33,15 +33,14 @@ export default defineConfig({
         orientation: "portrait",
         scope: "/",
         start_url: "/",
+        // "any" and "maskable" are declared separately on purpose: a maskable
+        // icon is full-bleed with the mark inside the inner 60%, so reusing it
+        // as "any" would show a huge margin in launchers that don't mask.
         icons: [
-          { src: "applydir-app-icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "applydir-app-icon-512.png", sizes: "512x512", type: "image/png" },
-          {
-            src: "applydir-maskable-512.png",
-            sizes: "512x512",
-            type: "image/png",
-            purpose: "maskable",
-          },
+          { src: "applydir-app-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "applydir-app-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "applydir-maskable-icon-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+          { src: "applydir-maskable-icon-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
         ],
       },
       workbox: {

@@ -45,6 +45,18 @@ export default {
   				DEFAULT: '#F9FAFB',
   				dark: '#F3F4F6'
   			},
+  			// Identity tokens (brand/README.md). Ink is the reversed field and
+  			// display type; stone is the warm page ground. Both were previously
+  			// only available as one-off hex values.
+  			ink: {
+  				DEFAULT: '#101010',
+  				soft: '#1C1A19',
+  				line: '#22201E'
+  			},
+  			stone: {
+  				DEFAULT: '#F4F2F0',
+  				line: '#E4E0DC'
+  			},
   			background: 'hsl(var(--background))',
   			foreground: 'hsl(var(--foreground))',
   			card: {
@@ -105,6 +117,14 @@ export default {
   				'0%':   { transform: 'rotate(0deg)' },
   				'100%': { transform: 'rotate(360deg)' },
   			},
+  			'rise': {
+  				'0%':   { opacity: '0', transform: 'translateY(14px)' },
+  				'100%': { opacity: '1', transform: 'translateY(0)' },
+  			},
+  			'marquee': {
+  				'0%':   { transform: 'translateX(0)' },
+  				'100%': { transform: 'translateX(-50%)' },
+  			},
   			// Screen loader exit.
   			'fade-out': {
   				'0%':   { opacity: '1' },
@@ -117,6 +137,8 @@ export default {
   			'shimmer': 'shimmer 1.5s ease-in-out infinite',
   			'spinner': 'spinner 0.8s linear infinite',
   			'fade-out': 'fade-out 0.3s ease-out forwards',
+  			'rise': 'rise 0.55s cubic-bezier(0.16,1,0.3,1) both',
+  			'marquee': 'marquee 38s linear infinite',
   		},
   	}
   },

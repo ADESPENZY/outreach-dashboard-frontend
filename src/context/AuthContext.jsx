@@ -64,7 +64,7 @@ export const AuthProvider = ({ children }) => {
       clearClientAuthState();
       setCurrentUser(null);
       setIsAuthenticated(false);
-      window.location.href = '/';
+      window.location.href = '/login';
     }
   };
 

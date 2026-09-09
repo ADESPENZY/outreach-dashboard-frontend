@@ -89,7 +89,7 @@ const ResetPasswordPage = () => {
           Your password has been reset. Sign in with your new password.
         </p>
         <Link
-          to="/"
+          to="/login"
           className="inline-flex items-center justify-center w-full h-12 rounded-lg font-montserrat font-semibold text-sm text-white"
           style={{ background: 'linear-gradient(135deg, #B82E07 70%, #FF5B2E 30%)' }}
         >
@@ -156,7 +156,7 @@ const ResetPasswordPage = () => {
         {body}
         {!done && (
           <p className="text-[rgba(255,255,255,0.35)] text-sm font-roboto text-center mt-6">
-            <Link to="/" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold">Back to sign in</Link>
+            <Link to="/login" className="text-[#FF5B2E] hover:text-[#B82E07] font-semibold">Back to sign in</Link>
           </p>
         )}
       </div>
