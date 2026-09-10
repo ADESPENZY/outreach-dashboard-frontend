@@ -388,3 +388,36 @@ export async function renderCvPdf(jobId, template) {
     throw new Error(parseApiError(err));
   }
 }
+
+/**
+ * Draft the user's response to an inbound reply, for review. Never sends.
+ * `force` re-drafts over an existing one.
+ */
+export async function draftReply(emailId, { force = false } = {}) {
+  try {
+    const response = await api.post(
+      `/api/outreach/emails/${emailId}/draft-reply/${force ? "?force=true" : ""}`,
+      {}
+    );
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/**
+ * Send the user's approved reply, threaded into the existing conversation.
+ * `body` is whatever they have in the box — their edits, not our draft.
+ * attachCv attaches the tailored CV (cv_request case).
+ */
+export async function sendReply(emailId, body, { attachCv = false } = {}) {
+  try {
+    const response = await api.post(`/api/outreach/emails/${emailId}/reply/`, {
+      body,
+      attach_cv: attachCv,
+    });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

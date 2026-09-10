@@ -6,14 +6,16 @@ import { motion } from 'framer-motion';
 import {
   Mail, Send, CheckCircle2, ArrowRight, ChevronDown, ChevronUp,
   Pencil, Trash2, Clock, PartyPopper, Linkedin, ExternalLink, Loader2,
-  AlertTriangle, MapPin, Wallet, Sparkles,
+  AlertTriangle, MapPin, Wallet, Sparkles, Eye,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
 import { postedAge } from '../utils/jobAge';
 import GenerateCvButton from '../components/GenerateCvButton';
+import TailoredCVPreview from '../components/TailoredCVPreview';
 import NoInboxModal from '../components/NoInboxModal';
 import {
   getDraftEmails, getSentEmails, approveEmail, queueEmail, editEmail, deleteEmail,
+  draftReply, sendReply,
 } from '../services/apiOutreach';
 import { getGmailAccounts } from '../services/apiGmail';
 import { getProfile } from '../services/apiProfile';
@@ -41,6 +43,11 @@ function JobLink({ jobId, className = '', children }) {
     </Link>
   );
 }
+
+// Intents the backend will draft a response for (reply_drafter.DRAFTABLE_INTENTS).
+// Anything else — including 'unclear' — gets an empty box the user writes
+// themselves, rather than a guess sent in their name.
+const DRAFTABLE_INTENTS = ['cv_request', 'apply_via_portal', 'wants_to_talk', 'not_a_fit'];
 
 // Friendly labels for classified reply intents (backend reply_intent → human).
 const REPLY_INTENT_LABEL = {
@@ -615,7 +622,7 @@ function gmailThreadUrl(email) {
 }
 
 // The conversation a reply is answering: the original intro, then every
-// follow-up, oldest first. Shared by both reply surfaces (see ReplyIntentBlock
+// follow-up, oldest first. Shared by both reply surfaces (see ReplyComposer
 // for why sharing matters here).
 //
 // Answers "no link from the reply to the full intro": before this, the desktop
@@ -677,18 +684,91 @@ function ThreadTimeline({ messages, tone = 'light', title = 'The conversation' }
   );
 }
 
-// The classified reply intent, plus (for a CV request) the drafted reply to
-// review. Shared by BOTH reply surfaces — the mobile ReplyCard and the desktop
-// PreviewPane. It lives in one place on purpose: this block was originally
-// inlined in the desktop pane only, so mobile silently never got it. One
-// component means the two can't drift apart again.
+// Review, edit and SEND a response to an inbound reply, without leaving the app.
 //
-// Never auto-sent: the user copies it, attaches the ready CV, and sends from
-// their own inbox. Renders nothing when there's no usable classification.
-function ReplyIntentBlock({ email }) {
+// Shared by BOTH reply surfaces — the mobile ReplyCard and the desktop
+// PreviewPane. It lives in one place on purpose: the intent block that preceded
+// it was inlined in the desktop pane only, so mobile silently never got it. One
+// component means the two cannot drift apart again.
+//
+// The gate model matches introductions: the system drafts, the human reads,
+// edits and approves, and only then does anything send. Nothing here sends on
+// its own — sendReply runs on click and nowhere else. What gets sent is whatever
+// is in the box, so a rewrite is really a rewrite.
+//
+// 'unclear' and unclassified replies deliberately arrive with no draft: an empty
+// box the user writes themselves beats a guess sent in their name.
+function ReplyComposer({ email, onSent }) {
+  const draftable = DRAFTABLE_INTENTS.includes(email.reply_intent);
+  const alreadySent = !!email.responded_at;
+
+  const [body, setBody] = useState(email.suggested_reply || '');
+  const [attachCv, setAttachCv] = useState(!!email.suggested_reply_cv_ready);
+  const [sending, setSending] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [previewCv, setPreviewCv] = useState(false);
+
+  // A different row selected in the desktop list is a different conversation.
+  useEffect(() => {
+    setBody(email.suggested_reply || '');
+    setAttachCv(!!email.suggested_reply_cv_ready);
+    setDismissed(false);
+  }, [email.id, email.suggested_reply, email.suggested_reply_cv_ready]);
+
   const showIntent = email.reply_intent && email.reply_intent !== 'unclear';
-  const showDraft  = email.reply_intent === 'cv_request' && email.suggested_reply;
-  if (!showIntent && !showDraft) return null;
+
+  // Already answered — say so and stop asking. No box, no nag.
+  if (alreadySent) {
+    return (
+      <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
+        <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5 flex items-center gap-1.5 flex-wrap">
+          <CheckCircle2 className="w-3.5 h-3.5" /> You replied {timeAgo(email.responded_at)}
+          {email.response_had_cv && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+              CV attached
+            </span>
+          )}
+        </p>
+        {email.response_body && (
+          <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto pr-1">
+            {email.response_body}
+          </p>
+        )}
+        <p className="text-[11px] text-emerald-700/60 mt-2">
+          Follow-ups for this conversation are switched off.
+        </p>
+      </div>
+    );
+  }
+
+  const regenerate = async () => {
+    setDrafting(true);
+    try {
+      const res = await draftReply(email.id, { force: true });
+      setBody(res.suggested_reply || '');
+      setAttachCv(!!res.suggested_reply_cv_ready);
+      if (!res.suggested_reply) toast.info('No draft this time. Write your own below.');
+    } catch (err) {
+      toast.error(err?.message || 'Could not draft a reply.');
+    } finally {
+      setDrafting(false);
+    }
+  };
+
+  const send = async () => {
+    if (!body.trim()) { toast.error('Write something before sending.'); return; }
+    setSending(true);
+    try {
+      const res = await sendReply(email.id, body, { attachCv });
+      toast.success(res.attached_cv ? 'Reply sent with your CV attached.' : 'Reply sent.');
+      onSent?.(res);
+    } catch (err) {
+      toast.error(err?.message || 'Could not send your reply.');
+    } finally {
+      setSending(false);
+    }
+  };
 
   return (
     <>
@@ -702,35 +782,96 @@ function ReplyIntentBlock({ email }) {
           </span>
         </div>
       )}
-      {showDraft && (
+
+      {dismissed ? (
+        <button
+          onClick={() => setDismissed(false)}
+          className="mt-3 inline-flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-emerald-100"
+        >
+          <Pencil className="w-3.5 h-3.5" /> Write a reply
+        </button>
+      ) : (
         <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5 flex items-center gap-1.5 flex-wrap">
-            Suggested reply · review before sending
-            {email.suggested_reply_cv_ready && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">Tailored CV ready</span>
+          <div className="flex items-center justify-between gap-2 flex-wrap mb-1.5">
+            <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70">
+              {draftable ? 'Your reply · review before sending' : 'Your reply'}
+            </p>
+            {draftable && (
+              <button
+                onClick={regenerate}
+                disabled={drafting || sending}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900 disabled:opacity-60"
+              >
+                {drafting
+                  ? <><Loader2 className="w-3 h-3 animate-spin" /> Drafting…</>
+                  : <>Redraft</>}
+              </button>
             )}
-          </p>
-          <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line">{email.suggested_reply}</p>
-          <div className="mt-2 flex items-center gap-2 flex-wrap">
+          </div>
+
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={6}
+            disabled={sending}
+            placeholder={draftable
+              ? 'Your drafted reply appears here. Edit anything before sending.'
+              : 'Write your reply. We did not draft one because their message was not clear enough to guess at.'}
+            className="w-full px-3 py-2 rounded-lg border border-emerald-200 bg-white text-sm text-black-light leading-relaxed outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/50 transition-all resize-y disabled:opacity-60"
+          />
+
+          {email.suggested_reply_cv_ready && (
+            <div className="mt-2 flex items-center gap-3 flex-wrap">
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-emerald-900 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={attachCv}
+                  onChange={(e) => setAttachCv(e.target.checked)}
+                  disabled={sending}
+                  className="rounded border-emerald-300 text-emerald-600 focus:ring-emerald-400"
+                />
+                Attach your tailored CV
+              </label>
+              <button
+                type="button"
+                onClick={() => setPreviewCv(true)}
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-900"
+              >
+                <Eye className="w-3.5 h-3.5" /> Preview it
+              </button>
+            </div>
+          )}
+
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             <button
-              onClick={() => { navigator.clipboard?.writeText(email.suggested_reply); toast.success('Reply copied — review it, attach your CV, and send from your inbox.'); }}
-              className="inline-flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-emerald-100">
-              Copy reply
+              onClick={send}
+              disabled={sending || !body.trim()}
+              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <>Send reply <Send className="w-4 h-4" /></>}
             </button>
-            {/* The CV they asked for, right next to the ask — not buried in a
-                footer several sections away. */}
-            <GenerateCvButton
-              job={{ id: email.job_id, title: email.job_title, company_name: email.company_name }}
-              hasCv={email.job_has_cv}
-            />
+            <button
+              onClick={() => setDismissed(true)}
+              disabled={sending}
+              className="text-secondary-dark hover:text-black-light font-semibold rounded-xl px-3 py-2 text-xs transition-colors disabled:opacity-60"
+            >
+              Discard
+            </button>
+            <span className="text-[11px] text-emerald-700/60">
+              Sends from your inbox, in this thread.
+            </span>
           </div>
         </div>
+      )}
+
+      {previewCv && email.job_id && (
+        <TailoredCVPreview jobId={email.job_id} onClose={() => setPreviewCv(false)} />
       )}
     </>
   );
 }
 
-function ReplyCard({ email, reachedCount }) {
+function ReplyCard({ email, reachedCount, onSent }) {
   const r = recipientOf(email);
   const who = r.name || r.email || 'They';
   const copyPost = async () => {
@@ -781,7 +922,7 @@ function ReplyCard({ email, reachedCount }) {
         </p>
       )}
 
-      <ReplyIntentBlock email={email} />
+      <ReplyComposer email={email} onSent={onSent} />
 
       {/* The intro + follow-ups this reply answers — mobile had no way to see
           them at all before. */}
@@ -900,7 +1041,7 @@ function EmptyPreview() {
 
 // The right preview panel — full letter with a sticky footer of actions. Keyed
 // by email id in the parent so its edit state resets when the selection changes.
-function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCount }) {
+function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCount, onSent }) {
   const [editing, setEditing] = useState(false);
   const [subject, setSubject] = useState(email.subject || '');
   const [body, setBody] = useState(email.body || '');
@@ -1000,8 +1141,8 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
               <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
             )}
 
-            {/* Shared with the mobile ReplyCard — see ReplyIntentBlock. */}
-            <ReplyIntentBlock email={email} />
+            {/* Shared with the mobile ReplyCard — see ReplyComposer. */}
+            <ReplyComposer email={email} onSent={onSent} />
             <div className="mt-4 flex items-center gap-2 flex-wrap">
               <a href={gmailThreadUrl(email)} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
@@ -1422,7 +1563,7 @@ const OutreachPage = () => {
               )
             ) : (
               replies.length === 0 ? emptyStateFor('replies') : (
-                <div className="space-y-4">{replies.map((email) => <ReplyCard key={email.id} email={email} reachedCount={reachedCount} />)}</div>
+                <div className="space-y-4">{replies.map((email) => <ReplyCard key={email.id} email={email} reachedCount={reachedCount} onSent={refresh} />)}</div>
               )
             )}
           </div>
@@ -1456,6 +1597,7 @@ const OutreachPage = () => {
                         onDiscard={discardOne}
                         onSaveEdit={handleSaveEdit}
                         reachedCount={reachedCount}
+                        onSent={refresh}
                       />
                     </div>
                   ) : (
