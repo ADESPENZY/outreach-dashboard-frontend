@@ -211,10 +211,18 @@ export async function rescheduleEmail(emailId, sendAt) {
   }
 }
 
-export async function markEmailReplied(emailId) {
+/**
+ * Hand-mark an introduction as replied, for a reply the scanner missed.
+ *
+ * Marks the whole thread and stops its follow-ups (same server path the scan
+ * uses). Pass replyBody when you have what they actually wrote — intent
+ * classification and the CV-request draft can only run with the text.
+ */
+export async function markEmailReplied(emailId, replyBody = '') {
   try {
     const response = await api.patch(
-      `/api/outreach/emails/${emailId}/mark-replied/`
+      `/api/outreach/emails/${emailId}/mark-replied/`,
+      replyBody ? { reply_body: replyBody } : {}
     );
     return response.data;
   } catch (err) {

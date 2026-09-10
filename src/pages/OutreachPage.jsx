@@ -170,8 +170,13 @@ const linkedinPost = (reached) => {
 // row in a thread carries the same intent and body — so in practice this lands
 // on the original, which is also the row whose `body` is the intro the card
 // shows. The first two keys are for legacy rows written before that fix.
+// The grouped card also carries its siblings as `thread_messages` — the whole
+// conversation we sent (original first, then each follow-up). Those rows were
+// already in this payload and were being thrown away; keeping them is what lets
+// a reply show the intro and follow-ups it answers, with no extra request and
+// no thread endpoint.
 function groupRepliesByThread(emails) {
-  const threads = new Map();
+  const buckets = new Map();
   for (const e of emails) {
     if (e.status !== 'replied') continue;
     const key = e.contact?.email
@@ -179,10 +184,23 @@ function groupRepliesByThread(emails) {
       : e.contact?.id  ? `i:${e.contact.id}`
       : e.job_id       ? `j:${e.job_id}`
       : `e:${e.id}`;
-    const prev = threads.get(key);
-    if (!prev || betterReplyRow(e, prev)) threads.set(key, e);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(e);
   }
-  return [...threads.values()].sort(
+
+  const cards = [];
+  for (const rows of buckets.values()) {
+    let chosen = rows[0];
+    for (const r of rows) if (betterReplyRow(r, chosen)) chosen = r;
+    // Conversation order: the original, then follow-ups as they went out.
+    const messages = [...rows].sort(
+      (a, b) => (a.followup_count || 0) - (b.followup_count || 0)
+             || new Date(a.sent_at || 0) - new Date(b.sent_at || 0)
+    );
+    // Spread, never mutate — these rows belong to the react-query cache.
+    cards.push({ ...chosen, thread_messages: messages });
+  }
+  return cards.sort(
     (a, b) => new Date(b.replied_at || b.reply_received_at || 0)
             - new Date(a.replied_at || a.reply_received_at || 0)
   );
@@ -575,6 +593,69 @@ function gmailThreadUrl(email) {
   return base; // last resort: at least the right account's inbox
 }
 
+// The conversation a reply is answering: the original intro, then every
+// follow-up, oldest first. Shared by both reply surfaces (see ReplyIntentBlock
+// for why sharing matters here).
+//
+// Answers "no link from the reply to the full intro": before this, the desktop
+// pane showed a single row's body labelled "The introduction" — misleading once
+// follow-ups existed — and mobile showed no intro at all. Collapsed by default,
+// because their reply is the headline; the thread is context you open.
+function ThreadTimeline({ messages, tone = 'light', title = 'The conversation' }) {
+  const [open, setOpen] = useState(false);
+  const msgs = Array.isArray(messages) ? messages : [];
+  if (msgs.length === 0) return null;
+
+  // Two palettes so this reads correctly on the white desktop card and on the
+  // mobile card's emerald ground.
+  const t = tone === 'emerald'
+    ? { head: 'text-emerald-700/70', label: 'text-emerald-800', meta: 'text-emerald-700/60',
+        body: 'text-emerald-900/90', rule: 'border-emerald-200', chip: 'bg-emerald-100 text-emerald-800' }
+    : { head: 'text-secondary-dark/60', label: 'text-black-light', meta: 'text-secondary-dark/70',
+        body: 'text-black-light', rule: 'border-neutral-dark', chip: 'bg-neutral text-secondary-dark' };
+
+  const labelFor = (m, i) =>
+    (m.followup_count || 0) === 0 ? 'Your introduction' : `Follow-up ${m.followup_count || i}`;
+
+  return (
+    <div className={`mt-4 pt-4 border-t ${t.rule}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-widest ${t.head} hover:opacity-80 transition-opacity`}
+      >
+        {open ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        {title}
+        <span className={`ml-1 rounded-full px-1.5 py-0.5 text-[10px] font-semibold normal-case tracking-normal ${t.chip}`}>
+          {msgs.length === 1 ? '1 message' : `${msgs.length} messages`}
+        </span>
+      </button>
+
+      {open && (
+        <ol className="mt-3 space-y-3">
+          {msgs.map((m, i) => (
+            <li key={m.id} className={`pl-3 border-l-2 ${t.rule}`}>
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <span className={`text-xs font-bold ${t.label}`}>{labelFor(m, i)}</span>
+                {m.sent_at && <span className={`text-[11px] ${t.meta}`}>{timeAgo(m.sent_at)}</span>}
+              </div>
+              {m.subject && (
+                <p className={`text-xs font-semibold ${t.label} mt-0.5`}>{m.subject}</p>
+              )}
+              {m.body && (
+                <p className={`text-xs ${t.body} leading-relaxed whitespace-pre-line mt-1 max-h-48 overflow-y-auto pr-1`}>
+                  {m.body}
+                </p>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  );
+}
+
 // The classified reply intent, plus (for a CV request) the drafted reply to
 // review. Shared by BOTH reply surfaces — the mobile ReplyCard and the desktop
 // PreviewPane. It lives in one place on purpose: this block was originally
@@ -680,6 +761,10 @@ function ReplyCard({ email, reachedCount }) {
       )}
 
       <ReplyIntentBlock email={email} />
+
+      {/* The intro + follow-ups this reply answers — mobile had no way to see
+          them at all before. */}
+      <ThreadTimeline messages={email.thread_messages} tone="emerald" />
 
       <div className="mt-4 flex items-center gap-3 flex-wrap">
         <a
@@ -899,6 +984,16 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
             <>
               {email.subject && <p className="text-lg font-bold font-montserrat text-black-light leading-snug mb-3">{email.subject}</p>}
               <p className="text-sm text-black-light leading-relaxed whitespace-pre-line font-roboto">{email.body}</p>
+              {/* On a reply, the body above is only the FIRST message. The rest
+                  of what we sent lives here, so "The introduction" isn't
+                  quietly hiding three follow-ups. The displayed row is filtered
+                  out so it isn't listed twice. */}
+              {tab === 'replies' && (
+                <ThreadTimeline
+                  title="Follow-ups we sent"
+                  messages={(email.thread_messages || []).filter((m) => m.id !== email.id)}
+                />
+              )}
             </>
           )}
         </div>
