@@ -957,7 +957,44 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
           )}
         </div>
 
-        {/* ── Card 2 — the letter ──────────────────────────────────────── */}
+        {/* ── Card 2 — their reply ─────────────────────────────────────────
+            On the replies tab this is the HEADLINE, so it sits directly under
+            the header. It used to render AFTER the full introduction letter,
+            which pushed the actual reply below the fold — the one thing the
+            user opened this tab to read. */}
+        {tab === 'replies' && (
+          <div className="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-5 lg:p-6">
+            <p className="text-sm font-bold text-emerald-900 flex items-center gap-2"><PartyPopper className="w-4 h-4" /> They replied!</p>
+            {email.reply_body ? (
+              <div className="mt-3">
+                <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5">Their reply</p>
+                <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line max-h-72 overflow-y-auto pr-1">
+                  {email.reply_body}
+                </p>
+                {email.reply_received_at && (
+                  <p className="text-[11px] text-emerald-700/60 mt-1.5">Received {timeAgo(email.reply_received_at)}</p>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
+            )}
+
+            {/* Shared with the mobile ReplyCard — see ReplyIntentBlock. */}
+            <ReplyIntentBlock email={email} />
+            <div className="mt-4 flex items-center gap-2 flex-wrap">
+              <a href={gmailThreadUrl(email)} target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
+                Open in Gmail <ExternalLink className="w-4 h-4" />
+              </a>
+              <button onClick={copyPost}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all">
+                <Linkedin className="w-4 h-4" /> Post on LinkedIn 🎉
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Card 3 — the letter (what WE sent) ───────────────────────── */}
         <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 lg:p-6">
           <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-3 font-montserrat">The introduction</p>
           {editing ? (
@@ -998,38 +1035,6 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
           )}
         </div>
 
-        {/* ── Card 3 — reply celebration ───────────────────────────────── */}
-        {tab === 'replies' && (
-          <div className="bg-emerald-50 rounded-2xl border border-emerald-200 shadow-sm p-5 lg:p-6">
-            <p className="text-sm font-bold text-emerald-900 flex items-center gap-2"><PartyPopper className="w-4 h-4" /> They replied!</p>
-            {email.reply_body ? (
-              <div className="mt-3">
-                <p className="text-[11px] font-bold uppercase tracking-widest text-emerald-700/70 mb-1.5">Their reply</p>
-                <p className="text-sm text-emerald-900/90 leading-relaxed whitespace-pre-line max-h-72 overflow-y-auto pr-1">
-                  {email.reply_body}
-                </p>
-                {email.reply_received_at && (
-                  <p className="text-[11px] text-emerald-700/60 mt-1.5">Received {timeAgo(email.reply_received_at)}</p>
-                )}
-              </div>
-            ) : (
-              <p className="text-sm text-emerald-900/80 mt-1">Open your inbox to read it and keep the conversation going.</p>
-            )}
-
-            {/* Shared with the mobile ReplyCard — see ReplyIntentBlock. */}
-            <ReplyIntentBlock email={email} />
-            <div className="mt-4 flex items-center gap-2 flex-wrap">
-              <a href={gmailThreadUrl(email)} target="_blank" rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 bg-white text-emerald-700 border border-emerald-200 font-semibold rounded-xl px-3.5 py-2 text-sm hover:bg-emerald-100 transition-colors">
-                Open in Gmail <ExternalLink className="w-4 h-4" />
-              </a>
-              <button onClick={copyPost}
-                className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all">
-                <Linkedin className="w-4 h-4" /> Post on LinkedIn 🎉
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* ── Card 3 — sent status ─────────────────────────────────────── */}
         {tab === 'sent' && st && (
