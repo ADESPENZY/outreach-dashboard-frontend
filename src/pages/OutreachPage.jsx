@@ -175,25 +175,46 @@ const linkedinPost = (reached) => {
 // already in this payload and were being thrown away; keeping them is what lets
 // a reply show the intro and follow-ups it answers, with no extra request and
 // no thread endpoint.
+const threadKeyOf = (e) =>
+  e.contact?.email ? `c:${String(e.contact.email).toLowerCase()}`
+  : e.contact?.id  ? `i:${e.contact.id}`
+  : e.job_id       ? `j:${e.job_id}`
+  : `e:${e.id}`;
+
+// Statuses that mean the message actually went out. A reply marks only the rows
+// that were 'sent'/'opened' at the time, so the original can sit at another
+// status and be missing from the replied set — which is how a FOLLOW-UP ended
+// up displayed as "The introduction". The conversation is assembled from
+// everything we actually sent this contact, not just the replied rows.
+const WENT_OUT = ['sent', 'opened', 'replied', 'bounced'];
+
 function groupRepliesByThread(emails) {
   const buckets = new Map();
   for (const e of emails) {
     if (e.status !== 'replied') continue;
-    const key = e.contact?.email
-      ? `c:${String(e.contact.email).toLowerCase()}`
-      : e.contact?.id  ? `i:${e.contact.id}`
-      : e.job_id       ? `j:${e.job_id}`
-      : `e:${e.id}`;
+    const key = threadKeyOf(e);
     if (!buckets.has(key)) buckets.set(key, []);
     buckets.get(key).push(e);
   }
 
+  // Every message we sent, per thread — the superset the timeline draws from.
+  const sentByKey = new Map();
+  for (const e of emails) {
+    if (!WENT_OUT.includes(e.status)) continue;
+    const key = threadKeyOf(e);
+    if (!buckets.has(key)) continue;          // only threads that got a reply
+    if (!sentByKey.has(key)) sentByKey.set(key, []);
+    sentByKey.get(key).push(e);
+  }
+
   const cards = [];
-  for (const rows of buckets.values()) {
+  for (const [key, rows] of buckets.entries()) {
+    // The CARD row comes from the replied set — it is the one carrying
+    // reply_body and the classification.
     let chosen = rows[0];
     for (const r of rows) if (betterReplyRow(r, chosen)) chosen = r;
-    // Conversation order: the original, then follow-ups as they went out.
-    const messages = [...rows].sort(
+    // The CONVERSATION is everything we sent, in the order it went out.
+    const messages = [...(sentByKey.get(key) || rows)].sort(
       (a, b) => (a.followup_count || 0) - (b.followup_count || 0)
              || new Date(a.sent_at || 0) - new Date(b.sent_at || 0)
     );
@@ -996,7 +1017,15 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
 
         {/* ── Card 3 — the letter (what WE sent) ───────────────────────── */}
         <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 lg:p-6">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-3 font-montserrat">The introduction</p>
+          {/* Say what this actually IS. When someone replies to a follow-up
+              rather than the original, the row we show is that follow-up —
+              labelling it "The introduction" told the user a plain untruth
+              about which message they were reading. */}
+          <p className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 mb-3 font-montserrat">
+            {(email.followup_count || 0) === 0
+              ? 'The introduction'
+              : `Our follow-up${email.followup_count > 1 ? ` #${email.followup_count}` : ''}`}
+          </p>
           {editing ? (
             <div className="space-y-3">
               <div>
