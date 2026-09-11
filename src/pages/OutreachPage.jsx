@@ -742,22 +742,42 @@ function ReplyComposer({ email, onSent }) {
     );
   }
 
-  const regenerate = async () => {
+  const regenerate = async (opts = {}) => {
     setDrafting(true);
     try {
-      const res = await draftReply(email.id, { force: true });
+      const res = await draftReply(email.id, { force: true, ...opts });
       setBody(res.suggested_reply || '');
-      setAttachCv(!!res.suggested_reply_cv_ready);
+      if (res.suggested_reply_cv_ready !== undefined && opts.attachCv === undefined) {
+        setAttachCv(!!res.suggested_reply_cv_ready);
+      }
       if (!res.suggested_reply) toast.info('No draft this time. Write your own below.');
+      return res;
     } catch (err) {
       toast.error(err?.message || 'Could not draft a reply.');
+      return null;
     } finally {
       setDrafting(false);
     }
   };
 
+  // apply_via_portal: they asked us to apply FIRST. The draft says the
+  // application is in, which is a statement of fact only the user can make, so
+  // nothing is drafted until they confirm it. `suggested_reply` being empty is
+  // the "not yet confirmed" state — no extra field, no migration.
+  const awaitingApplied =
+    email.reply_intent === 'apply_via_portal' && !email.suggested_reply && !body;
+
+  // The "attached" sentence must not outlive the attachment. If they untick the
+  // CV while the draft still claims it, sending is blocked until it is redrafted.
+  const claimsAttachment = /\battach(ed|ing|ment)\b/i.test(body);
+  const attachmentMismatch = claimsAttachment && !attachCv;
+
   const send = async () => {
     if (!body.trim()) { toast.error('Write something before sending.'); return; }
+    if (attachmentMismatch) {
+      toast.error('This reply says your CV is attached. Tick the box, or redraft without that line.');
+      return;
+    }
     setSending(true);
     try {
       const res = await sendReply(email.id, body, { attachCv });
@@ -783,7 +803,42 @@ function ReplyComposer({ email, onSent }) {
         </div>
       )}
 
-      {dismissed ? (
+      {/* They asked us to apply first. Nothing is drafted until the user says
+          they actually did — the reply states the application is in, and only
+          they can know that. */}
+      {awaitingApplied && !dismissed ? (
+        <div className="mt-3 rounded-xl border border-emerald-200 bg-white p-3">
+          <p className="text-sm font-semibold text-emerald-900">
+            {recipientOf(email).name || 'They'} asked you to apply first.
+          </p>
+          <p className="text-xs text-emerald-800/80 mt-1 leading-relaxed">
+            Apply for{' '}
+            <JobLink jobId={email.job_id} className="font-semibold">
+              {email.job_title || 'the role'}
+            </JobLink>
+            {email.company_name ? ` at ${email.company_name}` : ''}, then confirm below
+            so the reply can say your application is in.
+          </p>
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => regenerate({ applied: true })}
+              disabled={drafting}
+              className="inline-flex items-center gap-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-60"
+            >
+              {drafting
+                ? <><Loader2 className="w-4 h-4 animate-spin" /> Drafting…</>
+                : <><CheckCircle2 className="w-4 h-4" /> I&rsquo;ve applied</>}
+            </button>
+            <button
+              onClick={() => setDismissed(true)}
+              disabled={drafting}
+              className="text-secondary-dark hover:text-black-light font-semibold rounded-xl px-3 py-2 text-xs transition-colors disabled:opacity-60"
+            >
+              Not yet
+            </button>
+          </div>
+        </div>
+      ) : dismissed ? (
         <button
           onClick={() => setDismissed(false)}
           className="mt-3 inline-flex items-center gap-1.5 text-emerald-700 border border-emerald-200 bg-white rounded-lg px-3 py-1.5 text-xs font-semibold hover:bg-emerald-100"
@@ -842,10 +897,31 @@ function ReplyComposer({ email, onSent }) {
             </div>
           )}
 
+          {/* The draft promises an attachment that is no longer going. Sending
+              is blocked until it matches — a claim about an attachment is a
+              statement of fact to a hiring contact. */}
+          {attachmentMismatch && (
+            <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-900 leading-relaxed">
+                This reply says your CV is attached, but it is not.{' '}
+                <button
+                  type="button"
+                  onClick={() => regenerate({ attachCv: false })}
+                  disabled={drafting}
+                  className="underline font-semibold hover:text-amber-700 disabled:opacity-60"
+                >
+                  Redraft without that line
+                </button>
+                , or tick the box above.
+              </p>
+            </div>
+          )}
+
           <div className="mt-3 flex items-center gap-2 flex-wrap">
             <button
               onClick={send}
-              disabled={sending || !body.trim()}
+              disabled={sending || !body.trim() || attachmentMismatch}
               className="inline-flex items-center gap-1.5 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {sending ? <><Loader2 className="w-4 h-4 animate-spin" /> Sending…</> : <>Send reply <Send className="w-4 h-4" /></>}

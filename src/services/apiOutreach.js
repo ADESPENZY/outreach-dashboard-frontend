@@ -393,11 +393,16 @@ export async function renderCvPdf(jobId, template) {
  * Draft the user's response to an inbound reply, for review. Never sends.
  * `force` re-drafts over an existing one.
  */
-export async function draftReply(emailId, { force = false } = {}) {
+export async function draftReply(
+  emailId,
+  { force = false, applied = false, attachCv = undefined } = {}
+) {
   try {
+    const body = { applied };
+    if (attachCv !== undefined) body.attach_cv = attachCv;
     const response = await api.post(
       `/api/outreach/emails/${emailId}/draft-reply/${force ? "?force=true" : ""}`,
-      {}
+      body
     );
     return response.data;
   } catch (err) {
