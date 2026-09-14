@@ -26,28 +26,29 @@ const AnalyticsDashboardOverview = () => {
 
   const dates   = daily_activity.map(d => d.date);
   const sentArr = daily_activity.map(d => d.sent);
-  const openArr = daily_activity.map(d => d.opened);
+  // See Analytics.jsx — the opened series was measuring auto-replies.
+  const delArr  = daily_activity.map(d => d.delivered);
   const repArr  = daily_activity.map(d => d.replied);
 
   const activityChart = {
     animation: false,
     tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.95)', borderColor: '#e5e7eb', borderWidth: 1, textStyle: { color: '#1f2937' } },
-    legend: { data: ['Sent', 'Opened', 'Replied'], bottom: 0, textStyle: { color: '#1f2937' } },
+    legend: { data: ['Sent', 'Delivered', 'Replied'], bottom: 0, textStyle: { color: '#1f2937' } },
     grid: { left: 0, right: 0, top: 10, bottom: 30, containLabel: true },
     xAxis: { type: 'category', boundaryGap: false, data: dates, axisLine: { lineStyle: { color: '#e5e7eb' } }, axisLabel: { color: '#9ca3af', fontSize: 10 } },
     yAxis: { type: 'value', minInterval: 1, axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f3f4f6' } }, axisLabel: { color: '#9ca3af' } },
     series: [
       { name: 'Sent',    type: 'line', smooth: true, showSymbol: false, data: sentArr, lineStyle: { width: 3, color: 'rgba(87,181,231,1)' },   areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(87,181,231,0.2)' }, { offset: 1, color: 'rgba(87,181,231,0.01)' }] } } },
-      { name: 'Opened',  type: 'line', smooth: true, showSymbol: false, data: openArr, lineStyle: { width: 3, color: 'rgba(141,211,199,1)' },  areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(141,211,199,0.2)' }, { offset: 1, color: 'rgba(141,211,199,0.01)' }] } } },
+      { name: 'Delivered',  type: 'line', smooth: true, showSymbol: false, data: delArr, lineStyle: { width: 3, color: 'rgba(141,211,199,1)' },  areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(141,211,199,0.2)' }, { offset: 1, color: 'rgba(141,211,199,0.01)' }] } } },
       { name: 'Replied', type: 'line', smooth: true, showSymbol: false, data: repArr,  lineStyle: { width: 3, color: 'rgba(251,191,114,1)' },  areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(251,191,114,0.2)' }, { offset: 1, color: 'rgba(251,191,114,0.01)' }] } } },
     ],
   };
 
-  // Reply rate leads (the real signal); open rate flagged as approximate.
+  // Reply rate leads. There is no open rate: the pixel is off.
   const stats = [
     { label: 'Reply Rate',       value: `${summary.reply_rate}%`, icon: MessageSquare,  color: 'bg-emerald-50 text-emerald-500' },
     { label: 'Emails Sent (14d)', value: summary.total_sent,      icon: Send,           color: 'bg-blue-50 text-blue-500' },
-    { label: 'Open Rate*',       value: `${summary.open_rate}%`,  icon: MailOpen,       color: 'bg-purple-50 text-purple-500' },
+    { label: 'Delivered',        value: summary.total_delivered,  icon: MailOpen,       color: 'bg-purple-50 text-purple-500' },
     { label: 'Contacts Found',   value: pipeline.total_contacts,  icon: Users,          color: 'bg-amber-50 text-amber-500' },
   ];
 

@@ -557,10 +557,31 @@ function SentCard({ email }) {
         </div>
       </div>
 
+      {/* This person is gone — they bounced permanently, or they wrote back to
+          say they had left. Plain language, no status names: the user should
+          not have to know what 'hard bounce' means to understand that the
+          thread is over and we are already looking for a replacement. */}
+      {email.contact_gone && (
+        <div className="mt-3 rounded-xl border border-neutral-dark bg-neutral px-3 py-2.5">
+          <p className="text-xs font-semibold text-black leading-relaxed">
+            {email.contact_gone.message}
+          </p>
+          {email.reply_redirect_email && (
+            <p className="mt-2 text-xs text-secondary-dark">
+              They suggested{' '}
+              <a href={`mailto:${email.reply_redirect_email}`} className="underline hover:text-black">
+                {email.reply_redirect_name ? `${email.reply_redirect_name} · ` : ''}{email.reply_redirect_email}
+              </a>
+              . Nothing has been sent to them.
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Auto-reply (OOO) capture — the recipient is away. Surfaces the
-          message and any alternate contact it named, for the user to act on
-          manually (follow-ups still continue; snoozing is a later pass). */}
-      {email.reply_body && (
+          message for the user to read. A redirect is no longer captured here:
+          an out-of-office names a stand-in for the week, not a contact. */}
+      {email.reply_body && !email.contact_gone && (
         <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">
           <p className="text-[11px] font-bold uppercase tracking-widest text-amber-700/80 mb-1">
             Auto-reply received{email.reply_received_at ? ` · ${timeAgo(email.reply_received_at)}` : ''}
@@ -568,14 +589,6 @@ function SentCard({ email }) {
           <p className="text-xs text-amber-900/90 leading-relaxed whitespace-pre-line max-h-40 overflow-y-auto pr-1">
             {email.reply_body}
           </p>
-          {email.reply_redirect_email && (
-            <p className="mt-2 text-xs font-semibold text-amber-900">
-              Alternate contact mentioned:{' '}
-              <a href={`mailto:${email.reply_redirect_email}`} className="underline hover:text-amber-700">
-                {email.reply_redirect_name ? `${email.reply_redirect_name} · ` : ''}{email.reply_redirect_email}
-              </a>
-            </p>
-          )}
         </div>
       )}
 

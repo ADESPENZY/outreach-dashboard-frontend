@@ -120,12 +120,6 @@ const InboxOverview = () => {
 
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs font-medium text-secondary-dark/60">Open Rate</p>
-                  <p className="text-lg font-semibold text-black mt-1">
-                    {account.performance.open_rate}%
-                  </p>
-                </div>
-                <div>
                   <p className="text-xs font-medium text-secondary-dark/60">Reply Rate</p>
                   <p className="text-lg font-semibold text-black mt-1">
                     {account.performance.reply_rate}%

@@ -87,19 +87,21 @@ const Analytics = () => {
 
   const dates   = daily_activity.map(d => d.date);
   const sentArr = daily_activity.map(d => d.sent);
-  const openArr = daily_activity.map(d => d.opened);
+  // No opened series. The tracking pixel is off, so 'opened' only ever meant
+  // an auto-reply had landed — a holiday count wearing an engagement label.
+  const delArr  = daily_activity.map(d => d.delivered);
   const repArr  = daily_activity.map(d => d.replied);
 
   const activityChart = {
     animation: false,
     tooltip: { trigger: 'axis', backgroundColor: '#fff', borderColor: '#F3F4F6', borderWidth: 1, textStyle: { color: '#1A1A1A' } },
-    legend: { data: ['Sent', 'Opened', 'Replied'], bottom: 0 },
+    legend: { data: ['Sent', 'Delivered', 'Replied'], bottom: 0 },
     grid: { left: '3%', right: '4%', bottom: '12%', top: '4%', containLabel: true },
     xAxis: { type: 'category', boundaryGap: false, data: dates, axisLabel: { color: '#6B7280', fontSize: 11 } },
     yAxis: { type: 'value', minInterval: 1, axisLabel: { color: '#6B7280' } },
     series: [
       { name: 'Sent',    type: 'line', smooth: true, showSymbol: false, data: sentArr, lineStyle: { width: 3, color: 'rgba(87,181,231,1)' },   areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(87,181,231,0.2)' }, { offset: 1, color: 'rgba(87,181,231,0.01)' }] } } },
-      { name: 'Opened',  type: 'line', smooth: true, showSymbol: false, data: openArr, lineStyle: { width: 3, color: 'rgba(141,211,199,1)' },  areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(141,211,199,0.2)' }, { offset: 1, color: 'rgba(141,211,199,0.01)' }] } } },
+      { name: 'Delivered',  type: 'line', smooth: true, showSymbol: false, data: delArr, lineStyle: { width: 3, color: 'rgba(141,211,199,1)' },  areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(141,211,199,0.2)' }, { offset: 1, color: 'rgba(141,211,199,0.01)' }] } } },
       { name: 'Replied', type: 'line', smooth: true, showSymbol: false, data: repArr,  lineStyle: { width: 3, color: 'rgba(251,191,114,1)' },  areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(251,191,114,0.2)' }, { offset: 1, color: 'rgba(251,191,114,0.01)' }] } } },
     ],
   };
@@ -186,7 +188,7 @@ const Analytics = () => {
         <StatCard label="Reply Rate"   value={`${summary.reply_rate}%`} sub="the metric that matters" icon={MessageSquare} color="bg-emerald-50 text-emerald-600" />
         <StatCard label="Emails Sent"  value={summary.total_sent}      sub={`last ${days} days`}     icon={Send}          color="bg-blue-50 text-blue-500" />
         <StatCard label="Replies"      value={summary.total_replied}   sub={`last ${days} days`}     icon={MessageSquare} color="bg-green-50 text-green-600" />
-        <StatCard label="Open Rate"    value={`${summary.open_rate}%`}  sub="approx · incl. prefetch" icon={MailOpen}      color="bg-purple-50 text-purple-500" />
+        <StatCard label="Delivered"    value={summary.total_delivered} sub="reached an inbox"      icon={Mail}          color="bg-purple-50 text-purple-500" />
       </div>
 
       {/* Pipeline state — current, not time-bound */}
@@ -194,7 +196,6 @@ const Analytics = () => {
         <StatCard label="Contacts Found" value={pipeline.total_contacts} sub="all time"        icon={Users}    color="bg-amber-50 text-amber-500" />
         <StatCard label="Drafts"         value={summary.total_drafts}    sub="ready to review"  icon={FileText} color="bg-neutral-dark text-secondary-dark" />
         <StatCard label="Awaiting Send"  value={summary.total_approved}  sub="approved/queued"  icon={Mail}     color="bg-amber-50 text-amber-500" />
-        <StatCard label="Opened"         value={summary.total_opened}    sub={`last ${days} days`} icon={MailOpen} color="bg-violet-50 text-violet-500" />
       </div>
 
       {/* Conversion Funnel — where opportunities drop off (all time) */}
@@ -237,7 +238,6 @@ const Analytics = () => {
                 <tr className="bg-neutral/70 text-xs uppercase tracking-wider text-secondary-dark font-semibold font-montserrat border-b border-neutral-dark">
                   <th className="px-5 py-3">Inbox</th>
                   <th className="px-5 py-3 text-right">Sent</th>
-                  <th className="px-5 py-3 text-right">Opened</th>
                   <th className="px-5 py-3 text-right">Replied</th>
                   <th className="px-5 py-3 text-right">Reply Rate</th>
                 </tr>
@@ -247,7 +247,6 @@ const Analytics = () => {
                   <tr key={r.email} className="hover:bg-neutral/50 transition-colors">
                     <td className="px-5 py-3 font-medium text-black">{r.email}</td>
                     <td className="px-5 py-3 text-right text-secondary-dark">{r.sent}</td>
-                    <td className="px-5 py-3 text-right text-secondary-dark">{r.opened}</td>
                     <td className="px-5 py-3 text-right text-secondary-dark">{r.replied}</td>
                     <td className="px-5 py-3 text-right font-semibold text-emerald-600">{r.reply_rate}%</td>
                   </tr>
@@ -261,7 +260,7 @@ const Analytics = () => {
       {/* Daily Activity Chart */}
       <div className="bg-white rounded-2xl shadow-sm border border-neutral-dark p-6">
         <h2 className="text-base font-bold text-black-light font-montserrat mb-4">Daily Email Activity</h2>
-        {sentArr.every(v => v === 0) && openArr.every(v => v === 0) && repArr.every(v => v === 0) ? (
+        {sentArr.every(v => v === 0) && delArr.every(v => v === 0) && repArr.every(v => v === 0) ? (
           <div className="h-48 flex items-center justify-center text-secondary-dark/60 text-sm">
             No emails sent in the last {days} days yet.
           </div>
@@ -307,7 +306,6 @@ const Analytics = () => {
                   <th className="px-5 py-3">Strategy</th>
                   <th className="px-5 py-3 text-right">In pipeline</th>
                   <th className="px-5 py-3 text-right">Sent</th>
-                  <th className="px-5 py-3 text-right">Opened</th>
                   <th className="px-5 py-3 text-right">Replied</th>
                   <th className="px-5 py-3 text-right">Open rate</th>
                   <th className="px-5 py-3 text-right">Reply rate</th>
@@ -329,9 +327,7 @@ const Analytics = () => {
                       </td>
                       <td className="px-5 py-3 text-right text-secondary-dark">{s.drafts}</td>
                       <td className="px-5 py-3 text-right text-secondary-dark">{s.sent}</td>
-                      <td className="px-5 py-3 text-right text-secondary-dark">{s.opened}</td>
                       <td className="px-5 py-3 text-right text-secondary-dark">{s.replied}</td>
-                      <td className="px-5 py-3 text-right font-semibold text-purple-600">{s.open_rate}%</td>
                       <td className="px-5 py-3 text-right font-semibold text-emerald-600">{s.reply_rate}%</td>
                     </tr>
                   );

@@ -202,7 +202,7 @@ const Inboxes = () => {
       <div className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
         <StatCard label="Connected Inboxes" value={summary.total_accounts  ?? '—'} icon={Mail}         color="bg-blue-50 text-blue-500"    />
         <StatCard label="Active"             value={summary.active_accounts ?? '—'} icon={Users}        color="bg-emerald-50 text-emerald-500" />
-        <StatCard label="Avg Open Rate"      value={`${summary.avg_open_rate ?? 0}%`}  icon={MailOpen}     color="bg-purple-50 text-purple-500" />
+        <StatCard label="Avg Bounce Rate"    value={`${summary.avg_bounce_rate ?? 0}%`} icon={MailOpen}    color="bg-purple-50 text-purple-500" />
         <StatCard label="Avg Reply Rate"     value={`${summary.avg_reply_rate ?? 0}%`} icon={MessageSquare} color="bg-amber-50 text-amber-500"  />
       </div>
 
@@ -274,7 +274,6 @@ const Inboxes = () => {
                   <th className="px-5 py-3">Status</th>
                   <th className="px-5 py-3">Daily Quota</th>
                   <th className="px-5 py-3 hidden md:table-cell">Sends</th>
-                  <th className="px-5 py-3 hidden lg:table-cell">Open Rate</th>
                   <th className="px-5 py-3 hidden lg:table-cell">Reply Rate</th>
                   <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
@@ -317,9 +316,6 @@ const Inboxes = () => {
                             <Send className="w-3.5 h-3.5" />
                             <span>{account.activity.total_sent}</span>
                           </div>
-                        </td>
-                        <td className="px-5 py-4 hidden lg:table-cell text-secondary-dark">
-                          {account.performance.open_rate}%
                         </td>
                         <td className="px-5 py-4 hidden lg:table-cell text-secondary-dark">
                           {account.performance.reply_rate}%
@@ -421,7 +417,6 @@ const Inboxes = () => {
                                     <h4 className="text-xs font-bold text-secondary-dark/60 uppercase tracking-wider mb-3">Performance</h4>
                                     <div className="space-y-3">
                                       {[
-                                        ['Open Rate',   account.performance.open_rate,   'bg-blue-500'],
                                         ['Reply Rate',  account.performance.reply_rate,  'bg-emerald-500'],
                                         ['Bounce Rate', account.performance.bounce_rate, 'bg-red-400'],
                                       ].map(([label, val, color]) => (
@@ -435,9 +430,9 @@ const Inboxes = () => {
                                       ))}
                                       <div className="grid grid-cols-3 gap-2 mt-2">
                                         {[
-                                          ['Sent',    account.activity.total_sent],
-                                          ['Opened',  account.activity.total_opened],
-                                          ['Replied', account.activity.total_replied],
+                                          ['Sent',     account.activity.total_sent],
+                                          ['Replied',  account.activity.total_replied],
+                                          ['Bounced',  account.activity.total_bounced],
                                         ].map(([label, val]) => (
                                           <div key={label} className="bg-white rounded-xl p-3 border border-neutral-dark text-center">
                                             <p className="text-lg font-bold text-black">{val}</p>
