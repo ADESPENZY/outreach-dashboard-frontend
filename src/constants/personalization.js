@@ -28,7 +28,10 @@ export const FALLBACK_DIFFERENTIATORS = [
   'Deep domain expertise',
 ];
 
-export const SECRET_WEAPON_MAX = 400;   // matches SECRET_WEAPON_MAX_CHARS server-side
+// Story answers and secret weapon. Matches SECRET_WEAPON_MAX_CHARS in the email
+// generator and MAX_SECRET_WEAPON_CHARS in accounts.serializers. At 400 the box cut
+// stories off mid-sentence, before the part that made them worth telling.
+export const SECRET_WEAPON_MAX = 2000;
 export const OUTREACH_NOTE_MAX = 300;   // matches the cap in jobs.views.job_patch_status
 export const MAX_DIFFERENTIATORS = 2;
 
