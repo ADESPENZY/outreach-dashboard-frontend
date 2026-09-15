@@ -25,6 +25,7 @@ import JobDetailDrawer from '../components/JobDetailDrawer';
 import ApplyDirectModal from '../components/ApplyDirectModal';
 import BroadenSearchNudge from '../components/BroadenSearchNudge';
 import { postedAge } from '../utils/jobAge';
+import { cardState, draftFailureText } from '../utils/cardState';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // Curated roles the headhunter found, organised by lifecycle so the review flow
@@ -146,22 +147,6 @@ const positiveReason = (text) =>
         ? 'Your experience aligns well with this role.'
         : text;
 
-// Visual lifecycle state, derived from server status + contact/draft/queue flags:
-//   new        → scraped, undecided → Skip / Write Intro
-//   working    → approved, drafting in the background (spinner)
-//   queued     → approved but 3 already in flight → waiting its turn
-//   drafted    → real contact + draft ready → lives on Introductions
-//   no_contact → manual_apply → Apply Direct
-//   sent       → contacted/outreach_automated
-const cardState = (job) => {
-    if (job.status === 'contacted' || job.status === 'outreach_automated') return 'sent';
-    if (job.has_draft && job.has_real_contact) return 'drafted';
-    if (job.status === 'manual_apply' || (job.has_draft && !job.has_real_contact)) return 'no_contact';
-    if (job.status === 'approved' && job.is_queued) return 'queued';
-    if (job.status === 'approved' && !job.has_draft) return 'working';
-    return 'new';
-};
-
 const JobsPage = () => {
     const queryClient = useQueryClient();
     const navigate = useNavigate();
@@ -258,7 +243,8 @@ const JobsPage = () => {
     const queuedJobs  = jobs.filter((j) => effState(j) === 'queued').sort(orderByActed);
     const newJobs     = jobs.filter((j) => effState(j) === 'new');
     // Contact-found cards still mid-completion animation live in the tray, not the grid.
-    const contactJobs = jobs.filter((j) => ['drafted', 'sent'].includes(effState(j)) && !completingIds.has(j.id));
+    // A found contact whose intro was never drafted is still a contact found.
+    const contactJobs = jobs.filter((j) => ['drafted', 'sent', 'contact_no_draft'].includes(effState(j)) && !completingIds.has(j.id));
     const applyJobs   = jobs.filter((j) => effState(j) === 'no_contact');
 
     // Hard cap: nothing new starts while MAX_WORKING are already in flight. The
@@ -408,6 +394,10 @@ const JobsPage = () => {
                     setActedOrder((prev) => prev.filter((x) => x !== id));
                     toast.success(`Introduction ready for ${name} — view on Introductions.`);
                 }, COMPLETE_HOLD_MS);
+            } else if (s === 'contact_no_draft' && !handledRef.current.has(id)) {
+                handledRef.current.add(id);
+                setActedOrder((prev) => prev.filter((x) => x !== id));
+                toast.info(`Found ${j.contact_name || 'a contact'} at ${j.company_name}, but ${draftFailureText(j)}.`);
             } else if (s === 'no_contact' && !handledRef.current.has(id)) {
                 handledRef.current.add(id);
                 setActedOrder((prev) => prev.filter((x) => x !== id));
@@ -688,7 +678,7 @@ const JobsPage = () => {
                     {reason}
                 </p>
 
-                {(state === 'drafted' || state === 'sent') ? (
+                {(state === 'drafted' || state === 'sent' || state === 'contact_no_draft') ? (
                     // The "Intro drafted"/"Intro sent" pill used to live here; the stage
                     // bar below now carries that, so this line is just WHO was found.
                     <div className="mt-2.5 space-y-1.5">
@@ -706,6 +696,12 @@ const JobsPage = () => {
                             <p className="flex items-center gap-1.5 text-xs text-secondary-dark">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                                 <span>Hiring manager found</span>
+                            </p>
+                        )}
+                        {state === 'contact_no_draft' && (
+                            <p className="flex items-center gap-1.5 text-xs text-amber-600">
+                                <Clock className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">No intro yet: {draftFailureText(job)}</span>
                             </p>
                         )}
                     </div>
@@ -778,7 +774,7 @@ const JobsPage = () => {
                         >
                             View on Intros <ArrowRight className="w-4 h-4" />
                         </button>
-                    ) : state === 'no_contact' ? (
+                    ) : (state === 'no_contact' || state === 'contact_no_draft') ? (
                         <div className="grid grid-cols-2 gap-2">
                             <button
                                 onClick={() => applyDirect(job)}

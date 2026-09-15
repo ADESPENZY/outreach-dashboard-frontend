@@ -317,6 +317,30 @@ function BodyPreview({ body }) {
 // ═══════════════════════════════════════════════════════════════════════════
 // TAB 1 — Pending Review card
 // ═══════════════════════════════════════════════════════════════════════════
+// A draft that failed claim verification on every attempt. It is saved rather
+// than thrown away, but it never queues or sends until a person approves it
+// here, which clears the flag. `review_problems` are the verifier's own strings.
+function NeedsReviewBanner({ email, className = '' }) {
+  if (!email.needs_review) return null;
+  const problems = Array.isArray(email.review_problems) ? email.review_problems : [];
+  return (
+    <div className={`rounded-xl border border-amber-300 bg-amber-50 p-3.5 ${className}`}>
+      <p className="flex items-center gap-1.5 text-sm font-semibold text-amber-800">
+        <AlertTriangle className="w-4 h-4 shrink-0" /> Needs your review before it can send
+      </p>
+      <p className="mt-1 text-xs text-amber-800/90">
+        We couldn&rsquo;t verify {problems.length === 1 ? 'this claim' : 'these claims'} against your CV.
+        Edit or remove {problems.length === 1 ? 'it' : 'them'}, then approve.
+      </p>
+      {problems.length > 0 && (
+        <ul className="mt-2 list-disc pl-5 space-y-1 text-xs text-amber-900">
+          {problems.map((p, i) => <li key={i} className="break-words">{p}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function IntroCard({ email, onApprove, onDiscard, onSaveEdit, busy }) {
   const [editing, setEditing] = useState(false);
   const [subject, setSubject] = useState(email.subject || '');
@@ -423,6 +447,7 @@ function IntroCard({ email, onApprove, onDiscard, onSaveEdit, busy }) {
 
         {/* ── RIGHT — the letter ───────────────────────────────────────── */}
         <div className="flex-1 min-w-0 p-5 sm:p-6">
+          <NeedsReviewBanner email={email} className="mb-4" />
           {editing ? (
             <div className="space-y-3">
               <div>
@@ -491,7 +516,7 @@ function IntroCard({ email, onApprove, onDiscard, onSaveEdit, busy }) {
                   >
                     {acting
                       ? <><ApplyDirLoader.Button variant="light" /> Sending…</>
-                      : <>Approve &amp; Send <Send className="w-4 h-4" /></>}
+                      : <>{email.needs_review ? 'Reviewed — Approve & Send' : 'Approve & Send'} <Send className="w-4 h-4" /></>}
                   </button>
                 </div>
               </div>
@@ -1072,7 +1097,9 @@ function PreviewListItem({ email, tab, active, onClick }) {
   const initial = (email.company_name || '?').trim().charAt(0).toUpperCase();
   const match = matchPill(email.job_fit_score);
   const st = tab === 'pending'
-    ? { label: 'Pending review', cls: 'text-primary-dark', dot: 'bg-primary-light' }
+    ? (email.needs_review
+      ? { label: 'Needs review', cls: 'text-amber-700', dot: 'bg-amber-500' }
+      : { label: 'Pending review', cls: 'text-primary-dark', dot: 'bg-primary-light' })
     : tab === 'replies'
       ? { label: 'Replied', cls: 'text-emerald-600', dot: 'bg-emerald-500' }
       : (() => { const s = sentStatus(email); return { label: s.label, cls: s.cls, dot: 'bg-neutral-dark' }; })();
@@ -1159,6 +1186,7 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
     <div className="flex flex-col h-full bg-neutral/50">
       {/* Stacked cards on a light canvas — airy, sectioned, intentional */}
       <div className="flex-1 overflow-y-auto p-4 lg:p-5 space-y-4">
+        {tab === 'pending' && <NeedsReviewBanner email={email} />}
 
         {/* ── Card 1 — company, role, chips, recipient ─────────────────── */}
         <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 lg:p-6">
@@ -1331,7 +1359,7 @@ function PreviewPane({ email, tab, onApprove, onDiscard, onSaveEdit, reachedCoun
                 className="inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed">
                 {acting
                   ? <><ApplyDirLoader.Button variant="light" /> Sending…</>
-                  : <>Approve &amp; Send <Send className="w-4 h-4" /></>}
+                  : <>{email.needs_review ? 'Reviewed — Approve & Send' : 'Approve & Send'} <Send className="w-4 h-4" /></>}
               </button>
             </div>
           )}
@@ -1386,6 +1414,10 @@ const OutreachPage = () => {
 
   // ── Derived lists ───────────────────────────────────────────────────────
   const pending = drafts; // status === 'draft'
+  // Flagged drafts are approved one at a time, by a person reading the claims we
+  // could not verify. Bulk approval never touches them.
+  const bulkApprovable = pending.filter((e) => !e.needs_review);
+  const flaggedCount = pending.length - bulkApprovable.length;
   // One card per THREAD, not per row. `_mark_replied` deliberately flips every
   // sent/opened row in a thread to 'replied' (reply detection depends on that —
   // don't change it), so a reply to a thread with three follow-ups arrives as
@@ -1460,7 +1492,7 @@ const OutreachPage = () => {
     let ok = 0;
     const blocked = [];
     try {
-      for (const email of pending) {
+      for (const email of bulkApprovable) {
         try {
           await approveEmail(email.id);
           await queueEmail(email.id);
@@ -1478,6 +1510,12 @@ const OutreachPage = () => {
         toast.info(
           `${blocked.length} couldn't be sent — no named contact was found. ` +
           `Those roles moved to Apply Direct on Opportunities.`,
+        );
+      }
+      if (flaggedCount > 0) {
+        toast.info(
+          `${flaggedCount} introduction${flaggedCount === 1 ? '' : 's'} need${flaggedCount === 1 ? 's' : ''} your review ` +
+          `before sending, so ${flaggedCount === 1 ? 'it was' : 'they were'} left out.`,
         );
       }
     } finally {
@@ -1628,10 +1666,10 @@ const OutreachPage = () => {
             {tab === 'pending' ? (
               pending.length === 0 ? emptyStateFor('pending') : (
                 <div className="space-y-4">
-                  {pending.length >= 3 && (
+                  {bulkApprovable.length >= 3 && (
                     <div className="rounded-2xl border border-neutral-dark bg-white shadow-sm p-4 flex items-center justify-between gap-3 flex-wrap">
                       <button onClick={approveAll} disabled={bulking} className="inline-flex items-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2 text-sm shadow-sm hover:opacity-90 transition-all disabled:opacity-60">
-                        {bulking ? <><Loader2 className="w-4 h-4 animate-spin" /> Approving…</> : <>Approve all {pending.length} introductions</>}
+                        {bulking ? <><Loader2 className="w-4 h-4 animate-spin" /> Approving…</> : <>Approve all {bulkApprovable.length} introductions</>}
                       </button>
                       <p className="text-xs text-secondary-dark flex items-center gap-1.5 min-w-0">
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-500" />
@@ -1663,11 +1701,11 @@ const OutreachPage = () => {
               <div className="flex rounded-2xl border border-neutral-dark overflow-hidden bg-white shadow-sm h-[calc(100vh-15rem)] min-h-[540px] max-h-[860px]">
                 {/* LEFT — scrollable list of spaced cards on a light canvas */}
                 <div className="w-[38%] shrink-0 border-r border-neutral-dark overflow-y-auto bg-neutral/50 p-3 space-y-3">
-                  {tab === 'pending' && pending.length >= 2 && (
+                  {tab === 'pending' && bulkApprovable.length >= 2 && (
                     <div className="flex items-center justify-between px-1 pb-1">
                       <span className="text-[11px] font-bold uppercase tracking-wider text-secondary-dark/60 font-montserrat">Pending</span>
                       <button onClick={approveAll} disabled={bulking} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-dark hover:text-primary-light transition-colors disabled:opacity-60">
-                        {bulking ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Approving…</> : `Approve all (${pending.length})`}
+                        {bulking ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Approving…</> : `Approve all (${bulkApprovable.length})`}
                       </button>
                     </div>
                   )}
