@@ -11,7 +11,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion'; // eslint-disable-line no-unused-vars
 import { useNavigate } from 'react-router-dom';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
-import { getOpportunityJobs, updateJobStatus, trackJob, getScrapeStatus, searchNow } from '../services/apiJobs';
+import { getOpportunityJobs, updateJobStatus, trackJob, getScrapeStatus, searchNow, retryDraft } from '../services/apiJobs';
 import HeadhuntingState from '../components/HeadhuntingState';
 import RoleRequestModal from '../components/RoleRequestModal';
 import { getAnalytics } from '../services/apiAnalytics';
@@ -25,7 +25,7 @@ import JobDetailDrawer from '../components/JobDetailDrawer';
 import ApplyDirectModal from '../components/ApplyDirectModal';
 import BroadenSearchNudge from '../components/BroadenSearchNudge';
 import { postedAge } from '../utils/jobAge';
-import { cardState, draftFailureText } from '../utils/cardState';
+import { canRetryDraft, cardState, draftFailureText, isRetryingDraft } from '../utils/cardState';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // Curated roles the headhunter found, organised by lifecycle so the review flow
@@ -215,9 +215,11 @@ const JobsPage = () => {
         refetchOnWindowFocus: false,
         staleTime: 30000,
         // Poll while a scrape is active (results stream in), or while anything is
-        // still resolving (finding contact / drafting) or queued. Idle otherwise.
+        // still resolving (finding contact / drafting / retrying a draft) or queued.
+        // Idle otherwise.
         refetchInterval: (query) =>
-            (isSearching || (query.state.data?.jobs || []).some((j) => ['working', 'queued'].includes(cardState(j)))) ? 4000 : false,
+            (isSearching || (query.state.data?.jobs || []).some((j) =>
+                ['working', 'queued'].includes(cardState(j)) || isRetryingDraft(j))) ? 4000 : false,
     });
 
     // Stable identity per fetch — the 90s-ceiling effect depends on `jobs`, and a
@@ -394,7 +396,7 @@ const JobsPage = () => {
                     setActedOrder((prev) => prev.filter((x) => x !== id));
                     toast.success(`Introduction ready for ${name} — view on Introductions.`);
                 }, COMPLETE_HOLD_MS);
-            } else if (s === 'contact_no_draft' && !handledRef.current.has(id)) {
+            } else if (s === 'contact_no_draft' && !isRetryingDraft(j) && !handledRef.current.has(id)) {
                 handledRef.current.add(id);
                 setActedOrder((prev) => prev.filter((x) => x !== id));
                 toast.info(`Found ${j.contact_name || 'a contact'} at ${j.company_name}, but ${draftFailureText(j)}.`);
@@ -449,6 +451,24 @@ const JobsPage = () => {
 
     const handleUpdateStatus = (id, newStatus, silent = false, outreachNote = '') =>
         updateStatusMutation.mutate({ id, newStatus, silent, outreachNote });
+
+    // ── Mutation: try a failed intro draft again ──────────────────────────────
+    // The server accepts (202) and drafts in the background; the card flips to
+    // "Retrying…" at once from the returned payload and resolves on a later poll.
+    // Cooldowns and caps come back as readable errors and are shown as-is.
+    const retryDraftMutation = useMutation({
+        mutationFn: (id) => retryDraft(id),
+        onSuccess: (data, id) => {
+            queryClient.setQueryData(['jobs-page', 'opportunities'], (old) => old?.jobs
+                ? { ...old, jobs: old.jobs.map((j) => (j.id === id ? { ...j, ...data } : j)) }
+                : old);
+            // Re-arm the outcome toast: "Introduction ready…" or "…couldn't draft".
+            handledRef.current.delete(id);
+            setActedOrder((prev) => [id, ...prev.filter((x) => x !== id)]);
+        },
+        onError: (err) => toast.error(err.message || "Couldn't retry just now. Please try again."),
+        onSettled: () => queryClient.invalidateQueries({ queryKey: ['jobs-page'] }),
+    });
 
     // Reach Out → approve; contact search + draft happen in the background.
     // outreachNote is the user's note about THIS company from the personalization
@@ -607,6 +627,8 @@ const JobsPage = () => {
         const state = cardState(job);
         const age = postedAge(job);
         const pendingThisJob = updateStatusMutation.isPending && updateStatusMutation.variables?.id === job.id;
+        const retrying = isRetryingDraft(job)
+            || (retryDraftMutation.isPending && retryDraftMutation.variables === job.id);
         const approvePending = pendingThisJob && updateStatusMutation.variables?.newStatus === 'approved';
         const rejectPending  = pendingThisJob && ['rejected', 'expired'].includes(updateStatusMutation.variables?.newStatus);
 
@@ -698,12 +720,17 @@ const JobsPage = () => {
                                 <span>Hiring manager found</span>
                             </p>
                         )}
-                        {state === 'contact_no_draft' && (
+                        {state === 'contact_no_draft' && (retrying ? (
+                            <p className="flex items-center gap-1.5 text-xs text-primary-dark">
+                                <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
+                                <span className="truncate">Retrying the intro…</span>
+                            </p>
+                        ) : (
                             <p className="flex items-center gap-1.5 text-xs text-amber-600">
                                 <Clock className="w-3.5 h-3.5 shrink-0" />
                                 <span className="truncate">No intro yet: {draftFailureText(job)}</span>
                             </p>
-                        )}
+                        ))}
                     </div>
                 ) : state === 'no_contact' ? (
                     <div className="mt-2.5 flex items-center gap-1.5 text-xs text-secondary-dark min-h-[1.25rem]">
@@ -776,6 +803,17 @@ const JobsPage = () => {
                         </button>
                     ) : (state === 'no_contact' || state === 'contact_no_draft') ? (
                         <div className="grid grid-cols-2 gap-2">
+                            {(canRetryDraft(job) || retrying) && (
+                                <button
+                                    onClick={() => retryDraftMutation.mutate(job.id)}
+                                    disabled={retrying}
+                                    className="col-span-2 inline-flex items-center justify-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold font-montserrat rounded-xl px-4 py-2.5 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                                >
+                                    {retrying
+                                        ? <><Loader2 className="w-4 h-4 animate-spin" /> Retrying…</>
+                                        : <><RefreshCw className="w-4 h-4" /> Try again</>}
+                                </button>
+                            )}
                             <button
                                 onClick={() => applyDirect(job)}
                                 className="col-span-2 inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat rounded-xl px-4 py-2.5 shadow-sm hover:opacity-90 transition-all"

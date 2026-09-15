@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { cardState, draftFailureText } from './cardState.js';
+import { canRetryDraft, cardState, draftFailureText, isRetryingDraft } from './cardState.js';
 
 const job = (overrides) => ({
     status: 'scraped', has_draft: false, has_real_contact: false,
@@ -64,4 +64,32 @@ test('unchanged states', () => {
 test('payloads without has_live_contact fall back to has_real_contact', () => {
     const j = { status: 'manual_apply', has_draft: false, has_real_contact: true };
     assert.equal(cardState(j), 'contact_no_draft');
+});
+
+const failed = (reason, overrides = {}) => job({
+    status: 'approved', has_real_contact: true, has_live_contact: true,
+    draft_failed_at: '2026-09-15T10:00:00Z', draft_failure_reason: reason, ...overrides,
+});
+
+test('Try again is offered when drafting failed, including legacy manual_apply rows', () => {
+    assert.equal(canRetryDraft(failed('generation_failed')), true);
+    assert.equal(canRetryDraft(job({ status: 'manual_apply', has_real_contact: true, has_live_contact: true })), true);
+});
+
+test('Try again is not offered below the fit floor or while a retry runs', () => {
+    assert.equal(canRetryDraft(failed('below_fit_floor')), false);
+    assert.equal(canRetryDraft(failed('retrying')), false);
+});
+
+test('a retry in flight stays a contact card and says so', () => {
+    const j = failed('retrying');
+    assert.equal(cardState(j), 'contact_no_draft');
+    assert.equal(isRetryingDraft(j), true);
+    assert.equal(draftFailureText(j), 'retrying the intro now');
+});
+
+test('Try again never appears on cards without a found contact', () => {
+    assert.equal(canRetryDraft(job({ status: 'manual_apply' })), false);
+    assert.equal(canRetryDraft(job({})), false);
+    assert.equal(canRetryDraft(job({ status: 'approved', has_draft: true, has_real_contact: true })), false);
 });

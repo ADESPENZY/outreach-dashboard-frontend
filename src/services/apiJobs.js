@@ -169,6 +169,26 @@ export async function scoreAllJobs() {
  * thread can hand it to the generator as `highlight`. Omitted when empty so an
  * ordinary skip/approve sends exactly the payload it always did.
  */
+/**
+ * Try a failed intro draft again for a job whose contact was found.
+ * Generation only — the backend never re-runs contact discovery. Resolves with
+ * the card payload (draft_failure_reason: 'retrying'); the outcome arrives on a
+ * later poll. Rejections carry the server's own message (cooldown, daily cap…).
+ */
+export async function retryDraft(id) {
+  try {
+    const response = await api.post(`/api/jobs/${id}/retry-draft/`);
+    return response.data;
+  } catch (err) {
+    // The per-user hourly throttle is DRF's own and answers with a bare
+    // "Request was throttled" detail; every other refusal has a readable error.
+    if (err.response?.status === 429 && !err.response?.data?.code) {
+      throw new Error("You've retried a lot of intros in the last hour. Try again later.");
+    }
+    throw new Error(parseApiError(err));
+  }
+}
+
 export async function updateJobStatus(id, status, outreachNote = '') {
   try {
     const body = { status };

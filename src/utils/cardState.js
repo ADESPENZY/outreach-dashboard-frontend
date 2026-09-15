@@ -35,7 +35,18 @@ export const cardState = (job) => {
 const DRAFT_FAILURE_COPY = {
     below_fit_floor: 'this role is below your fit threshold',
     generation_failed: "we couldn't draft the intro",
+    retrying: 'retrying the intro now',
 };
 
 export const draftFailureText = (job) =>
     DRAFT_FAILURE_COPY[job.draft_failure_reason] || "the intro wasn't drafted";
+
+// A retry is in flight (POST /api/jobs/<id>/retry-draft/ was accepted).
+export const isRetryingDraft = (job) => job.draft_failure_reason === 'retrying';
+
+// "Try again" is offered on a found contact whose intro failed to draft. Not while
+// a retry is running, and not below the fit floor, where no retry can succeed.
+export const canRetryDraft = (job) =>
+    cardState(job) === 'contact_no_draft'
+    && !isRetryingDraft(job)
+    && job.draft_failure_reason !== 'below_fit_floor';
