@@ -41,6 +41,45 @@ const MAX_WORKING = 3;            // mirrors backend MAX_CONCURRENT_AUTODRAFT
 const COMPLETE_HOLD_MS = 3000;    // "Found Sarah Chen ✓" dwell before the card fades
 const RESOLVE_TIMEOUT_MS = 90000; // hard ceiling on any tray spinner — never longer
 
+// Is this card's backend work still plausibly in flight? The Opportunities poll
+// runs only while at least one job answers yes, so this predicate is what decides
+// whether an open tab costs anything.
+//
+// Three tests, and the last two are the point:
+//   1. the server still calls it working/queued, or a draft retry is running;
+//   2. the local 90s ceiling has not already force-resolved it — the same
+//      `timedOut` set effState layers on top, so the poll now stops at exactly
+//      the moment the card leaves the tray instead of running on behind it;
+//   3. its start stamp is still inside that ceiling.
+//
+// Test 3 is the fix. cardState() calls ANY approved row with no draft 'working'
+// (see cardState.js) with no upper bound, so a single row stuck in that state
+// pinned a 4s refetch of all 200 jobs on for as long as the tab stayed open. The
+// backend sweeper (sweep_stuck_autodrafts) does recover such a row within ~10
+// minutes, which is why this rarely ran forever in practice — but nothing in the
+// browser depended on that cron, and nothing should.
+//
+// `timedOutIds` and `startedAtMap` are passed in rather than closed over:
+// react-query evaluates refetchInterval synchronously inside useQuery, before
+// anything declared further down the component is initialised — the temporal
+// dead zone DashboardPage.jsx documents. Both are refs, so they are safe to read.
+const isResolving = (job, timedOutIds, startedAtMap, now) => {
+    if (timedOutIds.has(job.id)) return false;
+    const retrying = isRetryingDraft(job);
+    if (!retrying && !['working', 'queued'].includes(cardState(job))) return false;
+    // A retry restarts the clock at draft_failed_at; anything else runs from
+    // approved_at. Falling back to the client stamp keeps this in lockstep with
+    // the ceiling effect, which stamps every spinning card it sees — including
+    // one inherited from a reload, where the server timestamps may be absent.
+    const stamped = Date.parse(retrying ? job.draft_failed_at : job.approved_at);
+    const startedAt = Number.isNaN(stamped) ? startedAtMap.get(job.id) : stamped;
+    // No stamp anywhere means we are seeing this card for the first time; the
+    // ceiling effect records it on this same render, so the next evaluation is
+    // bounded. Polling one more cycle is correct, and it cannot repeat.
+    if (startedAt == null) return true;
+    return now - startedAt < RESOLVE_TIMEOUT_MS;
+};
+
 const GRID_STAGGER = {
     hidden: {},
     show: { transition: { staggerChildren: 0.06, delayChildren: 0.04 } },
@@ -214,12 +253,17 @@ const JobsPage = () => {
         queryFn:  () => getOpportunityJobs(),
         refetchOnWindowFocus: false,
         staleTime: 30000,
-        // Poll while a scrape is active (results stream in), or while anything is
-        // still resolving (finding contact / drafting / retrying a draft) or queued.
-        // Idle otherwise.
-        refetchInterval: (query) =>
-            (isSearching || (query.state.data?.jobs || []).some((j) =>
-                ['working', 'queued'].includes(cardState(j)) || isRetryingDraft(j))) ? 4000 : false,
+        // Poll while a scrape is active (results stream in), or while a card's
+        // background work could still land. Idle otherwise — and "idle" has to
+        // mean zero requests, so the second test is bounded by the same 90s
+        // ceiling the tray uses rather than by cardState alone. See isResolving.
+        refetchInterval: (query) => {
+            if (isSearching) return 4000;
+            const now = Date.now();
+            return (query.state.data?.jobs || []).some(
+                (j) => isResolving(j, timedOutRef.current, startedAtRef.current, now),
+            ) ? 4000 : false;
+        },
     });
 
     // Stable identity per fetch — the 90s-ceiling effect depends on `jobs`, and a
@@ -464,6 +508,12 @@ const JobsPage = () => {
                 : old);
             // Re-arm the outcome toast: "Introduction ready…" or "…couldn't draft".
             handledRef.current.delete(id);
+            // Restart the resolve clock, the same way approveJob does. The server
+            // stamps draft_failed_at when it accepts the retry, so isResolving is
+            // bounded either way; this covers the window before that payload has
+            // been merged, and keeps the two entry points symmetric.
+            startedAtRef.current.set(id, Date.now());
+            timedOutRef.current.delete(id);
             setActedOrder((prev) => [id, ...prev.filter((x) => x !== id)]);
         },
         onError: (err) => toast.error(err.message || "Couldn't retry just now. Please try again."),
