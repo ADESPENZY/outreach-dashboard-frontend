@@ -34,7 +34,13 @@ function closeReason(code) {
   return 'The connection dropped.';
 }
 
-export function useLiveCopilot(sessionId) {
+/**
+ * options.onAudioShared(): called once the tab's audio has been shared, still
+ * inside Start. The page uses it to try opening the floating window.
+ */
+export function useLiveCopilot(sessionId, options = {}) {
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
   const [status, setStatus] = useState('idle');
   const [problem, setProblem] = useState('');       // shown with Start / Reconnect
   const [view, dispatch] = useReducer(liveReducer, initialLiveState);
@@ -190,6 +196,7 @@ export function useLiveCopilot(sessionId) {
     }
     const audioOnly = new MediaStream([track]);
     Object.assign(r.current, { stream: audioOnly, track });
+    optionsRef.current.onAudioShared?.();
 
     // The browser's own "Stop sharing" bar: stop listening, but don't end the
     // interview — they can press Start again.

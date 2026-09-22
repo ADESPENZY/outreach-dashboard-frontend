@@ -1,16 +1,30 @@
+import { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import {
   ArrowLeft, Mic, Square, Loader2, RefreshCw, AlertCircle, Info, CheckCircle2, Sparkles,
+  PictureInPicture2,
 } from 'lucide-react';
 import { getInterviewContext } from '../services/apiInterview';
 import { useLiveCopilot } from '../hooks/useLiveCopilot';
+import { useDocumentPip } from '../hooks/useDocumentPip';
 import { inlineSegments, parseAnswer } from '../lib/liveCopilot';
 
 // ── Interview Prep — live copilot ────────────────────────────────────────────
 // Read at a glance mid-interview: the question at the top, the answer big and
 // calm below it (lead line + a few bullets), one Start/Stop toggle. The audio
-// loop itself lives in useLiveCopilot. Picture-in-Picture comes next.
+// loop itself lives in useLiveCopilot.
+//
+// Floating window: Document Picture-in-Picture (useDocumentPip). The SAME
+// LivePanel, on the SAME reducer state, is portalled into the floating window,
+// so it updates from the same socket messages as the page — no second copy of
+// the state. It opens after Start when the browser still allows it (the tab
+// picker usually uses up the click), otherwise from the "Pop out" button. It
+// closes on Stop and whenever the socket ends; the in-page panel always works.
+
+// Statuses in which the socket is gone and the floating window closes.
+const PIP_CLOSES_ON = ['idle', 'dropped', 'stopping', 'finished'];
 
 const PRIMARY = 'inline-flex items-center justify-center gap-2 bg-gradient-to-r from-primary-light to-primary-dark text-white font-semibold font-montserrat text-sm rounded-xl px-5 py-2.5 shadow-sm hover:opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
 const SECONDARY = 'inline-flex items-center justify-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold text-sm rounded-xl px-5 py-2.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed';
@@ -22,7 +36,20 @@ export default function InterviewLivePage() {
     queryFn: () => getInterviewContext(sessionId),
     staleTime: Infinity,
   });
-  const live = useLiveCopilot(sessionId);
+  const pip = useDocumentPip();
+  const live = useLiveCopilot(sessionId, {
+    // Right after the tab is shared. requestWindow() needs a live user gesture,
+    // and the tab picker usually outlasts it — then "Pop out" does the job.
+    onAudioShared: () => {
+      const active = navigator.userActivation ? navigator.userActivation.isActive : true;
+      if (pip.supported && active) pip.open().catch(() => {});
+    },
+  });
+
+  const { close: closePip } = pip;
+  useEffect(() => {
+    if (PIP_CLOSES_ON.includes(live.status)) closePip();
+  }, [live.status, closePip]);
 
   const job = context?.job;
   const company = job?.company_name || context?.session?.company_name;
@@ -78,11 +105,58 @@ export default function InterviewLivePage() {
         </Notice>
       )}
 
+      {!finished && live.configured && (
+        <FloatingWindowControl pip={pip} status={live.status} />
+      )}
+
       {live.status === 'idle' && !finished && live.configured && !live.view.question && <HowItWorks />}
 
       {(live.view.question || live.view.caption || ['listening', 'dropped', 'stopping'].includes(live.status)) && !finished && (
         <LivePanel view={live.view} listening={live.status === 'listening'} />
       )}
+
+      {pip.pipWindow && createPortal(
+        <div className="min-h-screen p-3 space-y-2">
+          <StatusLine status={live.status} bankSize={live.view.bankSize} finished={finished} />
+          <LivePanel view={live.view} listening={live.status === 'listening'} compact />
+        </div>,
+        pip.pipWindow.document.body,
+      )}
+    </div>
+  );
+}
+
+function FloatingWindowControl({ pip, status }) {
+  if (!pip.supported) {
+    return (
+      <p className="flex items-center gap-2 text-xs text-secondary-dark">
+        <Info className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+        Your browser doesn't support the floating window — answers will show on this page.
+      </p>
+    );
+  }
+  if (pip.pipWindow) {
+    return (
+      <p className="flex items-center gap-2 text-xs text-secondary-dark">
+        <PictureInPicture2 className="w-3.5 h-3.5 shrink-0 text-accent-teal" aria-hidden="true" />
+        Answers are also showing in the floating window.
+      </p>
+    );
+  }
+  if (!['connecting', 'listening'].includes(status)) return null;
+  return (
+    <div className="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-neutral-dark px-4 py-3">
+      <p className="text-sm text-secondary-dark flex-1 min-w-0">
+        Pop the answers out into a small window that stays on top of your meeting.
+      </p>
+      <button
+        type="button"
+        onClick={() => pip.open().catch(() => {})}
+        className="inline-flex items-center gap-2 bg-neutral hover:bg-neutral-dark text-black-light font-semibold text-sm rounded-xl px-4 py-2 transition-all shrink-0"
+      >
+        <PictureInPicture2 className="w-4 h-4" aria-hidden="true" />
+        Pop out
+      </button>
     </div>
   );
 }
@@ -141,17 +215,18 @@ function StatusLine({ status, bankSize, finished }) {
   return <p className="text-sm text-secondary-dark mt-1" role="status">{text}</p>;
 }
 
-function LivePanel({ view, listening }) {
+function LivePanel({ view, listening, compact = false }) {
   const { lead, bullets } = parseAnswer(view.answer);
   const streaming = !!view.question && !view.answerDone;
+  const pad = compact ? 'px-4 py-3' : 'px-6 py-5';
   return (
     <section className="bg-white rounded-2xl border border-neutral-dark shadow-sm" aria-live="polite">
       {/* Question */}
-      <div className="px-6 py-5 border-b border-neutral-dark">
+      <div className={`${pad} border-b border-neutral-dark`}>
         <p className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider font-montserrat">
           They asked
         </p>
-        <p className="text-base md:text-lg font-semibold text-black-light mt-1 leading-snug">
+        <p className={`${compact ? 'text-sm' : 'text-base md:text-lg'} font-semibold text-black-light mt-1 leading-snug`}>
           {view.question || (listening ? 'Waiting for the first question…' : '—')}
         </p>
         {view.caption && (
@@ -162,7 +237,7 @@ function LivePanel({ view, listening }) {
       </div>
 
       {/* Answer */}
-      <div className="px-6 py-6 space-y-4 min-h-[10rem]">
+      <div className={compact ? 'px-4 py-4 space-y-3' : 'px-6 py-6 space-y-4 min-h-[10rem]'}>
         {view.notice && (
           <p className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
@@ -178,15 +253,15 @@ function LivePanel({ view, listening }) {
         )}
 
         {lead.map((line, i) => (
-          <p key={i} className="text-xl md:text-2xl font-bold font-montserrat text-black-light leading-snug">
+          <p key={i} className={`${compact ? 'text-lg' : 'text-xl md:text-2xl'} font-bold font-montserrat text-black-light leading-snug`}>
             <Inline text={line} />
           </p>
         ))}
 
         {bullets.length > 0 && (
-          <ul className="space-y-3">
+          <ul className={compact ? 'space-y-2' : 'space-y-3'}>
             {bullets.map((b, i) => (
-              <li key={i} className="flex gap-3 text-lg text-black-light leading-relaxed">
+              <li key={i} className={`flex gap-3 ${compact ? 'text-base' : 'text-lg'} text-black-light leading-relaxed`}>
                 {b.label ? (
                   <span className="shrink-0 mt-1 inline-flex items-center justify-center px-2 h-6 rounded-lg bg-primary-light/10 text-primary-dark text-xs font-bold font-montserrat">
                     {b.label}
