@@ -4,6 +4,7 @@ import {
   Briefcase,
   Mail,
   BarChart3,
+  MessagesSquare,
   Settings,
   Flame,
   Plus,
@@ -19,14 +20,15 @@ import { settingsLink } from '@/constants/settingsSections';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import Logo from './brand/Logo';
 
-// The 4-item product navigation. Settings is the gear pinned at the very
+// The 5-item product navigation. Settings is the gear pinned at the very
 // bottom; the live Connected Inboxes status sits just above it.
 // See ARCHITECTURE.md §1.
 const NAV = [
-  { name: 'Home',          icon: Home,       path: '/dashboard' },
-  { name: 'Opportunities', icon: Briefcase,  path: '/dashboard/opportunities' },
-  { name: 'Introductions', icon: Mail,       path: '/dashboard/introductions' },
-  { name: 'Progress',      icon: BarChart3,  path: '/dashboard/progress' },
+  { name: 'Home',           icon: Home,           path: '/dashboard' },
+  { name: 'Opportunities',  icon: Briefcase,      path: '/dashboard/opportunities' },
+  { name: 'Introductions',  icon: Mail,           path: '/dashboard/introductions' },
+  { name: 'Progress',       icon: BarChart3,      path: '/dashboard/progress' },
+  { name: 'Interview Prep', icon: MessagesSquare, path: '/dashboard/interview' },
 ];
 
 // Settings → Email & Sending is where inbox management (and the Reconnect
@@ -159,7 +161,7 @@ const Sidebar = ({ isOpen, onClose }) => {
         </button>
       </div>
 
-      {/* ── MAIN nav — the 4 product items ──────────────────────── */}
+      {/* ── MAIN nav — the 5 product items ──────────────────────── */}
       <nav className="flex-1 mt-6">
         {isCollapsed ? (
           <div className="hidden md:block h-px bg-neutral-dark mx-1 mb-2" />

@@ -17,6 +17,9 @@ const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const JobsPage = lazy(() => import('./pages/JobsPage'));
 const OutreachPage = lazy(() => import('./pages/OutreachPage'));
 const ProgressPage = lazy(() => import('./pages/ProgressPage'));
+const InterviewPrepPage = lazy(() => import('./pages/InterviewPrepPage'));
+const InterviewPrepNewPage = lazy(() => import('./pages/InterviewPrepNewPage'));
+const InterviewLivePage = lazy(() => import('./pages/InterviewLivePage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 const LegalPage = lazy(() => import('./pages/LegalPage'));
 const SettingsHomeRoute = lazy(() =>
@@ -81,11 +84,14 @@ function App() {
             {/* Dashboard — JWT only; onboarding is now optional (progressive disclosure) */}
             <Route element={<ProtectedRoute requireOnboarding={false} />}>
               <Route path="/dashboard" element={<Dashboard />}>
-                {/* ── The 4 product pages ──────────────────────────────── */}
+                {/* ── The 5 product pages ──────────────────────────────── */}
                 <Route index                    element={<DashboardPage />} />   {/* Home */}
                 <Route path="opportunities"     element={<JobsPage />} />        {/* was Jobs */}
                 <Route path="introductions"     element={<OutreachPage />} />    {/* was Outreach */}
                 <Route path="progress"          element={<ProgressPage />} />    {/* new: merges Analytics + JobTracker + Inboxes later */}
+                <Route path="interview"         element={<InterviewPrepPage />} />
+                <Route path="interview/new"     element={<InterviewPrepNewPage />} />
+                <Route path="interview/:sessionId/live" element={<InterviewLivePage />} />  {/* placeholder until the live layer */}
                 {/* Settings is two-faced by breakpoint: at md+ both routes
                     render the unchanged tab-rail page; below md, `settings`
                     is a grouped row list and `settings/<slug>` is one section
