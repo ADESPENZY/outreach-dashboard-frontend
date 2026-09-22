@@ -57,3 +57,42 @@ export async function prepareInterviewSession(sessionId) {
     throw new Error(parseApiError(err));
   }
 }
+
+/**
+ * Everything the live copilot answers from (role, company, status…). The live
+ * page reads it for its header and to know whether the interview already ended.
+ */
+export async function getInterviewContext(sessionId) {
+  try {
+    const response = await api.get(`/api/interview/sessions/${sessionId}/context/`);
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/**
+ * A 90-second ticket for the live copilot socket. Mint it right before
+ * connecting. Rejects with `.status` set (409 = interview ended, 503 = live
+ * help not configured) so the caller can say something specific.
+ */
+export async function mintInterviewTicket(sessionId) {
+  try {
+    const response = await api.post(`/api/interview/sessions/${sessionId}/ws-ticket/`);
+    return response.data;   // { ticket, ws_session_id }
+  } catch (err) {
+    const error = new Error(parseApiError(err));
+    error.status = err.response?.status;
+    throw error;
+  }
+}
+
+/** End the interview over REST — the fallback when the live socket is down at Stop. */
+export async function endInterviewSession(sessionId) {
+  try {
+    const response = await api.post(`/api/interview/sessions/${sessionId}/end/`);
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
