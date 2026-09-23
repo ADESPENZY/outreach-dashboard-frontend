@@ -25,7 +25,10 @@ import JobDetailDrawer from '../components/JobDetailDrawer';
 import ApplyDirectModal from '../components/ApplyDirectModal';
 import BroadenSearchNudge from '../components/BroadenSearchNudge';
 import { postedAge } from '../utils/jobAge';
-import { canRetryDraft, cardState, draftFailureText, isRetryingDraft } from '../utils/cardState';
+import {
+    canRetryDraft, cardState, draftFailureText, isRetryingDraft, WORKING_LABEL, workingStage,
+} from '../utils/cardState';
+import { firstNameOf, introReadyText } from '../utils/introCopy';
 
 // ── Opportunities — the Discover Feed ─────────────────────────────────────
 // Curated roles the headhunter found, organised by lifecycle so the review flow
@@ -438,12 +441,21 @@ const JobsPage = () => {
                 setTimeout(() => {
                     setCompleting((prev) => prev.filter((c) => c.id !== id));
                     setActedOrder((prev) => prev.filter((x) => x !== id));
-                    toast.success(`Introduction ready for ${name} — view on Introductions.`);
+                    toast.success(introReadyText(firstNameOf(j.contact_name)));
                 }, COMPLETE_HOLD_MS);
             } else if (s === 'contact_no_draft' && !isRetryingDraft(j) && !handledRef.current.has(id)) {
                 handledRef.current.add(id);
                 setActedOrder((prev) => prev.filter((x) => x !== id));
-                toast.info(`Found ${j.contact_name || 'a contact'} at ${j.company_name}, but ${draftFailureText(j)}.`);
+                // A draft that saved flagged is NOT this branch — it has a draft,
+                // so it resolves as 'drafted' above and the review banner handles
+                // it. This is a real generation failure, and it reads as an error.
+                if (j.draft_failure_reason === 'generation_failed') {
+                    toast.error(`We couldn't write your introduction to `
+                        + `${firstNameOf(j.contact_name) || 'the hiring manager'} `
+                        + `at ${j.company_name}. You can try again from the card.`);
+                } else {
+                    toast.info(`Found ${j.contact_name || 'a contact'} at ${j.company_name}, but ${draftFailureText(j)}.`);
+                }
             } else if (s === 'no_contact' && !handledRef.current.has(id)) {
                 handledRef.current.add(id);
                 setActedOrder((prev) => prev.filter((x) => x !== id));
@@ -663,7 +675,9 @@ const JobsPage = () => {
                 ) : (
                     <p className="mt-2 flex items-center gap-1.5 text-xs text-primary-dark">
                         <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
-                        <span className="truncate">Finding the hiring manager…</span>
+                        {/* Two phases, never a bare spinner: finding the person,
+                            then writing the intro. See workingStage. */}
+                        <span className="truncate">{WORKING_LABEL[workingStage(job)]}</span>
                     </p>
                 )}
             </div>

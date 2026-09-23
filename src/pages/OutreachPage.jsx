@@ -9,6 +9,7 @@ import {
   AlertTriangle, MapPin, Wallet, Sparkles, Eye,
 } from 'lucide-react';
 import { ApplyDirLoader } from '../components/ui/ApplyDirLoader';
+import { firstNameOf, introReadyText } from '../utils/introCopy';
 import { postedAge } from '../utils/jobAge';
 import GenerateCvButton from '../components/GenerateCvButton';
 import TailoredCVPreview from '../components/TailoredCVPreview';
@@ -1392,6 +1393,26 @@ const OutreachPage = () => {
     queryKey: ['outreach-sent'],
     queryFn: getSentEmails,
   });
+
+  // ── "Your introduction is ready" — announced on THIS page too ─────────────
+  // Reach Out is tapped on Opportunities, but the draft can land minutes later,
+  // by which time the user is often here. The drafts query above already polls,
+  // so the arrival is detectable without any new transport: prime the seen-set
+  // on the first settled fetch (so a reload never toasts the whole backlog),
+  // then toast only ids that appear after it.
+  const seenDraftIds = React.useRef(null);
+  useEffect(() => {
+    if (loadingDrafts) return;
+    const ids = new Set(drafts.map((d) => d.id));
+    if (seenDraftIds.current === null) { seenDraftIds.current = ids; return; }
+    const arrived = drafts.filter((d) => !seenDraftIds.current.has(d.id));
+    seenDraftIds.current = ids;
+    // A draft saved flagged for review is still a draft that is ready to read —
+    // the review banner on the card says the rest. It is not a failure here.
+    arrived.forEach((d) => toast.success(introReadyText(firstNameOf(
+      [d.contact?.first_name, d.contact?.last_name].filter(Boolean).join(' '),
+    ))));
+  }, [drafts, loadingDrafts]);
   const { data: inboxData } = useQuery({ queryKey: ['gmailAccounts'], queryFn: getGmailAccounts });
   const { data: profileData } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   // Testing-mode activation gate DISABLED 2026-07-30 (OAuth app PUBLISHED — no

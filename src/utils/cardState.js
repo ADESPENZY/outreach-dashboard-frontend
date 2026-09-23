@@ -30,6 +30,18 @@ export const cardState = (job) => {
     return 'new';
 };
 
+// A 'working' card is really two phases, and the payload already tells them
+// apart: once a live contact exists but no draft does, the person has been found
+// and the intro is being written. No new field, no backend change.
+export const workingStage = (job) => (hasLiveContact(job) ? 'writing' : 'finding');
+
+// The only two labels a working card may show. Plain English on purpose: the
+// user never sees an internal stage name.
+export const WORKING_LABEL = {
+    finding: 'Finding the hiring manager…',
+    writing: 'Writing your introduction…',
+};
+
 // Why a found contact has no intro. Blank reason = a legacy row flipped to
 // manual_apply before the reason was recorded.
 const DRAFT_FAILURE_COPY = {
