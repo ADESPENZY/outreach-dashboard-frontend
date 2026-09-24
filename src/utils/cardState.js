@@ -42,16 +42,29 @@ export const WORKING_LABEL = {
     writing: 'Writing your introduction…',
 };
 
+// Past the usual duration, and past the point where we stop watching. Both are
+// still WORKING states: elapsed time is not evidence of failure, and the card
+// must never claim one. (Measured: p50 42s, real tail 455-1992s.)
+export const SLOW_LABEL = 'Still working — this one is taking longer than usual.';
+export const LONG_WAIT_LABEL = 'Still working — check Introductions in a few minutes.';
+
 // Why a found contact has no intro. Blank reason = a legacy row flipped to
 // manual_apply before the reason was recorded.
 const DRAFT_FAILURE_COPY = {
-    below_fit_floor: 'this role is below your fit threshold',
     generation_failed: "we couldn't draft the intro",
     retrying: 'retrying the intro now',
 };
 
-export const draftFailureText = (job) =>
-    DRAFT_FAILURE_COPY[job.draft_failure_reason] || "the intro wasn't drafted";
+// Declining to write to a role that scored below the user's own bar is the
+// product working, not the product failing. It is deliberately NOT in the map
+// above: it must never be rendered in a failure colour or counted as an error.
+export const isBelowBar = (job) => job.draft_failure_reason === 'below_fit_floor';
+
+export const BELOW_BAR_TEXT = "we didn't reach out — this one scored below your bar";
+
+export const draftFailureText = (job) => (isBelowBar(job)
+    ? BELOW_BAR_TEXT
+    : DRAFT_FAILURE_COPY[job.draft_failure_reason] || "the intro wasn't drafted");
 
 // A retry is in flight (POST /api/jobs/<id>/retry-draft/ was accepted).
 export const isRetryingDraft = (job) => job.draft_failure_reason === 'retrying';

@@ -2,7 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { canRetryDraft, cardState, draftFailureText, isRetryingDraft } from './cardState.js';
+import {
+    BELOW_BAR_TEXT, canRetryDraft, cardState, draftFailureText, isBelowBar,
+    isRetryingDraft, LONG_WAIT_LABEL, SLOW_LABEL, WORKING_LABEL, workingStage,
+} from './cardState.js';
 
 const job = (overrides) => ({
     status: 'scraped', has_draft: false, has_real_contact: false,
@@ -26,13 +29,35 @@ test('a legacy manual_apply row with a live contact shows the contact', () => {
     assert.equal(draftFailureText(j), "the intro wasn't drafted");
 });
 
-test('below the fit floor keeps the contact and names the reason', () => {
+test('below the bar keeps the contact and is NOT a failure', () => {
     const j = job({
         status: 'approved', has_real_contact: true, has_live_contact: true,
         draft_failed_at: '2026-09-15T10:00:00Z', draft_failure_reason: 'below_fit_floor',
     });
     assert.equal(cardState(j), 'contact_no_draft');
-    assert.equal(draftFailureText(j), 'this role is below your fit threshold');
+    assert.equal(isBelowBar(j), true);
+    assert.equal(draftFailureText(j), BELOW_BAR_TEXT);
+    // It must never borrow the failure wording.
+    assert.ok(!draftFailureText(j).includes("couldn't"));
+});
+
+test('only below_fit_floor is below the bar', () => {
+    assert.equal(isBelowBar(job({ draft_failure_reason: 'generation_failed' })), false);
+    assert.equal(isBelowBar(job({ draft_failure_reason: 'retrying' })), false);
+    assert.equal(isBelowBar(job({})), false);
+});
+
+test('a working card names its phase, and every label is a working one', () => {
+    const finding = job({ status: 'approved' });
+    const writing = job({ status: 'approved', has_real_contact: true, has_live_contact: true });
+    assert.equal(workingStage(finding), 'finding');
+    assert.equal(workingStage(writing), 'writing');
+    // Nothing a slow or abandoned card says may imply failure.
+    for (const label of [WORKING_LABEL.finding, WORKING_LABEL.writing, SLOW_LABEL, LONG_WAIT_LABEL]) {
+        assert.ok(!/couldn't|could not|no hiring manager|apply directly|failed/i.test(label), label);
+    }
+    assert.ok(SLOW_LABEL.startsWith('Still working'));
+    assert.ok(LONG_WAIT_LABEL.includes('Introductions'));
 });
 
 test('manual_apply with no contact is still Apply Direct', () => {

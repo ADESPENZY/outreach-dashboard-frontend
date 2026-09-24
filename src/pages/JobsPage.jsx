@@ -4,7 +4,7 @@ import { toast } from 'react-toastify';
 import { useSearchParams } from 'react-router';
 import {
     MapPin, ArrowRight, ArrowLeft, CheckCircle2, Search, Loader2, UserX,
-    ExternalLink, Clock, FileText, ChevronDown, RefreshCw, SearchX, Sparkles,
+    ExternalLink, Clock, FileText, ChevronDown, RefreshCw, SearchX, Sparkles, Info,
 } from 'lucide-react';
 // `motion` is used only as `<motion.div>` (member-expression JSX), which this
 // eslint config's jsx-uses-vars doesn't count — silence the false positive.
@@ -26,7 +26,8 @@ import ApplyDirectModal from '../components/ApplyDirectModal';
 import BroadenSearchNudge from '../components/BroadenSearchNudge';
 import { postedAge } from '../utils/jobAge';
 import {
-    canRetryDraft, cardState, draftFailureText, isRetryingDraft, WORKING_LABEL, workingStage,
+    canRetryDraft, cardState, draftFailureText, isBelowBar, isRetryingDraft,
+    LONG_WAIT_LABEL, SLOW_LABEL, WORKING_LABEL, workingStage,
 } from '../utils/cardState';
 import { firstNameOf, introReadyText } from '../utils/introCopy';
 
@@ -42,7 +43,14 @@ import { firstNameOf, introReadyText } from '../utils/introCopy';
 const ITEMS_PER_PAGE = 9;
 const MAX_WORKING = 3;            // mirrors backend MAX_CONCURRENT_AUTODRAFT
 const COMPLETE_HOLD_MS = 3000;    // "Found Sarah Chen ✓" dwell before the card fades
-const RESOLVE_TIMEOUT_MS = 90000; // hard ceiling on any tray spinner — never longer
+// Two thresholds, and NEITHER of them means failure. Measured on 54 real drafts
+// (re-drafts excluded): p50 42s, with a genuine tail at 455s / 544s / 645s /
+// 1992s. The old single 90s ceiling sat inside normal work and announced
+// "couldn't find a hiring manager" over drafts that were fine.
+const SLOW_AFTER_MS = 90000;       // past usual → say so, and poll less often
+const RESOLVE_TIMEOUT_MS = 600000; // 10 min → stop watching, still not a failure
+const POLL_FAST_MS = 4000;         // while any card is inside SLOW_AFTER_MS
+const POLL_SLOW_MS = 15000;        // once every watched card is past it
 
 // Is this card's backend work still plausibly in flight? The Opportunities poll
 // runs only while at least one job answers yes, so this predicate is what decides
@@ -66,6 +74,14 @@ const RESOLVE_TIMEOUT_MS = 90000; // hard ceiling on any tray spinner — never 
 // react-query evaluates refetchInterval synchronously inside useQuery, before
 // anything declared further down the component is initialised — the temporal
 // dead zone DashboardPage.jsx documents. Both are refs, so they are safe to read.
+// How long this card has been in flight, by the best stamp available. Shared by
+// the poll predicate and the label effect so the two can never disagree.
+const elapsedFor = (job, startedAtMap, now) => {
+    const stamped = Date.parse(isRetryingDraft(job) ? job.draft_failed_at : job.approved_at);
+    const startedAt = Number.isNaN(stamped) ? startedAtMap.get(job.id) : stamped;
+    return startedAt == null ? 0 : now - startedAt;
+};
+
 const isResolving = (job, timedOutIds, startedAtMap, now) => {
     if (timedOutIds.has(job.id)) return false;
     const retrying = isRetryingDraft(job);
@@ -210,9 +226,14 @@ const JobsPage = () => {
     // the tray with a success flourish for COMPLETE_HOLD_MS, then faded out.
     const [completing, setCompleting] = useState([]);
     const handledRef = useRef(new Set());   // dedupe completion / no-contact toasts
-    // Jobs whose spinner blew the 90s ceiling — presented as Apply Direct instead.
+    // Cards we have stopped watching after RESOLVE_TIMEOUT_MS. They stay in the
+    // tray as work in progress — the server is still the only thing allowed to
+    // say a job has no contact.
     const [timedOut, setTimedOut] = useState(() => new Set());
     const timedOutRef  = useRef(new Set());   // sync mirror of `timedOut`
+    // Cards past SLOW_AFTER_MS: same state, calmer label, slower poll.
+    const [slow, setSlow] = useState(() => new Set());
+    const slowRef = useRef(new Set());
     const startedAtRef = useRef(new Map());   // jobId -> ms when its spinner began
 
     const [searchParams, setSearchParams] = useSearchParams();
@@ -254,18 +275,37 @@ const JobsPage = () => {
     const { data: pageData, isLoading: loading } = useQuery({
         queryKey: ['jobs-page', 'opportunities'],
         queryFn:  () => getOpportunityJobs(),
-        refetchOnWindowFocus: false,
-        staleTime: 30000,
-        // Poll while a scrape is active (results stream in), or while a card's
-        // background work could still land. Idle otherwise — and "idle" has to
-        // mean zero requests, so the second test is bounded by the same 90s
-        // ceiling the tray uses rather than by cardState alone. See isResolving.
-        refetchInterval: (query) => {
-            if (isSearching) return 4000;
+        // Focus refetch, but only while something could actually have landed.
+        // This was `false`, and it is the other half of the Quantiphi bug: the
+        // draft existed at 41s, the backgrounded tab never fetched it, and
+        // coming back showed the stale pre-draft card.
+        refetchOnWindowFocus: (query) => {
+            if (isSearching) return true;
             const now = Date.now();
             return (query.state.data?.jobs || []).some(
                 (j) => isResolving(j, timedOutRef.current, startedAtRef.current, now),
-            ) ? 4000 : false;
+            );
+        },
+        staleTime: 30000,
+        // Poll while a scrape is active (results stream in), or while a card's
+        // background work could still land. Idle otherwise — and "idle" has to
+        // mean zero requests, so the second test is bounded by RESOLVE_TIMEOUT_MS
+        // rather than by cardState alone. See isResolving.
+        //
+        // Two speeds: 4s while any watched card is inside the usual duration,
+        // 15s once they are all past it. A slow job is still watched — it is
+        // watched more cheaply.
+        refetchInterval: (query) => {
+            if (isSearching) return POLL_FAST_MS;
+            const now = Date.now();
+            const watched = (query.state.data?.jobs || []).filter(
+                (j) => isResolving(j, timedOutRef.current, startedAtRef.current, now),
+            );
+            if (!watched.length) return false;
+            const anyFresh = watched.some(
+                (j) => elapsedFor(j, startedAtRef.current, now) < SLOW_AFTER_MS,
+            );
+            return anyFresh ? POLL_FAST_MS : POLL_SLOW_MS;
         },
     });
 
@@ -273,14 +313,11 @@ const JobsPage = () => {
     // fresh array each render would tear its interval down before it could tick.
     const jobs = useMemo(() => pageData?.jobs ?? [], [pageData]);
 
-    // Server state, with the local 90s force-resolve layered on top. The override
-    // only applies while the server still says working/queued — if the backend
-    // later produces a real result, that result wins.
-    const effState = (job) => {
-        const s = cardState(job);
-        if ((s === 'working' || s === 'queued') && timedOut.has(job.id)) return 'no_contact';
-        return s;
-    };
+    // Server state, full stop. There used to be a local override here that
+    // turned any card past the 90s ceiling into 'no_contact' — which put a job
+    // with a contact and a draft into the Apply Direct pile on a timer. Elapsed
+    // time is not a result; only the server decides this.
+    const effState = (job) => cardState(job);
 
     // ── Buckets ───────────────────────────────────────────────────────────────
     const completingIds = new Set(completing.map((c) => c.id));
@@ -387,11 +424,22 @@ const JobsPage = () => {
     useEffect(() => { setCurrentPage(1); }, [activeTab]);
     const pageNewJobs = newJobs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
-    // ── Spinner ceiling ───────────────────────────────────────────────────────
+    // ── How long it has been taking ───────────────────────────────────────────
     // Every card we see spinning gets a start stamp — on click, and also on first
-    // sight of one that was already spinning, so a spinner inherited from a reload
-    // is bounded too. Past RESOLVE_TIMEOUT_MS the card leaves the tray and drops
-    // into Apply Direct, whatever the backend is still doing.
+    // sight of one that was already spinning, so a spinner inherited from a
+    // reload is stamped too.
+    //
+    // This effect used to end a card's life: past 90s it fired "couldn't find a
+    // hiring manager", dropped the card into Apply Direct, marked it handled so
+    // the real success toast could never fire, and killed its polling. All four
+    // were wrong — a slow draft is not a missing contact, and the server is the
+    // only thing that knows whether anyone was found.
+    //
+    // Now it only changes what the card SAYS, and how often we ask:
+    //   past SLOW_AFTER_MS      → "taking longer than usual", poll every 15s
+    //   past RESOLVE_TIMEOUT_MS → "check Introductions", stop polling
+    // No toast at either line, and nothing is marked handled — when the draft
+    // lands, "Your introduction to <name> is ready to review." still fires.
     useEffect(() => {
         const active = jobs.filter((j) => ['working', 'queued'].includes(cardState(j)));
         const now = Date.now();
@@ -402,21 +450,23 @@ const JobsPage = () => {
 
         const tick = () => {
             const t = Date.now();
-            const expired = active.filter((j) => {
-                const t0 = startedAtRef.current.get(j.id);
-                return t0 && t - t0 >= RESOLVE_TIMEOUT_MS && !timedOutRef.current.has(j.id);
+            let changedSlow = false;
+            let changedTimedOut = false;
+            active.forEach((j) => {
+                const elapsed = elapsedFor(j, startedAtRef.current, t);
+                if (elapsed >= SLOW_AFTER_MS && !slowRef.current.has(j.id)) {
+                    slowRef.current.add(j.id);
+                    changedSlow = true;
+                }
+                if (elapsed >= RESOLVE_TIMEOUT_MS && !timedOutRef.current.has(j.id)) {
+                    timedOutRef.current.add(j.id);
+                    changedTimedOut = true;
+                }
             });
-            if (!expired.length) return;
-            expired.forEach((j) => {
-                timedOutRef.current.add(j.id);
-                handledRef.current.add(j.id);   // never double-toast if the server lands later
-                startedAtRef.current.delete(j.id);
-                setActedOrder((prev) => prev.filter((x) => x !== j.id));
-                toast.info(`Couldn't find a hiring manager at ${j.company_name} — you can apply directly.`);
-            });
-            setTimedOut(new Set(timedOutRef.current));
+            if (changedSlow) setSlow(new Set(slowRef.current));
+            if (changedTimedOut) setTimedOut(new Set(timedOutRef.current));
         };
-        tick();                                 // catch anything already past the line
+        tick();                                 // catch anything already past a line
         const id = setInterval(tick, 1000);
         return () => clearInterval(id);
     }, [jobs]);
@@ -449,7 +499,12 @@ const JobsPage = () => {
                 // A draft that saved flagged is NOT this branch — it has a draft,
                 // so it resolves as 'drafted' above and the review banner handles
                 // it. This is a real generation failure, and it reads as an error.
-                if (j.draft_failure_reason === 'generation_failed') {
+                if (isBelowBar(j)) {
+                    // Declining a low-fit role is the product working. Never an
+                    // error toast, and it names the reason in the user's terms.
+                    toast.info(`We didn't reach out to ${j.company_name} — this one scored `
+                        + 'below your bar.');
+                } else if (j.draft_failure_reason === 'generation_failed') {
                     toast.error(`We couldn't write your introduction to `
                         + `${firstNameOf(j.contact_name) || 'the hiring manager'} `
                         + `at ${j.company_name}. You can try again from the card.`);
@@ -675,9 +730,14 @@ const JobsPage = () => {
                 ) : (
                     <p className="mt-2 flex items-center gap-1.5 text-xs text-primary-dark">
                         <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
-                        {/* Two phases, never a bare spinner: finding the person,
-                            then writing the intro. See workingStage. */}
-                        <span className="truncate">{WORKING_LABEL[workingStage(job)]}</span>
+                        {/* Four labels, one state. Never a bare spinner, and
+                            never a failure: finding the person, writing the
+                            intro, taking a while, taking a long while. */}
+                        <span className="truncate">
+                            {timedOut.has(job.id) ? LONG_WAIT_LABEL
+                                : slow.has(job.id) ? SLOW_LABEL
+                                    : WORKING_LABEL[workingStage(job)]}
+                        </span>
                     </p>
                 )}
             </div>
@@ -788,6 +848,13 @@ const JobsPage = () => {
                             <p className="flex items-center gap-1.5 text-xs text-primary-dark">
                                 <Loader2 className="w-3.5 h-3.5 shrink-0 animate-spin" />
                                 <span className="truncate">Retrying the intro…</span>
+                            </p>
+                        ) : isBelowBar(job) ? (
+                            // Not a failure: we found the person and chose not to
+                            // write. Neutral colour, no "no intro yet" framing.
+                            <p className="flex items-center gap-1.5 text-xs text-secondary-dark">
+                                <Info className="w-3.5 h-3.5 shrink-0" />
+                                <span className="truncate">We didn&rsquo;t reach out — this one scored below your bar</span>
                             </p>
                         ) : (
                             <p className="flex items-center gap-1.5 text-xs text-amber-600">
