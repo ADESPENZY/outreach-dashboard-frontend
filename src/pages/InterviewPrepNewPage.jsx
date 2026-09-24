@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import {
@@ -6,13 +6,18 @@ import {
   AlertCircle, Search,
 } from 'lucide-react';
 import { getProfile } from '../services/apiProfile';
-import { createInterviewSession, prepareInterviewSession } from '../services/apiInterview';
+import {
+  createInterviewSession, prepareInterviewSession, updateInterviewSession,
+} from '../services/apiInterview';
+import AnswerStylePicker from '../components/interview/AnswerStylePicker';
+import { DEFAULT_ANSWER_STYLE } from '../constants/answerStyles';
 import { settingsPath } from '../constants/settingsSections';
 
 // ── Interview Prep — new prep wizard ─────────────────────────────────────────
-// Step 1: which CV the answers come from. Step 2: the role. Then we create the
-// interview and write its likely questions + answers (one slow model call —
-// up to a minute), and hand over to the live copilot.
+// Step 1: which CV the answers come from. Step 2: the role. Step 3: how the
+// answers should sound. Then we create the interview, set its style, and write
+// its likely questions + answers (one slow model call — up to a minute), before
+// handing over to the live copilot.
 //
 // Two requests, deliberately separate: if preparing fails, "Try again" re-runs
 // ONLY the prep on the interview we already created, never a second interview.
@@ -34,6 +39,8 @@ export default function InterviewPrepNewPage() {
   const [cvText, setCvText] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [jdText, setJdText] = useState('');
+  // Seeded from the profile default below, then overridable for this interview.
+  const [answerStyle, setAnswerStyle] = useState(DEFAULT_ANSWER_STYLE);
 
   // phase: 'form' → 'creating' → 'preparing' → 'ready' | 'failed'
   const [phase, setPhase] = useState('form');
@@ -45,6 +52,14 @@ export default function InterviewPrepNewPage() {
   const choice = cvChoice ?? (profileCv ? 'base' : 'custom');
   const step1Done = choice === 'base' ? !!profileCv : cvText.trim().length > 0;
   const step2Done = companyName.trim().length > 0 || jdText.trim().length > 0;
+  const stepDone = { 1: step1Done, 2: step2Done, 3: true }[step];
+
+  // Start from the user's saved default; they can pick something else here
+  // without changing the default.
+  const profileStyle = profile?.answer_style_default;
+  useEffect(() => {
+    if (profileStyle) setAnswerStyle(profileStyle);
+  }, [profileStyle]);
 
   async function prepare(target) {
     setPhase('preparing');
@@ -69,6 +84,14 @@ export default function InterviewPrepNewPage() {
       const created = await createInterviewSession({
         cvSource: choice, cvText, jdText: jdText.trim(), companyName: companyName.trim(),
       });
+      // BEFORE preparing: the bank is written in the session's style.
+      if (answerStyle && answerStyle !== created.answer_style) {
+        try {
+          await updateInterviewSession(created.id, { answerStyle });
+        } catch {
+          // Not worth failing the whole prep — it just falls back to the default.
+        }
+      }
       setSession(created);
       queryClient.invalidateQueries({ queryKey: ['interviewSessions'] });
       await prepare(created);
@@ -78,8 +101,11 @@ export default function InterviewPrepNewPage() {
     }
   }
 
+  // The style step shows three sample cards side by side; give it room.
+  const width = step === 3 && phase === 'form' ? 'max-w-5xl' : 'max-w-2xl';
+
   return (
-    <div className="p-4 md:p-8 w-full max-w-2xl mx-auto space-y-6 font-roboto">
+    <div className={`p-4 md:p-8 w-full ${width} mx-auto space-y-6 font-roboto transition-[max-width] duration-300`}>
       <Link
         to="/dashboard/interview"
         className="inline-flex items-center gap-1.5 text-sm text-secondary-dark hover:text-black-light hover:bg-neutral rounded-lg px-3 py-2 -ml-3 transition-colors"
@@ -100,9 +126,10 @@ export default function InterviewPrepNewPage() {
       ) : (
         <div className="bg-white rounded-2xl border border-neutral-dark shadow-sm">
           <div className="px-6 py-5 border-b border-neutral-dark">
-            <p className="text-xs text-secondary-dark">Step {step} of 2</p>
+            <p className="text-xs text-secondary-dark">Step {step} of 3</p>
             <h1 className="text-lg font-bold font-montserrat text-black-light mt-0.5">
-              {step === 1 ? 'Which CV are you using?' : 'About the role'}
+              {{ 1: 'Which CV are you using?', 2: 'About the role',
+                 3: 'How should your answers sound?' }[step]}
             </h1>
           </div>
 
@@ -116,12 +143,19 @@ export default function InterviewPrepNewPage() {
                 cvText={cvText}
                 onCvText={setCvText}
               />
-            ) : (
+            ) : step === 2 ? (
               <StepRole
                 companyName={companyName}
                 onCompanyName={setCompanyName}
                 jdText={jdText}
                 onJdText={setJdText}
+              />
+            ) : (
+              <AnswerStylePicker
+                value={answerStyle}
+                onChange={setAnswerStyle}
+                title="Pick the voice for this interview"
+                description="Listen to each one. You can switch mid-interview, and this doesn't change your usual default."
               />
             )}
 
@@ -134,14 +168,14 @@ export default function InterviewPrepNewPage() {
           </div>
 
           <div className="px-6 py-4 border-t border-neutral-dark flex items-center justify-between gap-3">
-            {step === 2 ? (
-              <button type="button" onClick={() => setStep(1)} className={SECONDARY}>
+            {step > 1 ? (
+              <button type="button" onClick={() => setStep(step - 1)} className={SECONDARY}>
                 <ArrowLeft className="w-4 h-4" aria-hidden="true" />
                 Back
               </button>
             ) : <span />}
-            {step === 1 ? (
-              <button type="button" disabled={!step1Done} onClick={() => setStep(2)} className={PRIMARY}>
+            {step < 3 ? (
+              <button type="button" disabled={!stepDone} onClick={() => setStep(step + 1)} className={PRIMARY}>
                 Continue
                 <ArrowRight className="w-4 h-4" aria-hidden="true" />
               </button>

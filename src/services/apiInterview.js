@@ -96,3 +96,14 @@ export async function endInterviewSession(sessionId) {
     throw new Error(parseApiError(err));
   }
 }
+
+/** Change how answers are worded in ONE interview (the profile default lives on the profile). */
+export async function updateInterviewSession(sessionId, { answerStyle }) {
+  try {
+    const response = await api.patch(`/api/interview/sessions/${sessionId}/`,
+                                     { answer_style: answerStyle });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

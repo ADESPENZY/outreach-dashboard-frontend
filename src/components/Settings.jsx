@@ -30,6 +30,8 @@ import { enablePush, disablePush, isPushEnabled, pushAvailableHere, sendTestPush
 import { LegalSections } from '@/components/legal/PolicyContent';
 import api from '@/api';
 import PendingActivationCard from './PendingActivationCard';
+import AnswerStylePicker from './interview/AnswerStylePicker';
+import { DEFAULT_ANSWER_STYLE } from '@/constants/answerStyles';
 import KeywordSuggestions from './KeywordSuggestions';
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -332,6 +334,9 @@ function ProfileTab({ only }) {
   const [storyKnownFor, setStoryKnownFor] = useState('');
   const [diffs, setDiffs] = useState([]);
   const [projects, setProjects] = useState([]);
+  // How the interview copilot words answers by default; a single interview can
+  // override it in the prep wizard.
+  const [answerStyle, setAnswerStyle] = useState(DEFAULT_ANSWER_STYLE);
   // Only one project card is open at a time — five expanded cards is more than
   // fits on a phone, and the summary line is enough to find the right one.
   const [openProject, setOpenProject] = useState(null);
@@ -355,6 +360,7 @@ function ProfileTab({ only }) {
     setStoryProud(profile.story_proud || '');
     setStoryKnownFor(profile.story_known_for || profile.secret_weapon || '');
     setDiffs(profile.differentiators || []);
+    setAnswerStyle(profile.answer_style_default || DEFAULT_ANSWER_STYLE);
     // Stored entries are strings holding Python dict reprs (see lib/projectHighlights);
     // parse once here so the form works with real fields, never raw text.
     setProjects((profile.project_highlights || []).map(parseProject));
@@ -380,6 +386,7 @@ function ProfileTab({ only }) {
         story_proud: storyProud.trim(),
         story_known_for: storyKnownFor.trim(),
         differentiators: diffs,
+        answer_style_default: answerStyle,
         project_highlights: projects.filter(p => !isProjectEmpty(p)).map(serializeProject),
       });
       qc.invalidateQueries({ queryKey: ['profile'] });
@@ -631,6 +638,16 @@ function ProfileTab({ only }) {
           <p className="text-xs text-secondary-dark/70 flex items-start gap-1.5"><Info className="w-3.5 h-3.5 shrink-0 mt-0.5" /> Affects future emails only — drafts already written won't change.</p>
         </VoiceCard>
         </div>
+
+        {/* Interview answers — a different voice from the outreach one above:
+            this is what YOU say out loud, not what we write on your behalf. */}
+        <section className="bg-white rounded-2xl border border-neutral-dark shadow-sm p-5 mt-6">
+          <AnswerStylePicker
+            value={answerStyle}
+            onChange={setAnswerStyle}
+            description="Your usual voice in Interview Prep. Every interview starts here, and you can pick a different one for a single interview."
+          />
+        </section>
 
         <div className="flex justify-end"><SaveButton onClick={saveVoice} saving={savingVoice} /></div>
       </P>
