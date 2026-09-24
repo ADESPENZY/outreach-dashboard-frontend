@@ -15,7 +15,18 @@ import { useCallback, useEffect, useState } from 'react';
 //   * "pagehide" fires on the window when it closes, however it was closed.
 //   * Chromium desktop (Chrome/Edge 116+); not Safari, not mobile.
 
-const SIZE = { width: 420, height: 400 };
+// Wide and shallow: it sits over a video call, and the answer reads in two or
+// three lines rather than a narrow column. Clamped so it always fits the screen.
+const WANTED = { width: 760, height: 320 };
+
+function windowSize() {
+  const maxW = (window.screen?.availWidth || 1280) - 40;
+  const maxH = (window.screen?.availHeight || 800) - 40;
+  return {
+    width: Math.max(360, Math.min(WANTED.width, maxW)),
+    height: Math.max(240, Math.min(WANTED.height, maxH)),
+  };
+}
 
 function copyStyles(target) {
   for (const sheet of [...document.styleSheets]) {
@@ -42,10 +53,12 @@ export function useDocumentPip() {
     if (!supported) return null;
     const existing = window.documentPictureInPicture.window;
     if (existing) return existing;
-    const win = await window.documentPictureInPicture.requestWindow(SIZE);
+    const win = await window.documentPictureInPicture.requestWindow(windowSize());
     copyStyles(win.document);
     win.document.title = 'ApplyDir · Live answers';
-    win.document.body.className = 'm-0 bg-neutral font-roboto';
+    // The panel is the whole window: dark surface, no chrome, no scroll of its own.
+    win.document.documentElement.className = 'h-full';
+    win.document.body.className = 'm-0 h-full bg-overlay text-overlay-text font-roboto overflow-hidden';
     win.addEventListener('pagehide', () => {
       setPipWindow((current) => (current === win ? null : current));
     }, { once: true });

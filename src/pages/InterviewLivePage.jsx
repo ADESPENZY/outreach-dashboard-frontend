@@ -3,25 +3,22 @@ import { createPortal } from 'react-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useParams } from 'react-router';
 import {
-  ArrowLeft, Mic, Square, Loader2, RefreshCw, AlertCircle, Info, CheckCircle2, Sparkles,
+  ArrowLeft, Mic, Square, Loader2, RefreshCw, AlertCircle, Info, CheckCircle2,
   PictureInPicture2,
 } from 'lucide-react';
 import { getInterviewContext } from '../services/apiInterview';
 import { useLiveCopilot } from '../hooks/useLiveCopilot';
 import { useDocumentPip } from '../hooks/useDocumentPip';
-import { inlineSegments, parseAnswer } from '../lib/liveCopilot';
+import LiveAnswerPanel from '../components/interview/LiveAnswerPanel';
 
 // ── Interview Prep — live copilot ────────────────────────────────────────────
-// Read at a glance mid-interview: the question at the top, the answer big and
-// calm below it (lead line + a few bullets), one Start/Stop toggle. The audio
-// loop itself lives in useLiveCopilot.
+// The page holds the controls (Start/Stop, Pop out, problems) and the state;
+// LiveAnswerPanel renders the answers. The SAME panel instance-for-instance is
+// portalled into the Document Picture-in-Picture window, so the floating copy
+// and the in-page copy share one state — no fork, no second socket.
 //
-// Floating window: Document Picture-in-Picture (useDocumentPip). The SAME
-// LivePanel, on the SAME reducer state, is portalled into the floating window,
-// so it updates from the same socket messages as the page — no second copy of
-// the state. It opens after Start when the browser still allows it (the tab
-// picker usually uses up the click), otherwise from the "Pop out" button. It
-// closes on Stop and whenever the socket ends; the in-page panel always works.
+// Nothing is discarded: every question and answer stays in view.history, and
+// interrupt handling is about WHICH one you are looking at (see lib/liveCopilot).
 
 // Statuses in which the socket is gone and the floating window closes.
 const PIP_CLOSES_ON = ['idle', 'dropped', 'stopping', 'finished'];
@@ -51,12 +48,33 @@ export default function InterviewLivePage() {
     if (PIP_CLOSES_ON.includes(live.status)) closePip();
   }, [live.status, closePip]);
 
+  // The style this interview was prepared in (session → profile → experience).
+  const contextStyle = context?.answer_style;
+  const { dispatch } = live;
+  useEffect(() => {
+    if (contextStyle) dispatch({ type: 'ui/style', style: contextStyle });
+  }, [contextStyle, dispatch]);
+
   const job = context?.job;
   const company = job?.company_name || context?.session?.company_name;
   const role = live.view.role || job?.title;
   const title = [role, company].filter(Boolean).join(' · ') || 'Your interview';
   const alreadyEnded = context?.session?.status === 'ended';
   const finished = live.status === 'finished' || (alreadyEnded && live.status === 'idle');
+
+  const panel = (
+    <LiveAnswerPanel
+      view={live.view}
+      dispatch={live.dispatch}
+      status={live.status}
+      title={isLoading ? 'Loading…' : title}
+      onSetStyle={live.setStyle}
+      onRegenerate={live.regenerate}
+      // Fills its (flex) container in both homes, so the answer body — not the
+      // page or the floating window — is what scrolls.
+      className="flex-1 min-w-0"
+    />
+  );
 
   return (
     <div className="p-4 md:p-8 w-full max-w-3xl mx-auto space-y-5 font-roboto">
@@ -76,9 +94,7 @@ export default function InterviewLivePage() {
           </h1>
           <StatusLine status={live.status} bankSize={live.view.bankSize} finished={finished} />
         </div>
-        {!finished && (
-          <Toggle live={live} disabled={isLoading || isError} />
-        )}
+        {!finished && <Toggle live={live} disabled={isLoading || isError} />}
       </div>
 
       {isError ? (
@@ -105,23 +121,37 @@ export default function InterviewLivePage() {
         </Notice>
       )}
 
-      {!finished && live.configured && (
-        <FloatingWindowControl pip={pip} status={live.status} />
+      {!finished && live.configured && <FloatingWindowControl pip={pip} status={live.status} />}
+
+      {live.status === 'idle' && !finished && live.configured && !live.view.history.length && <HowItWorks />}
+
+      {/* In-page panel: always here, whether or not the floating window is open.
+          Capped height so long answers scroll inside it instead of the page. */}
+      {!finished && (
+        <div className="h-[26rem] md:h-[30rem] flex">
+          {pip.pipWindow
+            ? <PoppedOutPlaceholder onFocus={() => pip.pipWindow.focus()} />
+            : panel}
+        </div>
       )}
 
-      {live.status === 'idle' && !finished && live.configured && !live.view.question && <HowItWorks />}
-
-      {(live.view.question || live.view.caption || ['listening', 'dropped', 'stopping'].includes(live.status)) && !finished && (
-        <LivePanel view={live.view} listening={live.status === 'listening'} />
-      )}
-
+      {/* The floating window renders the very same panel. */}
       {pip.pipWindow && createPortal(
-        <div className="min-h-screen p-3 space-y-2">
-          <StatusLine status={live.status} bankSize={live.view.bankSize} finished={finished} />
-          <LivePanel view={live.view} listening={live.status === 'listening'} compact />
-        </div>,
+        <div className="h-full p-2 flex">{panel}</div>,
         pip.pipWindow.document.body,
       )}
+    </div>
+  );
+}
+
+function PoppedOutPlaceholder({ onFocus }) {
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center text-center gap-3 bg-white rounded-2xl border border-neutral-dark">
+      <PictureInPicture2 className="w-7 h-7 text-primary-light" aria-hidden="true" />
+      <p className="text-sm text-secondary-dark max-w-xs leading-relaxed">
+        Your answers are in the floating window so they stay on top of your meeting.
+      </p>
+      <button type="button" onClick={onFocus} className={SECONDARY}>Bring it to the front</button>
     </div>
   );
 }
@@ -139,7 +169,7 @@ function FloatingWindowControl({ pip, status }) {
     return (
       <p className="flex items-center gap-2 text-xs text-secondary-dark">
         <PictureInPicture2 className="w-3.5 h-3.5 shrink-0 text-accent-teal" aria-hidden="true" />
-        Answers are also showing in the floating window.
+        Answers are showing in the floating window.
       </p>
     );
   }
@@ -215,90 +245,6 @@ function StatusLine({ status, bankSize, finished }) {
   return <p className="text-sm text-secondary-dark mt-1" role="status">{text}</p>;
 }
 
-function LivePanel({ view, listening, compact = false }) {
-  const { lead, bullets } = parseAnswer(view.answer);
-  const streaming = !!view.question && !view.answerDone;
-  const pad = compact ? 'px-4 py-3' : 'px-6 py-5';
-  return (
-    <section className="bg-white rounded-2xl border border-neutral-dark shadow-sm" aria-live="polite">
-      {/* Question */}
-      <div className={`${pad} border-b border-neutral-dark`}>
-        <p className="text-[11px] font-bold text-secondary-dark/60 uppercase tracking-wider font-montserrat">
-          They asked
-        </p>
-        <p className={`${compact ? 'text-sm' : 'text-base md:text-lg'} font-semibold text-black-light mt-1 leading-snug`}>
-          {view.question || (listening ? 'Waiting for the first question…' : '—')}
-        </p>
-        {view.caption && (
-          <p className="text-sm text-secondary-dark italic mt-2 leading-relaxed">
-            Hearing: “{view.caption}”
-          </p>
-        )}
-      </div>
-
-      {/* Answer */}
-      <div className={compact ? 'px-4 py-4 space-y-3' : 'px-6 py-6 space-y-4 min-h-[10rem]'}>
-        {view.notice && (
-          <p className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden="true" />
-            {view.notice}
-          </p>
-        )}
-
-        {view.question && !view.answer && !view.notice && (
-          <p className="flex items-center gap-2 text-sm text-secondary-dark">
-            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
-            Thinking of an answer…
-          </p>
-        )}
-
-        {lead.map((line, i) => (
-          <p key={i} className={`${compact ? 'text-lg' : 'text-xl md:text-2xl'} font-bold font-montserrat text-black-light leading-snug`}>
-            <Inline text={line} />
-          </p>
-        ))}
-
-        {bullets.length > 0 && (
-          <ul className={compact ? 'space-y-2' : 'space-y-3'}>
-            {bullets.map((b, i) => (
-              <li key={i} className={`flex gap-3 ${compact ? 'text-base' : 'text-lg'} text-black-light leading-relaxed`}>
-                {b.label ? (
-                  <span className="shrink-0 mt-1 inline-flex items-center justify-center px-2 h-6 rounded-lg bg-primary-light/10 text-primary-dark text-xs font-bold font-montserrat">
-                    {b.label}
-                  </span>
-                ) : (
-                  <span className="shrink-0 mt-3 w-1.5 h-1.5 rounded-full bg-primary-light" aria-hidden="true" />
-                )}
-                <span className="min-w-0"><Inline text={b.text} /></span>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        {streaming && view.answer && (
-          <span className="inline-block w-2 h-5 bg-primary-light/60 animate-pulse rounded-sm" aria-hidden="true" />
-        )}
-
-        {view.answerDone && (
-          <div className="flex items-center gap-2 pt-1">
-            {view.source === 'cached' && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border bg-accent-teal/10 text-accent-teal border-accent-teal/20">
-                <Sparkles className="w-3 h-3" aria-hidden="true" />
-                Prepared answer
-              </span>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function Inline({ text }) {
-  return inlineSegments(text).map((seg, i) =>
-    seg.bold ? <strong key={i} className="font-bold">{seg.text}</strong> : <span key={i}>{seg.text}</span>);
-}
-
 function Notice({ tone, children }) {
   const styles = tone === 'error'
     ? 'bg-red-50 text-red-600 border-red-200'
@@ -323,6 +269,10 @@ function HowItWorks() {
       </ol>
       <p className="text-xs text-secondary-dark mt-4">
         We only listen to the tab you pick, never your microphone. Works in Chrome and Edge on a computer.
+        Once it's running: <span className="font-semibold text-black-light">←</span> and
+        <span className="font-semibold text-black-light"> →</span> move between answers,
+        <span className="font-semibold text-black-light"> L</span> jumps to the latest,
+        <span className="font-semibold text-black-light"> S</span> switches to a new question.
       </p>
     </section>
   );

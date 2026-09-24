@@ -261,5 +261,22 @@ export function useLiveCopilot(sessionId, options = {}) {
     };
   }, [closeSocket, teardownAudio]);
 
-  return { status, problem, view, configured, start, stop, reconnect };
+  // ── commands to the sidecar ───────────────────────────────────────────────
+  const command = useCallback((payload) => {
+    const ws = r.current.ws;
+    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(payload));
+  }, []);
+
+  const setStyle = useCallback((style) => {
+    dispatch({ type: 'ui/style', style });     // optimistic; the sidecar confirms
+    command({ type: 'set_style', style });
+  }, [command]);
+
+  const regenerate = useCallback((questionId, style) => {
+    command(style ? { type: 'regenerate', question_id: questionId, style }
+                  : { type: 'regenerate', question_id: questionId });
+  }, [command]);
+
+  return { status, problem, view, dispatch, configured, start, stop, reconnect,
+           setStyle, regenerate };
 }

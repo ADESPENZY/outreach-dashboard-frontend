@@ -19,6 +19,18 @@ export default {
   			sans: ['Bricolage Grotesque', 'system-ui', 'sans-serif']
   		},
   		colors: {
+  			// ── Live copilot overlay ──────────────────────────────────────────
+  			// The only deliberately dark surface in the app: the interview
+  			// answer console, read at a glance over a video call (in-page and in
+  			// the Document Picture-in-Picture window). Brand orange stays the
+  			// single accent; these are its neutrals.
+  			overlay: {
+  				DEFAULT: '#0F1115',
+  				raised:  '#171A21',
+  				line:    '#262B36',
+  				text:    '#E7E9EE',
+  				muted:   '#98A1B2',
+  			},
   			primary: {
   				DEFAULT: '#FF5B2E',
   				dark: '#B82E07',
@@ -102,6 +114,11 @@ export default {
   				'0%':   { transform: 'translateX(-100%)' },
   				'100%': { transform: 'translateX(250%)' },
   			},
+  			// Blinking caret while an answer streams in.
+  			'caret': {
+  				'0%, 100%': { opacity: '1' },
+  				'50%':      { opacity: '0' },
+  			},
   			'fade-in': {
   				'0%':   { opacity: '0', transform: 'translateY(8px)' },
   				'100%': { opacity: '1', transform: 'translateY(0)' },
@@ -134,6 +151,7 @@ export default {
   		animation: {
   			'slide-progress': 'slide-progress 1.4s ease-in-out infinite',
   			'fade-in': 'fade-in 0.3s ease-out',
+  			'caret': 'caret 1.1s step-end infinite',
   			'shimmer': 'shimmer 1.5s ease-in-out infinite',
   			'spinner': 'spinner 0.8s linear infinite',
   			'fade-out': 'fade-out 0.3s ease-out forwards',

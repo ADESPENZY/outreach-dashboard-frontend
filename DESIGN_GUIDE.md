@@ -50,6 +50,26 @@ Status badges/dots use Tailwind's named scales directly. Keep these consistent:
 | **Sent (count)** | `blue-500` | `blue-500` | `blue-50` |
 | **Premium/attention (rare)** | `amber` + `Crown` | `amber-700` | `amber-50` |
 
+### Overlay palette — the live interview console only
+
+The interview copilot's answer panel (`components/interview/LiveAnswerPanel.jsx`)
+is the **one deliberately dark surface** in the app: it is read at a glance over a
+video call, in-page and in the floating Picture-in-Picture window, where a white
+card glares. It is not dark mode (§7 still stands) — it is one dark component,
+and it uses tokens like everything else.
+
+| Token | Hex | Use it for |
+|---|---|---|
+| `overlay` | `#0F1115` | The console surface |
+| `overlay-raised` | `#171A21` | Its top bar and footer |
+| `overlay-line` | `#262B36` | 1px borders inside it |
+| `overlay-text` | `#E7E9EE` | Text on it (use `/85` for body copy) |
+| `overlay-muted` | `#98A1B2` | Labels and secondary text on it |
+
+`primary-light` stays the **only** accent on this surface (style chips, cues,
+the streaming caret `animate-caret`). Don't introduce a second dark surface
+without a reason as concrete as this one.
+
 ### shadcn token layer (powers `components/ui/*` only)
 
 These are HSL CSS variables in `index.css`. In **light mode** they're mostly
