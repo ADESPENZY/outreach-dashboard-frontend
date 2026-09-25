@@ -107,3 +107,23 @@ export async function updateInterviewSession(sessionId, { answerStyle }) {
     throw new Error(parseApiError(err));
   }
 }
+
+/** Jobs worth preparing for: at 'replied'/'interview' with no interview yet (max 5). */
+export async function listInterviewSuggestions() {
+  try {
+    const response = await api.get("/api/interview/suggestions/");
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}
+
+/** The saved transcript of one interview: [{question, answer, source, latency_ms, created_at}]. */
+export async function getInterviewTurns(sessionId) {
+  try {
+    const response = await api.get(`/api/interview/sessions/${sessionId}/turns/`);
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

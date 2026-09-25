@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link, useNavigate } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 import {
   ArrowLeft, ArrowRight, CheckCircle2, FileText, ClipboardPaste, Loader2,
-  AlertCircle, Search,
+  AlertCircle, Search, Link2,
 } from 'lucide-react';
 import { getProfile } from '../services/apiProfile';
 import {
@@ -31,13 +31,19 @@ const SECONDARY = 'inline-flex items-center justify-center gap-2 bg-neutral hove
 export default function InterviewPrepNewPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  // "Prep for this" on the Interview Prep page links here with the job attached,
+  // so the job description and company come from the saved job.
+  const [params] = useSearchParams();
+  const jobId = Number(params.get('job_id')) || null;
+  const jobRole = params.get('role') || '';
+  const jobCompany = params.get('company') || '';
   const { data: profile, isLoading: profileLoading } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   const profileCv = (profile?.cv_raw_text || '').trim();
 
   const [step, setStep] = useState(1);
   const [cvChoice, setCvChoice] = useState(null);         // 'base' | 'custom'
   const [cvText, setCvText] = useState('');
-  const [companyName, setCompanyName] = useState('');
+  const [companyName, setCompanyName] = useState(jobCompany);
   const [jdText, setJdText] = useState('');
   // Seeded from the profile default below, then overridable for this interview.
   const [answerStyle, setAnswerStyle] = useState(DEFAULT_ANSWER_STYLE);
@@ -51,7 +57,8 @@ export default function InterviewPrepNewPage() {
   // Default to the profile CV once we know whether there is one.
   const choice = cvChoice ?? (profileCv ? 'base' : 'custom');
   const step1Done = choice === 'base' ? !!profileCv : cvText.trim().length > 0;
-  const step2Done = companyName.trim().length > 0 || jdText.trim().length > 0;
+  // A linked job already carries its own description and company.
+  const step2Done = !!jobId || companyName.trim().length > 0 || jdText.trim().length > 0;
   const stepDone = { 1: step1Done, 2: step2Done, 3: true }[step];
 
   // Start from the user's saved default; they can pick something else here
@@ -83,6 +90,7 @@ export default function InterviewPrepNewPage() {
     try {
       const created = await createInterviewSession({
         cvSource: choice, cvText, jdText: jdText.trim(), companyName: companyName.trim(),
+        jobId,
       });
       // BEFORE preparing: the bank is written in the session's style.
       if (answerStyle && answerStyle !== created.answer_style) {
@@ -149,6 +157,7 @@ export default function InterviewPrepNewPage() {
                 onCompanyName={setCompanyName}
                 jdText={jdText}
                 onJdText={setJdText}
+                linkedJob={jobId ? { role: jobRole, company: jobCompany } : null}
               />
             ) : (
               <AnswerStylePicker
@@ -282,14 +291,26 @@ function StepCv({ loading, profileCv, choice, onChoice, cvText, onCvText }) {
   );
 }
 
-function StepRole({ companyName, onCompanyName, jdText, onJdText }) {
+function StepRole({ companyName, onCompanyName, jdText, onJdText, linkedJob }) {
   const researchOnly = companyName.trim() && !jdText.trim();
   return (
     <>
-      <p className="text-sm text-secondary-dark leading-relaxed">
-        The more you tell us, the closer the questions get. Paste the job description
-        if you have it — the company name on its own works too.
-      </p>
+      {linkedJob ? (
+        <p className="flex items-start gap-2 text-sm text-secondary-dark bg-neutral rounded-xl px-3 py-2.5 leading-relaxed">
+          <Link2 className="w-4 h-4 mt-0.5 shrink-0 text-primary-light" aria-hidden="true" />
+          <span>
+            Using the job you saved
+            {linkedJob.role ? <> — <span className="font-semibold text-black-light">{linkedJob.role}</span></> : null}
+            {linkedJob.company ? <> at <span className="font-semibold text-black-light">{linkedJob.company}</span></> : null}.
+            We'll read its description, so there's nothing to paste. Add anything extra below if you want.
+          </span>
+        </p>
+      ) : (
+        <p className="text-sm text-secondary-dark leading-relaxed">
+          The more you tell us, the closer the questions get. Paste the job description
+          if you have it — the company name on its own works too.
+        </p>
+      )}
       <div>
         <label htmlFor="company-name" className={LABEL}>Company</label>
         <input
