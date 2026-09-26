@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
 import { toast } from 'react-toastify';
@@ -74,32 +74,34 @@ export default function RecentIntroductions() {
   // is a timestamp from the last row, so the list is append-only and never
   // needs to re-fetch a page it already holds.
   const [olderPages, setOlderPages] = useState([]);
-  const [cursor, setCursor] = useState(null);
-  const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['progress-introductions', PAGE_SIZE],
-    queryFn: async () => {
-      const page = await getProgressIntroductions({ limit: PAGE_SIZE });
-      setCursor(page.next_before);
-      setHasMore(page.has_more);
-      // A refetch restarts the list, so stale later pages must not survive it.
-      setOlderPages([]);
-      return page;
-    },
+    queryFn: () => getProgressIntroductions({ limit: PAGE_SIZE }),
   });
 
-  const rows = [...(data?.items ?? []), ...olderPages.flat()];
+  // A refetch restarts the list from page 1, so pages fetched against the old
+  // first page must not survive it.
+  useEffect(() => { setOlderPages([]); }, [data]);
+
+  // The cursor is DERIVED from the last page in hand, never stored by a side
+  // effect inside queryFn. Setting it there looked fine on a cold load and
+  // silently broke on a warm one: React Query serves cached data without
+  // re-running queryFn, so returning to this page left cursor null and hid
+  // "Load more" while more rows existed.
+  const tail = olderPages.length ? olderPages[olderPages.length - 1] : data;
+  const cursor = tail?.next_before ?? null;
+  const hasMore = Boolean(tail?.has_more);
+
+  const rows = [...(data?.items ?? []), ...olderPages.flatMap((p) => p.items ?? [])];
 
   const loadMore = async () => {
     if (!cursor) return;
     setLoadingMore(true);
     try {
       const page = await getProgressIntroductions({ limit: PAGE_SIZE, before: cursor });
-      setOlderPages((p) => [...p, page.items]);
-      setCursor(page.next_before);
-      setHasMore(page.has_more);
+      setOlderPages((p) => [...p, page]);
     } catch (err) {
       toast.error(err.message);
     } finally {

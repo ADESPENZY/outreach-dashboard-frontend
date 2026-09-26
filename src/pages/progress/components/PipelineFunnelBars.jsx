@@ -113,7 +113,14 @@ export default function PipelineFunnelBars({ stages = [] }) {
       data: ordered.map((s) => ({
         value: s.count,
         name: s.label,
-        itemStyle: { color: STAGE_COLORS[s.key] ?? CHART_COLORS.reached },
+        itemStyle: {
+          // barMinHeight floors EVERY bar, including an empty stage — which
+          // drew a confident little block next to "Offer 0". A stage nobody
+          // has reached gets no bar at all; the 0 label still prints.
+          color: s.count === 0
+            ? 'transparent'
+            : (STAGE_COLORS[s.key] ?? CHART_COLORS.reached),
+        },
       })),
     }],
   }), [ordered]);

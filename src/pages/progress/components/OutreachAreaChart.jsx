@@ -152,6 +152,10 @@ export default function OutreachAreaChart({ days = [], rangeLabel = 'this range'
         name: s.name,
         type: 'line',
         smooth: true,
+        // Without this, the spline overshoots between a peak and a run of zero
+        // days and dips BELOW the axis — drawing negative introductions on a
+        // day nothing was sent. Monotone interpolation cannot overshoot.
+        smoothMonotone: 'x',
         symbol: 'circle',
         symbolSize: 6,
         showSymbol: false,
