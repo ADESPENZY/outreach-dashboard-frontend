@@ -126,7 +126,7 @@ export default function PipelineFunnelBars({ stages = [] }) {
   }), [ordered]);
 
   return (
-    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm overflow-hidden">
+    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm overflow-hidden transition-shadow duration-300 hover:shadow-md">
       <div className="px-4 md:px-6 py-5 border-b border-neutral-dark">
         <h2 className="text-base font-bold text-black-light font-montserrat">Your pipeline</h2>
         <p className="text-xs text-secondary-dark mt-0.5">

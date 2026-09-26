@@ -86,7 +86,7 @@ export function areaGradient(hex, topOpacity = 0.28) {
 }
 
 /** #RRGGBB + alpha → rgba(), so opacity never needs a second hardcoded color. */
-export function withAlpha(hex, alpha) {
+function withAlpha(hex, alpha) {
   const n = parseInt(hex.slice(1), 16);
   const r = (n >> 16) & 255;
   const g = (n >> 8) & 255;

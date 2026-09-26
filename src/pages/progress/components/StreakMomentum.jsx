@@ -70,11 +70,24 @@ export default function StreakMomentum({
 }) {
   const showTopPct = community.active_users >= 10 && community.top_pct != null && community.top_pct <= 50;
   return (
-    <motion.section variants={RISE} className="relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm">
+    <motion.section
+      variants={RISE}
+      className="relative overflow-hidden bg-white rounded-2xl border border-neutral-dark shadow-sm transition-shadow duration-300 hover:shadow-md"
+    >
       {/* warm ember glow behind the streak */}
       <span aria-hidden="true" className="pointer-events-none absolute -top-12 -right-12 h-40 w-40 rounded-full bg-amber-300/20 blur-3xl" />
 
-      <div className="px-4 md:px-6 py-5 space-y-5">
+      {/* Same header block as every other panel on the page: title, one line
+          of context, divider. This card used to open straight into content,
+          which made it the odd one out in the rail. */}
+      <div className="relative px-4 md:px-6 py-5 border-b border-neutral-dark">
+        <h2 className="text-base font-bold text-black-light font-montserrat">Momentum</h2>
+        <p className="text-xs text-secondary-dark mt-0.5">
+          Your streak, and how the week compares to the one before.
+        </p>
+      </div>
+
+      <div className="relative px-4 md:px-6 py-5 space-y-5">
         {/* Streak headline */}
         <div className="flex items-center gap-3">
           <span className="relative w-12 h-12 shrink-0">

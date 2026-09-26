@@ -173,6 +173,9 @@ export function useProgress() {
           : null,
         accent: 'emerald',
         hero: true,
+        // Somebody answered in the window being shown. Strictly > 0, so the
+        // card is ordinary on a quiet week rather than permanently festive.
+        celebrate: replies > 0,
         spark: sparkReplies,
         sparkLabel: 'Replies received per day, last 7 days',
       },
@@ -216,6 +219,10 @@ export function useProgress() {
     // plots all of it, the sparklines take the last 7.
     seriesDays: series?.days ?? [],
     strategies: analyticsQuery.data?.strategy_performance,
+    // The A/B readout is only meaningful once some strategy has actually sent.
+    // Before that it is a column of zeroes with a "send more" note, which is
+    // noise in the rail — the page hides the whole section instead.
+    hasStrategyData: (analyticsQuery.data?.strategy_performance ?? []).some((s) => s.sent > 0),
     // per-panel loading, so the numbers are not held back by the sparklines
     isLoading: progressQuery.isLoading,
     // In a series range the KPI VALUES come from the series call, so the row

@@ -92,7 +92,7 @@ export default function OutcomesDonut({ reached = 0, replied = 0, bounced = null
   }), [slices]);
 
   return (
-    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm">
+    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm transition-shadow duration-300 hover:shadow-md">
       <div className="px-4 md:px-6 py-5 border-b border-neutral-dark">
         <h2 className="text-base font-bold text-black-light font-montserrat">Where your introductions stand</h2>
         <p className="text-xs text-secondary-dark mt-0.5">

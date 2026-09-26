@@ -6,7 +6,7 @@ import { timeAgo, gmailSearchUrl } from '../utils/format';
 // action on each row. Moved unchanged out of PipelineFunnel when the div bars
 // became an ECharts chart — the chart replaced the BARS, not this list.
 
-export const NEXT_STAGE = {
+const NEXT_STAGE = {
   replied:   { stage: 'interview', label: 'Move to Interview' },
   interview: { stage: 'offer',     label: 'Move to Offer' },
 };

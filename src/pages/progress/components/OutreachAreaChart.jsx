@@ -165,7 +165,7 @@ export default function OutreachAreaChart({ days = [], rangeLabel = 'this range'
   }, [days, hidden]);
 
   return (
-    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm">
+    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm transition-shadow duration-300 hover:shadow-md">
       <div className="px-4 md:px-6 py-5 border-b border-neutral-dark flex items-start justify-between gap-3 flex-wrap">
         <div className="min-w-0">
           <h2 className="text-base font-bold text-black-light font-montserrat">Outreach over time</h2>
@@ -195,9 +195,11 @@ export default function OutreachAreaChart({ days = [], rangeLabel = 'this range'
               echarts={echarts}
               option={option}
               onChartReady={onChartReady}
+              // notMerge: a range change replaces the series outright rather
+              // than merging last range's points into this one.
+              // lazyUpdate: batch the redraw into the next frame, so toggling
+              // a legend chip does not force a synchronous re-render.
               notMerge
-              // `false` keeps the previous canvas while new data paints, so a
-              // range change does not flash an empty box.
               lazyUpdate
               style={{ height: '100%', width: '100%' }}
               opts={{ renderer: 'canvas' }}

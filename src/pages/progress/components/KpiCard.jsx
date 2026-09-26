@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { Sparkles } from 'lucide-react';
 
 import DeltaChip from './DeltaChip';
 import Sparkline from './Sparkline';
@@ -43,6 +44,7 @@ export default function KpiCard({
   chip = null,
   accent = 'blue',
   hero = false,
+  celebrate = false,
   spark = [],
   sparkLabel,
   sparkLoading = false,
@@ -55,21 +57,48 @@ export default function KpiCard({
       variants={RISE}
       whileHover={{ y: -4, transition: { duration: 0.25, ease: 'easeOut' } }}
       className={`relative overflow-hidden bg-white rounded-2xl border shadow-sm p-4 md:p-5 transition-shadow duration-300 hover:shadow-md ${
-        hero
-          ? 'border-primary-light/40 shadow-primary-light/10'
-          : 'border-neutral-dark'
+        celebrate
+          ? 'border-emerald-200 shadow-emerald-100'
+          : hero
+            ? 'border-primary-light/40 shadow-primary-light/10'
+            : 'border-neutral-dark'
       }`}
     >
-      <span className={`absolute inset-x-0 top-0 h-1 ${tone.bar}`} aria-hidden="true" />
-      {hero && (
+      <span className={`absolute inset-x-0 top-0 h-1 ${celebrate ? 'bg-emerald-400/60' : tone.bar}`} aria-hidden="true" />
+      {hero && !celebrate && (
         <span aria-hidden="true" className="pointer-events-none absolute -top-10 -right-10 h-28 w-28 rounded-full bg-primary-light/10 blur-2xl" />
+      )}
+      {/* Somebody replied in this period. A soft green wash and one sparkle —
+          no confetti library, and nothing that keeps moving after it lands.
+          motion-reduce disables the entrance for anyone who asked for that. */}
+      {celebrate && (
+        <motion.span
+          aria-hidden="true"
+          initial={{ opacity: 0, scale: 0.7 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+          className="pointer-events-none absolute -top-12 -right-12 h-32 w-32 rounded-full bg-emerald-400/20 blur-2xl motion-reduce:transition-none"
+        />
       )}
 
       <div className="flex items-start justify-between gap-2">
         {Icon && (
-          <span className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${tone.chip}`}>
+          <motion.span
+            initial={celebrate ? { scale: 0.85, rotate: -8 } : false}
+            animate={celebrate ? { scale: 1, rotate: 0 } : false}
+            transition={{ type: 'spring', stiffness: 260, damping: 16 }}
+            className={`relative w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+              celebrate ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-200' : tone.chip
+            }`}
+          >
             <Icon className="w-[18px] h-[18px]" aria-hidden="true" />
-          </span>
+            {celebrate && (
+              <Sparkles
+                className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 text-amber-400 motion-safe:animate-pulse"
+                aria-hidden="true"
+              />
+            )}
+          </motion.span>
         )}
         {deltaPct != null && <DeltaChip delta={deltaPct} />}
       </div>

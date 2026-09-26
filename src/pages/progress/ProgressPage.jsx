@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { Send, Building2, PartyPopper, TrendingUp, Flame, AlertCircle } from 'lucide-react';
 
@@ -6,16 +6,24 @@ import { useProgress } from './hooks/useProgress';
 
 import WeekNavigator from './components/WeekNavigator';
 import KpiCard from './components/KpiCard';
-import OutreachAreaChart from './components/OutreachAreaChart';
-import OutcomesDonut from './components/OutcomesDonut';
-import PipelineFunnelBars from './components/PipelineFunnelBars';
 import ActivityTimeline from './components/ActivityTimeline';
+import RecentIntroductions from './components/RecentIntroductions';
 import StreakMomentum from './components/StreakMomentum';
 import StrategyPerformance from './components/StrategyPerformance';
 import EmptyProgress from './components/EmptyProgress';
-import { KpiRowSkeleton, PanelSkeleton } from './components/ProgressSkeleton';
+import { KpiRowSkeleton, PanelSkeleton, ChartPanelSkeleton } from './components/ProgressSkeleton';
 
 import { STAGGER } from './animations';
+
+// The three ECharts panels are split out of this route's chunk on purpose.
+// ECharts is ~575 kB raw even registered module-by-module, which is an order
+// of magnitude more than the rest of the page; bundling it here would hold the
+// numbers, the pipeline and the activity feed behind a chart library on a
+// phone connection. Lazily they share one chunk that streams in behind a
+// skeleton, and the text content paints immediately.
+const OutreachAreaChart  = lazy(() => import('./components/OutreachAreaChart'));
+const OutcomesDonut      = lazy(() => import('./components/OutcomesDonut'));
+const PipelineFunnelBars = lazy(() => import('./components/PipelineFunnelBars'));
 
 // ── Progress — the fitness tracker for your job search ─────────────────────
 // One page that answers "is this working?": the selected period's numbers, the
@@ -35,7 +43,7 @@ const KPI_ICONS = {
 export default function ProgressPage() {
   const {
     week, isWeek, rangeKey, selectRange, stepWeek,
-    kpis, progress, strategies, weeksLabel, seriesDays, periodLabel,
+    kpis, progress, strategies, hasStrategyData, weeksLabel, seriesDays, periodLabel,
     isLoading, isKpiLoading, isError, refetch, isSparkLoading,
   } = useProgress();
 
@@ -109,8 +117,11 @@ export default function ProgressPage() {
               animate="show"
               className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-5"
             >
-              {kpis.map((kpi) => (
-                <KpiCard key={kpi.key} icon={KPI_ICONS[kpi.key]} sparkLoading={isSparkLoading} {...kpi} />
+              {/* `key` is pulled OUT of the spread: each kpi carries its own
+                  key field, and spreading that into JSX makes React warn and
+                  take the key from the object rather than the attribute. */}
+              {kpis.map(({ key, ...kpi }) => (
+                <KpiCard key={key} icon={KPI_ICONS[key]} sparkLoading={isSparkLoading} {...kpi} />
               ))}
             </motion.section>
           )}
@@ -124,22 +135,37 @@ export default function ProgressPage() {
           >
             {/* Main column — the story */}
             <div className="lg:col-span-2 space-y-6 min-w-0">
-              <OutreachAreaChart
-                days={seriesDays}
-                rangeLabel={periodLabel}
-                loading={isSparkLoading}
-              />
-              {isLoading ? <PanelSkeleton rows={4} /> : <PipelineFunnelBars stages={progress.stages} />}
+              <Suspense fallback={<ChartPanelSkeleton height={220} />}>
+                <OutreachAreaChart
+                  days={seriesDays}
+                  rangeLabel={periodLabel}
+                  loading={isSparkLoading}
+                />
+              </Suspense>
+
+              {isLoading ? (
+                <PanelSkeleton rows={4} />
+              ) : (
+                <Suspense fallback={<ChartPanelSkeleton height={176} />}>
+                  <PipelineFunnelBars stages={progress.stages} />
+                </Suspense>
+              )}
+              {/* Owns its own query and its own skeleton, so the roster does
+                  not wait on /progress/ and vice versa. */}
+              <RecentIntroductions />
+
               {isLoading ? <PanelSkeleton rows={4} /> : <ActivityTimeline initial={progress.timeline} />}
             </div>
 
             {/* Rail — momentum & learning */}
             <div className="space-y-6 min-w-0">
-              <OutcomesDonut
-                reached={progress?.hero?.reached_all ?? 0}
-                replied={progress?.hero?.replied_all ?? 0}
-                loading={isLoading}
-              />
+              <Suspense fallback={<ChartPanelSkeleton height={140} lines={2} />}>
+                <OutcomesDonut
+                  reached={progress?.hero?.reached_all ?? 0}
+                  replied={progress?.hero?.replied_all ?? 0}
+                  loading={isLoading}
+                />
+              </Suspense>
               {isLoading ? (
                 <PanelSkeleton rows={3} />
               ) : (
@@ -150,7 +176,7 @@ export default function ProgressPage() {
                   weeksLabel={weeksLabel}
                 />
               )}
-              {strategies && <StrategyPerformance strategies={strategies} />}
+              {hasStrategyData && <StrategyPerformance strategies={strategies} />}
             </div>
           </motion.div>
         </>

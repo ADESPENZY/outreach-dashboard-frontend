@@ -71,3 +71,28 @@ export async function advanceStage({ stage, trackerJobId, scrapedJobId }) {
     throw new Error(parseApiError(err));
   }
 }
+
+/**
+ * Recent introductions, newest first, cursor-paginated on sent_at.
+ *
+ * Originals only by default — "introduction" means a first touch everywhere
+ * else in this product, and an automated follow-up is not one. Pass
+ * includeFollowups to widen it to every sent touch.
+ *
+ * @param {{before?: string, limit?: number, status?: string, includeFollowups?: boolean}} params
+ */
+export async function getProgressIntroductions({
+  before, limit, status, includeFollowups,
+} = {}) {
+  try {
+    const params = {};
+    if (before) params.before = before;
+    if (limit) params.limit = limit;
+    if (status) params.status = status;
+    if (includeFollowups) params.include_followups = 'true';
+    const response = await api.get("/api/outreach/progress/introductions/", { params });
+    return response.data;
+  } catch (err) {
+    throw new Error(parseApiError(err));
+  }
+}

@@ -42,7 +42,7 @@ export default function StrategyPerformance({ strategies }) {
   const best = withSends[0];
 
   return (
-    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm">
+    <motion.section variants={RISE} className="bg-white rounded-2xl border border-neutral-dark shadow-sm transition-shadow duration-300 hover:shadow-md">
       <div className="px-4 md:px-6 py-5 border-b border-neutral-dark">
         <h2 className="text-base font-bold text-black-light font-montserrat">Strongest strategies</h2>
         <p className="text-xs text-secondary-dark mt-0.5">
