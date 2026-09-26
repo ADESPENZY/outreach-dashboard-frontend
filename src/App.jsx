@@ -16,7 +16,7 @@ const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const JobsPage = lazy(() => import('./pages/JobsPage'));
 const OutreachPage = lazy(() => import('./pages/OutreachPage'));
-const ProgressPage = lazy(() => import('./pages/ProgressPage'));
+const ProgressPage = lazy(() => import('./pages/progress/ProgressPage'));
 const InterviewPrepPage = lazy(() => import('./pages/InterviewPrepPage'));
 const InterviewPrepNewPage = lazy(() => import('./pages/InterviewPrepNewPage'));
 const InterviewLivePage = lazy(() => import('./pages/InterviewLivePage'));
