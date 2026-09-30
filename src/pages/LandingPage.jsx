@@ -1,8 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import LandingNav from '../components/landing/LandingNav';
-import Hero from '../components/landing/Hero';
-import HowItWorks from '../components/landing/HowItWorks';
+import HeroVoid from '../components/landing/hero/HeroVoid';
+import JourneySection from '../components/landing/journey/JourneySection';
+import useReducedMotion from '../components/landing/hero/useReducedMotion';
+import { registerLenis } from '../components/landing/hero/smoothScroll';
+import loadMotion from '../components/landing/motion/loadMotion';
 import EmailShowcase from '../components/landing/EmailShowcase';
 import CompareSection from '../components/landing/CompareSection';
 import TrustSection from '../components/landing/TrustSection';
@@ -62,7 +65,59 @@ function useStructuredData() {
   }, []);
 }
 
-/** The problem, stated once, in the reader's own words. */
+/**
+ * Smooth scrolling, and the ScrollTrigger handshake.
+ *
+ * Lenis replaces the browser's scroll with an interpolated one, which means
+ * ScrollTrigger's own scroll listener would read a stale position — so Lenis
+ * drives ScrollTrigger.update, and gsap's ticker drives Lenis' rAF rather than
+ * the two running separate loops against each other.
+ *
+ * Dynamically imported: neither library is on the landing page's critical path,
+ * and someone who asked for reduced motion never downloads Lenis at all.
+ */
+function useSmoothScroll(enabled) {
+  useEffect(() => {
+    if (!enabled) return undefined;
+
+    let cancelled = false;
+    let lenis;
+    let tick;
+    let gsapRef;
+    let unregister;
+
+    Promise.all([import('lenis'), loadMotion()])
+      .then(([{ default: Lenis }, { gsap, ScrollTrigger }]) => {
+        if (cancelled) return;
+        gsapRef = gsap;
+
+        lenis = new Lenis({ duration: 1.05, smoothWheel: true });
+        lenis.on('scroll', ScrollTrigger.update);
+        // The hero's "See how it works" needs to scroll through Lenis rather
+        // than around it; this is the handoff.
+        unregister = registerLenis(lenis);
+
+        tick = (time) => lenis.raf(time * 1000);   // gsap ticker is in seconds
+        gsap.ticker.add(tick);
+        gsap.ticker.lagSmoothing(0);
+      })
+      .catch(() => { /* native scrolling is a fine fallback */ });
+
+    return () => {
+      cancelled = true;
+      unregister?.();
+      if (gsapRef && tick) gsapRef.ticker.remove(tick);
+      lenis?.destroy();
+    };
+  }, [enabled]);
+}
+
+/**
+ * The problem, stated once, in the reader's own words.
+ *
+ * Out of the render since the void hero says this visually. Kept until the
+ * redesign is signed off.
+ */
 function ProblemSection() {
   return (
     <Section tone="ink">
@@ -159,6 +214,13 @@ function FinalCta() {
 export default function LandingPage() {
   useStructuredData();
 
+  const reduced = useReducedMotion();
+  useSmoothScroll(!reduced);
+
+  // Shared with the nav so it can stay transparent for exactly as long as the
+  // dark hero is on screen.
+  const heroRef = useRef(null);
+
   // AuthProvider has already run its boot check by the time this renders, so
   // reading it costs nothing extra. While it is still resolving we show the
   // signed-out nav rather than flashing "Go to dashboard" at a stranger.
@@ -167,17 +229,18 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-white font-sans antialiased">
+      {/* Targets the hero's primary CTA — it is focusable, so the browser moves
+          focus there rather than just scrolling past the headline. */}
       <a
-        href="#how"
+        href="#hero-cta"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[60] focus:rounded-lg focus:bg-ink focus:px-4 focus:py-2 focus:text-[14px] focus:text-white"
       >
         Skip to content
       </a>
-      <LandingNav signedIn={signedIn} />
+      <LandingNav signedIn={signedIn} overRef={heroRef} />
       <main>
-        <Hero />
-        <ProblemSection />
-        <HowItWorks />
+        <HeroVoid sectionRef={heroRef} />
+        <JourneySection />
         <EmailShowcase />
         <CompareSection />
         <TrustSection />

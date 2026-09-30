@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes, Navigate } from 'react-router';
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from 'react-router';
 import { lazy, Suspense } from 'react';
 import { ToastContainer } from 'react-toastify';
 import LandingPage from './pages/LandingPage';
@@ -44,6 +44,33 @@ import { ApplyDirLoader } from './components/ui/ApplyDirLoader';
 // shows the loading identity for 2s on initial load.
 // OFF for production — it was adding a flat 2s delay to every page load.
 const SHOW_BOOT_DEMO = false;
+
+/**
+ * The install card is anchored bottom-centre, which is exactly where the
+ * landing hero puts its CTAs (and, on desktop, the thread line). A visitor who
+ * has not signed up yet is the wrong person to ask to install the app anyway,
+ * so "/" opts out. Every other route is unchanged, including the timing,
+ * dismissal memory and the iOS instructions path.
+ *
+ * Has to be its own component: useLocation only works inside the Router, and
+ * App is the thing that renders it.
+ */
+function InstallPromptGate() {
+  const { pathname } = useLocation();
+  if (pathname === '/') return null;
+  return <InstallPrompt />;
+}
+
+/**
+ * Same reasoning for the "a new version is ready" toast: on the marketing page
+ * it lands on top of the hero and means nothing to someone who has never used
+ * the app. Inside the product it still matters, so every other route keeps it.
+ */
+function VersionCheckGate() {
+  const { pathname } = useLocation();
+  if (pathname === '/') return null;
+  return <VersionCheck />;
+}
 
 function App() {
   const [bootDemo, setBootDemo] = useState(SHOW_BOOT_DEMO);
@@ -138,10 +165,10 @@ function App() {
         />
 
         {/* Graceful "new version available" prompt (Vercel free-tier safe) */}
-        <VersionCheck />
+        <VersionCheckGate />
 
         {/* PWA install nudge — one-tap on Android, "Add to Home Screen" on iOS */}
-        <InstallPrompt />
+        <InstallPromptGate />
 
         {/* Gentle push opt-in, shown after the user's first sent intro */}
         <PushPrompt />
