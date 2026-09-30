@@ -393,11 +393,16 @@ const JobsPage = () => {
     }, [scrapeStatus?.is_active, scrapeStatus?.stale]);
 
     const hasAnyCard = pickedCount > 0 || trayCount > 0;
+    // HELD_BACK sits directly above CAUGHT_UP, and that order is the point: an
+    // empty board with matches still held is NOT caught up. It stays BELOW
+    // NEVER_RUN so a user whose first run hasn't finished still gets the
+    // first-run words.
     const emptyState =
         hasAnyCard          ? null
         : isSearching       ? 'SEARCHING'
         : sawInterrupted    ? 'INTERRUPTED'
         : !firstRunDone     ? 'NEVER_RUN'
+        : heldCount > 0     ? 'HELD_BACK'
         : hasEverHadResults ? 'CAUGHT_UP'
         :                     'FIRST_RUN_EMPTY';
 
@@ -1061,6 +1066,20 @@ const JobsPage = () => {
             title: 'All caught up!',
             sub: 'Your headhunter will find more opportunities overnight. Check back tomorrow.',
         },
+        // An empty board with matches still held back. The old CAUGHT_UP card
+        // claimed success and told these users to come back tomorrow, while
+        // their matches sat in the buffer — the worst of the three places that
+        // copy was wrong, because here the user sees nothing at all.
+        //
+        // No timeline is promised: some of these are queued behind the visible
+        // cap and will surface as the board clears, others are companies the
+        // user has already reached out to and may never surface. Saying which
+        // is which needs per-job reasons the API does not return yet.
+        HELD_BACK: {
+            Icon: Clock,
+            title: heldCount === 1 ? '1 match waiting' : `${heldCount} matches waiting`,
+            sub: "We've found these for you, but they aren't on your board yet — some are queued, and some are companies you've already reached out to.",
+        },
     };
 
     const emptyStateCard = (key) => {
@@ -1084,7 +1103,11 @@ const JobsPage = () => {
                 <h2 className="text-lg md:text-xl font-bold font-montserrat text-black-light">{title}</h2>
                 <p className="mt-2 text-sm text-secondary-dark max-w-sm leading-relaxed">{sub}</p>
 
-                {key !== 'CAUGHT_UP' && (
+                {/* HELD_BACK joins CAUGHT_UP in offering no buttons: this user
+                    does not need another search — they already have matches
+                    waiting, and "Search again" would spend a run to make the
+                    backlog deeper. */}
+                {key !== 'CAUGHT_UP' && key !== 'HELD_BACK' && (
                     <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
                         {key === 'FIRST_RUN_EMPTY' && (
                             <button onClick={() => navigate(settingsLink('jobs', isMobile))} className={primaryBtn}>
