@@ -353,6 +353,13 @@ const JobsPage = () => {
     // counted rows ingested but never scored — which nothing reviewed.
     const reviewedTotal = analytics?.curation?.reviewed ?? null;
 
+    // Matches found for this user that are NOT on screen yet, straight from the
+    // server (jobs.services.held_opportunity_count). A third scope again: not
+    // all-time like `reviewedTotal`, not on-screen like `pickedCount` — these
+    // exist, are shortlisted, and are queued behind the release valve. Shown so
+    // an empty review queue never reads as "we found nothing for you".
+    const heldCount = pageData?.held_count ?? 0;
+
     const trayCount = workingJobs.length + queuedJobs.length + completing.length;
 
     // ── Empty-state model ─────────────────────────────────────────────────────
@@ -1131,7 +1138,18 @@ const JobsPage = () => {
             <>
                 {newJobs.length > 0 ? grid(pageNewJobs) : (
                     activeTab === 'new'
-                        ? <p className="text-sm text-secondary-dark py-8 text-center">Nothing new to review — you&rsquo;re all caught up.</p>
+                        ? (
+                            // "All caught up" is only true when there is genuinely
+                            // nothing left. With matches still held back it was a
+                            // false negative — the user read it as "we found
+                            // nothing for you" and pressed Search again.
+                            heldCount > 0
+                                ? <p className="text-sm text-secondary-dark py-8 text-center">
+                                    Nothing new to review right now — <span className="font-bold">{heldCount}</span>{' '}
+                                    {heldCount === 1 ? 'more match is' : 'more matches are'} waiting to be shown.
+                                  </p>
+                                : <p className="text-sm text-secondary-dark py-8 text-center">Nothing new to review — you&rsquo;re all caught up.</p>
+                        )
                         : null
                 )}
 
@@ -1285,6 +1303,9 @@ const JobsPage = () => {
                                     : <>for you</>}
                                 {contactReady > 0 && (
                                     <> · <span className="font-bold text-emerald-600">{contactReady}</span> of them {contactReady === 1 ? 'has' : 'have'} a hiring manager ready</>
+                                )}
+                                {heldCount > 0 && (
+                                    <> · <span className="font-bold">{heldCount}</span> more waiting</>
                                 )}
                             </p>
                         </div>

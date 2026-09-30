@@ -109,6 +109,10 @@ export async function getOpportunityJobs(maxJobs = 200) {
     let jobs = Array.isArray(data.jobs) ? data.jobs : [];
     const totalCount = data.total_count ?? jobs.length;
     const totalPages = data.total_pages ?? 1;
+    // Matches that exist but are not on screen yet (release valve). Read from
+    // page 1 only — every page carries the same value, and an older backend
+    // that predates the field yields 0 rather than NaN.
+    const heldCount = data.held_count ?? 0;
 
     // Fetch the remaining pages (bounded by maxJobs) IN PARALLEL. The old
     // sequential loop waited for each page in turn — the main reason the
@@ -130,7 +134,7 @@ export async function getOpportunityJobs(maxJobs = 200) {
       }
     }
 
-    return { jobs, total_count: totalCount, total_pages: totalPages };
+    return { jobs, total_count: totalCount, total_pages: totalPages, held_count: heldCount };
   } catch (err) {
     throw new Error(parseApiError(err));
   }
