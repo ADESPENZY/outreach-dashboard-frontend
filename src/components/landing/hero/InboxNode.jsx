@@ -24,19 +24,35 @@ const Avatar = () => (
   </span>
 );
 
+/**
+ * The node reads as lit from the start — it is the counterweight to the void,
+ * not a dormant box that only wakes up on arrival. The pulse overlay just
+ * raises this briefly when the introduction lands.
+ */
+const RESTING_GLOW =
+  '0 0 0 1px rgba(255, 91, 46, 0.15), 0 0 40px -6px rgba(255, 91, 46, 0.35)';
+
+/**
+ * The arrival flare. It rides on the pulse overlay rather than on the node
+ * itself, so the hero timeline only has to fade one element in and out and
+ * the glow rises to ~0.6 and settles back on its own.
+ */
+const ARRIVAL_GLOW =
+  '0 0 0 1px rgba(255, 91, 46, 0.45), 0 0 56px -4px rgba(255, 91, 46, 0.6)';
+
 export default function InboxNode({ attach, left, top, reduced }) {
   return (
     <div
       ref={attach}
       data-inbox=""
       aria-hidden="true"
-      style={{ left: `${left}px`, top: `${top}px` }}
-      className="pointer-events-none absolute z-20 w-[150px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-white/10 bg-white/[0.04] p-3 backdrop-blur-md lg:w-[220px] lg:p-4"
+      style={{ left: `${left}px`, top: `${top}px`, boxShadow: RESTING_GLOW }}
+      className="pointer-events-none absolute z-20 w-[150px] -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-primary-light/35 bg-white/[0.04] p-3 backdrop-blur-md lg:w-[220px] lg:p-4"
     >
       {/* The border pulse on arrival is an overlay, so only opacity animates. */}
       <span
         data-inbox-pulse=""
-        style={{ opacity: 0 }}
+        style={{ opacity: 0, boxShadow: ARRIVAL_GLOW }}
         className="pointer-events-none absolute -inset-px rounded-2xl ring-2 ring-primary-light"
       />
 

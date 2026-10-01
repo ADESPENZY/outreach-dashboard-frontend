@@ -59,7 +59,7 @@ const NO_EXTRA = [];
  * @param {'cardToFloor'|'ceilingToCard'} mode  Which end the thread is anchored
  *        to. `cardToFloor` starts at the element and runs to the section floor;
  *        `ceilingToCard` starts at the section ceiling and runs into it.
- * @param {(api: {draw, pointAt, length}) => (() => void)|void} onReady
+ * @param {(api: {draw, pointAt, length, path, dot}) => (() => void)|void} onReady
  *        When given, ThreadLine does NOT create its own ScrollTrigger — it hands
  *        back `draw(0..1)` so a caller can fold the reveal into a timeline it
  *        already owns, plus `pointAt(0..1)` for anything that has to travel the
@@ -194,6 +194,11 @@ export default function ThreadLine({
           return { x: pt.x, y: pt.y };
         },
         get length() { return length; },
+        /** The drawn path and its tip, for callers that need to restyle or
+            pulse them (the journey recolours the thread during the flood and
+            breathes the tip while the scene is pinned). */
+        path,
+        dot,
       };
       const undo = onReady(api);
       return () => {
