@@ -35,7 +35,9 @@ export default {
   				DEFAULT: '#FF5B2E',
   				dark: '#B82E07',
   				light: '#FF5B2E',
-  				foreground: 'hsl(var(--primary-foreground))'
+  				foreground: 'hsl(var(--primary-foreground))',
+  				// Auth pages: error text and small orange text on dark.
+  				tint: '#FF9A7A'
   			},
   			black: {
   				DEFAULT: '#000000',
@@ -63,7 +65,12 @@ export default {
   			ink: {
   				DEFAULT: '#101010',
   				soft: '#1C1A19',
-  				line: '#22201E'
+  				line: '#22201E',
+  				// Auth pages (AUTH_DESIGN_GUIDE.md §1).
+  				stage: '#161413',    // story panel and input ground
+  				raised: '#2A2725',   // avatar circle
+  				mute: '#3A3633',     // unlit timeline dot
+  				void: '#0B0A0A'      // centre disc of the void
   			},
   			stone: {
   				DEFAULT: '#F4F2F0',
