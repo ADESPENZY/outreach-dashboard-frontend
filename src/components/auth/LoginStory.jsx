@@ -1,12 +1,10 @@
 import { motion, useReducedMotion } from 'framer-motion';
 import { User } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import StoryStage, { StoryCaption } from './StoryStage';
+import StoryStage, { Dot, StoryCaption, ThreadRow } from './StoryStage';
 import useStoryTimeline from './useStoryTimeline';
 import { LOGIN_STORY, loginCaptionIndex } from './storyContent';
-import {
-  LOGIN_TIMELINE, storyCard, storyFade, threadDraw, timelineFill,
-} from './authMotion';
+import { LOGIN_TIMELINE, storyFade, timelineFill } from './authMotion';
 
 /**
  * "The reply comes back" (AUTH_DESIGN_GUIDE.md §4).
@@ -17,17 +15,6 @@ import {
  */
 
 const S = LOGIN_STORY;
-
-const Dot = ({ tone = 'orange', className }) => (
-  <span
-    aria-hidden="true"
-    className={cn(
-      'h-2 w-2 shrink-0 rounded-full',
-      tone === 'orange' ? 'bg-primary-light' : 'bg-emerald-500',
-      className,
-    )}
-  />
-);
 
 /** Sent / Day 3 / Day 7 / Day 14, with a 2px track and the orange fill. */
 function FollowUpTimeline({ phase, compact = false }) {
@@ -77,39 +64,6 @@ function FollowUpTimeline({ phase, compact = false }) {
           );
         })}
       </ol>
-    </div>
-  );
-}
-
-/**
- * One card on the thread: a 12px dot to its left, and the segment down to the
- * next card's dot, drawn once that next card is in.
- */
-function ThreadRow({ shown, drawNext, last = false, children }) {
-  return (
-    <div className="relative pl-8">
-      <motion.span
-        aria-hidden="true"
-        initial={false}
-        animate={{ opacity: shown ? 1 : 0 }}
-        transition={storyFade}
-        className="absolute left-0 top-[22px] h-3 w-3 rounded-full bg-primary-light"
-      />
-      {!last && (
-        // From under this dot (34px) to the top of the next one: the row's
-        // height plus the 16px gap plus the next dot's 22px offset, minus 34.
-        <motion.span
-          aria-hidden="true"
-          initial={false}
-          animate={{ scaleY: drawNext ? 1 : 0 }}
-          transition={threadDraw}
-          style={{ originY: 0 }}
-          className="absolute left-[5px] top-[34px] h-[calc(100%+4px)] w-0.5 bg-primary-light"
-        />
-      )}
-      <motion.div initial={false} variants={storyCard} animate={shown ? 'in' : 'out'}>
-        {children}
-      </motion.div>
     </div>
   );
 }

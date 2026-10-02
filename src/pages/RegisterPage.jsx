@@ -15,6 +15,8 @@ import AuthField from '../components/auth/AuthField';
 import PasswordField from '../components/auth/PasswordField';
 import PillButton from '../components/auth/PillButton';
 import AuthGoogleButton from '../components/auth/AuthGoogleButton';
+import SignupStory from '../components/auth/SignupStory';
+import SignupIntroSlides, { shouldShowSignupIntro } from '../components/auth/SignupIntroSlides';
 import {
   FOCUS_RING, SHAKE_TRANSITION, SHAKE_X, SIGNUP_DONE_HOLD_MS,
   checkPop, chipsRow, riseContainer, riseItem,
@@ -58,6 +60,18 @@ const RegisterPage = () => {
   const { register: authRegister, loginWithGoogle } = useAuth();
   const [showUsernamePicker, setShowUsernamePicker] = useState(false);
   const [step, setStep] = useState(1); // 1 | 2 | 'done'
+
+  // Phone, first visit: intro slides before the form. Read before first paint
+  // so a returning visitor never sees them flash. Widening to desktop drops
+  // them (without marking them seen).
+  const [showIntro, setShowIntro] = useState(shouldShowSignupIntro);
+  useEffect(() => {
+    if (!showIntro || !window.matchMedia) return undefined;
+    const mq = window.matchMedia('(min-width: 1024px)');
+    const onChange = (e) => { if (e.matches) setShowIntro(false); };
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, [showIntro]);
   const [cameBack, setCameBack] = useState(false);
   const [blockError, setBlockError] = useState('');
 
@@ -181,13 +195,21 @@ const RegisterPage = () => {
     setBlockError('');
   };
 
+  if (showIntro) {
+    return (
+      <MotionConfig reducedMotion="user">
+        <SignupIntroSlides onDone={() => setShowIntro(false)} />
+      </MotionConfig>
+    );
+  }
+
   return (
     <MotionConfig reducedMotion="user">
       {showUsernamePicker && (
         <UsernamePickerModal onDone={() => { setShowUsernamePicker(false); navigate('/dashboard', { replace: true }); }} />
       )}
 
-      <AuthShell>
+      <AuthShell story={<SignupStory />}>
         <AnimatePresence mode="wait">
           {step === 1 && (
             <motion.div key="step1" variants={riseContainer} initial="hidden" animate="show" exit="exit">

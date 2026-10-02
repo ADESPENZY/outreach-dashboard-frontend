@@ -98,6 +98,48 @@ export const LOGIN_TIMELINE = {
   loopMs: 12600,
 };
 
+/** Typing in the introduction card: 2 characters every 36ms. */
+export const TYPE_CHARS = 2;
+export const TYPE_TICK_MS = 36;
+export const typingMs = (length) => Math.ceil(length / TYPE_CHARS) * TYPE_TICK_MS;
+
+/**
+ * Signup story, ms from loop start (§7). Phases:
+ * 0 clear · 1 role · 2 person · 3 introduction card, typing · 4 Approve ·
+ * 5 sent. Approve, sent and the restart are timed from the end of typing,
+ * so the schedule follows the length of the sample body.
+ */
+export function signupTimeline(bodyLength) {
+  const typingEnd = 4500 + typingMs(bodyLength);
+  return {
+    steps: [
+      { at: 0, phase: 0 },
+      { at: 700, phase: 1 },
+      { at: 2500, phase: 2 },
+      { at: 4500, phase: 3 },
+      { at: typingEnd + 600, phase: 4 },
+      { at: typingEnd + 2600, phase: 5 },
+    ],
+    loopMs: typingEnd + 7200,
+  };
+}
+
+/** Approve pill: a ring pulses out every 1.2s. */
+export const approvePulse = {
+  animate: { scale: [1, 1.6], opacity: [0.55, 0] },
+  transition: { duration: 1.2, repeat: Infinity, ease: EASE_OUT },
+};
+
+/** Phone intro slides: direction-aware slide and fade. */
+export const slideSwap = {
+  enter: (dir) => ({ opacity: 0, x: 24 * dir }),
+  center: { opacity: 1, x: 0, transition: { duration: 0.35, ease: EASE_OUT } },
+  exit: (dir) => ({ opacity: 0, x: -24 * dir, transition: { duration: 0.25, ease: EASE_OUT } }),
+};
+
+/** How far a swipe has to travel to change slide. */
+export const SWIPE_PX = 50;
+
 /** Story card in/out. Out is quicker: it is the loop clearing, not narration. */
 export const storyCard = {
   out: { opacity: 0, y: 14, transition: { duration: 0.3, ease: EASE_IN_OUT } },

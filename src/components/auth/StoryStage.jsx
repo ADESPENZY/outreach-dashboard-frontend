@@ -1,6 +1,51 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { cn } from '../../lib/utils';
-import { captionSwap, storyFade } from './authMotion';
+import { captionSwap, storyCard, storyFade, threadDraw } from './authMotion';
+
+/** Small status dot: orange (in progress) or green (done). */
+export const Dot = ({ tone = 'orange', className }) => (
+  <span
+    aria-hidden="true"
+    className={cn(
+      'h-2 w-2 shrink-0 rounded-full',
+      tone === 'orange' ? 'bg-primary-light' : 'bg-emerald-500',
+      className,
+    )}
+  />
+);
+
+/**
+ * One card on the story thread: a 12px dot to its left, and the segment down
+ * to the next card's dot, drawn once that next card is in. Rows sit 16px apart.
+ */
+export function ThreadRow({ shown, drawNext, last = false, children }) {
+  return (
+    <div className="relative pl-8">
+      <motion.span
+        aria-hidden="true"
+        initial={false}
+        animate={{ opacity: shown ? 1 : 0 }}
+        transition={storyFade}
+        className="absolute left-0 top-[22px] h-3 w-3 rounded-full bg-primary-light"
+      />
+      {!last && (
+        // From under this dot (34px) to the top of the next one: the row's
+        // height plus the 16px gap plus the next dot's 22px offset, minus 34.
+        <motion.span
+          aria-hidden="true"
+          initial={false}
+          animate={{ scaleY: drawNext ? 1 : 0 }}
+          transition={threadDraw}
+          style={{ originY: 0 }}
+          className="absolute left-[5px] top-[34px] h-[calc(100%+4px)] w-0.5 bg-primary-light"
+        />
+      )}
+      <motion.div initial={false} variants={storyCard} animate={shown ? 'in' : 'out'}>
+        {children}
+      </motion.div>
+    </div>
+  );
+}
 
 /**
  * A caption that crossfades when `index` changes. Both captions share one grid
