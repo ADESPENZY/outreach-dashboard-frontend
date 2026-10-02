@@ -3,11 +3,12 @@ import { Link } from 'react-router-dom';
 import LandingNav from '../components/landing/LandingNav';
 import HeroVoid from '../components/landing/hero/HeroVoid';
 import JourneySection from '../components/landing/journey/JourneySection';
+import OtherWaySection from '../components/landing/otherway/OtherWaySection';
+import ReachSection from '../components/landing/reach/ReachSection';
 import useReducedMotion from '../components/landing/hero/useReducedMotion';
 import { registerLenis } from '../components/landing/hero/smoothScroll';
 import loadMotion from '../components/landing/motion/loadMotion';
 import EmailShowcase from '../components/landing/EmailShowcase';
-import CompareSection from '../components/landing/CompareSection';
 import TrustSection from '../components/landing/TrustSection';
 import AudienceSection from '../components/landing/AudienceSection';
 import PricingSection from '../components/landing/PricingSection';
@@ -241,8 +242,9 @@ export default function LandingPage() {
       <main>
         <HeroVoid sectionRef={heroRef} />
         <JourneySection />
+        <OtherWaySection />
+        <ReachSection />
         <EmailShowcase />
-        <CompareSection />
         <TrustSection />
         <AudienceSection />
         <NicheSection />
