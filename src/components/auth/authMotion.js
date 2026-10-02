@@ -19,7 +19,19 @@ export const FOCUS_RING =
 export const riseContainer = {
   hidden: {},
   show: { transition: { staggerChildren: 0.06 } },
+  // Signup step change (AnimatePresence mode="wait"): out fades, in rises.
+  exit: { opacity: 0, transition: { duration: 0.25, ease: EASE_OUT } },
 };
+
+/** Email domain chips: the row opens from 0 height and fades. */
+export const chipsRow = {
+  initial: { height: 0, opacity: 0 },
+  animate: { height: 'auto', opacity: 1, transition: { duration: 0.25, ease: EASE_OUT } },
+  exit: { height: 0, opacity: 0, transition: { duration: 0.25, ease: EASE_OUT } },
+};
+
+/** How long "You're in." shows before the post-signup redirect. */
+export const SIGNUP_DONE_HOLD_MS = 1200;
 
 export const riseItem = {
   hidden: { opacity: 0, y: 12 },

@@ -32,7 +32,11 @@ export async function register(data) {
     const response = await api.post("/api/accounts/auth/register/", data);
     return response.data;
   } catch (err) {
-    throw new Error(parseApiError(err));
+    const e = new Error(parseApiError(err));
+    // Keep the raw response (as login does) so RegisterPage can put each
+    // field's validation error under its own input.
+    e.response = err.response;
+    throw e;
   }
 }
 
