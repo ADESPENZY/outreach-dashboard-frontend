@@ -65,3 +65,45 @@ export const DONE_HOLD_MS = 350;
 
 /** One full turn of the void's rings and CVs. */
 export const VOID_TURN_SECONDS = 140;
+
+/** First paint shows the finished frame; the loop starts this much later. */
+export const STORY_START_DELAY_MS = 2200;
+
+/**
+ * Login story, ms from loop start (§7). Phases:
+ * 0 clear · 1 card A · 2 Delivered · 3 timeline, Day 3 · 4 Day 7 ·
+ * 5 reply, Day 14 cancelled. The last step is also the finished frame.
+ */
+export const LOGIN_TIMELINE = {
+  steps: [
+    { at: 0, phase: 0 },
+    { at: 700, phase: 1 },
+    { at: 1700, phase: 2 },
+    { at: 3400, phase: 3 },
+    { at: 5000, phase: 4 },
+    { at: 6800, phase: 5 },
+  ],
+  loopMs: 12600,
+};
+
+/** Story card in/out. Out is quicker: it is the loop clearing, not narration. */
+export const storyCard = {
+  out: { opacity: 0, y: 14, transition: { duration: 0.3, ease: EASE_IN_OUT } },
+  in: { opacity: 1, y: 0, transition: { duration: 0.55, ease: EASE_OUT } },
+};
+
+/** Thread segment draws from the top. */
+export const threadDraw = { duration: 0.8, ease: EASE_IN_OUT };
+
+/** Timeline fill grows from the left. */
+export const timelineFill = { duration: 0.9, ease: EASE_IN_OUT };
+
+/** Caption change: the new one rises 14px while the old one fades. */
+export const captionSwap = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0, transition: { duration: 0.5, ease: EASE_OUT } },
+  exit: { opacity: 0, transition: { duration: 0.5, ease: EASE_OUT } },
+};
+
+/** Small fades inside a card ("Delivered", progress segments). */
+export const storyFade = { duration: 0.4, ease: EASE_OUT };

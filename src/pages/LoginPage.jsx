@@ -12,6 +12,7 @@ import AuthField from '../components/auth/AuthField';
 import PasswordField from '../components/auth/PasswordField';
 import PillButton from '../components/auth/PillButton';
 import AuthGoogleButton from '../components/auth/AuthGoogleButton';
+import LoginStory, { LoginStoryCompact } from '../components/auth/LoginStory';
 import {
   DONE_HOLD_MS, FOCUS_RING, SHAKE_TRANSITION, SHAKE_X, riseContainer, riseItem,
 } from '../components/auth/authMotion';
@@ -99,8 +100,13 @@ const LoginPage = () => {
         <UsernamePickerModal onDone={() => { setShowUsernamePicker(false); navigate(from, { replace: true }); }} />
       )}
 
-      <AuthShell headerRight={<InstallButton />}>
+      <AuthShell headerRight={<InstallButton />} story={<LoginStory />}>
         <motion.div variants={riseContainer} initial="hidden" animate="show">
+          {/* Phone only: the story, compact, above the h1. */}
+          <motion.div variants={riseItem} className="mb-8 lg:hidden">
+            <LoginStoryCompact />
+          </motion.div>
+
           <motion.div variants={riseItem}>
             <h1 className="text-[38px] font-bold leading-[1.04] tracking-[-0.03em] lg:text-[52px] lg:leading-[1.02] lg:tracking-[-0.032em]">
               Welcome back.
