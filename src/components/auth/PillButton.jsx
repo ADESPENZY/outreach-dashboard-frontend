@@ -43,7 +43,7 @@ const PillButton = forwardRef(function PillButton(
       whileHover={inactive ? undefined : 'hover'}
       whileTap={inactive ? undefined : 'press'}
       className={cn(
-        'relative h-[58px] w-full rounded-full bg-primary-light px-16 text-base font-semibold text-ink lg:h-14',
+        'relative h-[54px] w-full rounded-full bg-primary-light px-16 text-base font-semibold text-ink lg:h-14',
         FOCUS_RING,
         inactive && 'cursor-default',
         className,

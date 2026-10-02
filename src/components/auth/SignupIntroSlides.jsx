@@ -135,7 +135,7 @@ export default function SignupIntroSlides({ onDone }) {
   const slide = INTRO_SLIDES[index];
 
   return (
-    <div className="flex min-h-[100svh] flex-col bg-ink px-6 pb-6 pt-5 font-sans text-white antialiased">
+    <div className="flex min-h-[100dvh] flex-col bg-ink px-6 pb-[max(20px,env(safe-area-inset-bottom))] pt-[max(20px,env(safe-area-inset-top))] font-sans text-white antialiased">
       <div className="mx-auto flex w-full max-w-[440px] flex-1 flex-col">
         <header className="flex items-center justify-between gap-3">
           <Logo tone="reversed" height={24} />
@@ -172,7 +172,8 @@ export default function SignupIntroSlides({ onDone }) {
               aria-roledescription="slide"
               aria-label={`${index + 1} of ${INTRO_SLIDES.length}`}
             >
-              <div className="relative flex h-[360px] flex-col justify-center overflow-hidden rounded-[28px] bg-ink-stage p-5">
+              {/* 360px panel; 296px on screens under 740px tall so Continue stays on screen. */}
+              <div className="relative flex h-[360px] flex-col justify-center overflow-hidden rounded-[28px] bg-ink-stage p-5 [@media(max-height:739.98px)]:h-[296px]">
                 <div
                   aria-hidden="true"
                   className="pointer-events-none absolute -bottom-28 -right-28 h-64 w-64 rounded-full bg-[radial-gradient(circle,theme(colors.primary.light/35%)_0%,transparent_66%)]"

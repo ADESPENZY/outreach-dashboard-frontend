@@ -212,14 +212,14 @@ const RegisterPage = () => {
       <AuthShell story={<SignupStory />}>
         <AnimatePresence mode="wait">
           {step === 1 && (
-            <motion.div key="step1" variants={riseContainer} initial="hidden" animate="show" exit="exit">
+            <motion.div key="step1" variants={riseContainer} initial="hidden" animate="show" exit="exit" className="pt-[18px] lg:pt-0">
               <motion.div variants={riseItem}>
                 <p className={EYEBROW}>Step 1 of 2</p>
                 <h1 className={H1}>Get introduced.</h1>
                 <p className={LEAD}>Create your account. Nothing is sent until you approve it.</p>
               </motion.div>
 
-              <motion.form variants={riseItem} onSubmit={onContinue} noValidate className="mt-8 lg:mt-10">
+              <motion.form variants={riseItem} onSubmit={onContinue} noValidate className="mt-4 lg:mt-10">
                 <div ref={emailScope}>
                   <AuthField
                     id="email"
@@ -260,7 +260,7 @@ const RegisterPage = () => {
                   )}
                 </AnimatePresence>
 
-                <div ref={consentScope} className="mt-5">
+                <div ref={consentScope} className="mt-3 lg:mt-5">
                   <div className="flex min-h-11 items-start gap-3">
                     <Controller
                       name="agreed"
@@ -291,11 +291,11 @@ const RegisterPage = () => {
                   )}
                 </div>
 
-                <PillButton className="mt-6">Continue</PillButton>
-                <p className="mt-4 text-center text-sm text-white/60">Free during early access · No card</p>
+                <PillButton className="mt-4 lg:mt-6">Continue</PillButton>
+                <p className="mt-3 text-center text-sm text-white/60 lg:mt-4">Free during early access · No card</p>
               </motion.form>
 
-              <motion.div variants={riseItem} className="my-6 flex items-center gap-3" aria-hidden="true">
+              <motion.div variants={riseItem} className="my-3.5 flex items-center gap-3 lg:my-6" aria-hidden="true">
                 <span className="h-px flex-1 bg-white/10" />
                 <span className="text-xs uppercase tracking-[0.14em] text-white/60">or</span>
                 <span className="h-px flex-1 bg-white/10" />
@@ -308,15 +308,15 @@ const RegisterPage = () => {
                 />
               </motion.div>
 
-              <motion.p variants={riseItem} className="mt-6 text-[15px] text-white/70">
+              <motion.p variants={riseItem} className="mt-3.5 text-[15px] text-white/70 lg:mt-6">
                 Already have an account?{' '}
-                <Link to="/login" className={`inline-flex min-h-11 items-center lg:min-h-0 ${TEXT_LINK}`}>Sign in</Link>
+                <Link to="/login" className={`-my-3 inline-flex min-h-11 items-center lg:my-0 lg:min-h-0 ${TEXT_LINK}`}>Sign in</Link>
               </motion.p>
             </motion.div>
           )}
 
           {step === 2 && (
-            <motion.div key="step2" variants={riseContainer} initial="hidden" animate="show" exit="exit">
+            <motion.div key="step2" variants={riseContainer} initial="hidden" animate="show" exit="exit" className="pt-[18px] lg:pt-0">
               <motion.div variants={riseItem}>
                 <p className={EYEBROW}>Step 2 of 2</p>
                 <h1 className={H1}>Almost there.</h1>
@@ -338,9 +338,9 @@ const RegisterPage = () => {
                 variants={riseItem}
                 onSubmit={handleSubmit(onCreate, onCreateInvalid)}
                 noValidate
-                className="mt-8 lg:mt-10"
+                className="mt-4 lg:mt-10"
               >
-                <div ref={step2Scope} className="flex flex-col gap-5">
+                <div ref={step2Scope} className="flex flex-col gap-3 lg:gap-5">
                   <AuthField
                     id="full_name"
                     label="Full name"
@@ -384,7 +384,7 @@ const RegisterPage = () => {
                   {blockError && <p role="alert" className={ERROR_TEXT}>{blockError}</p>}
                 </div>
 
-                <PillButton status={mutation.isPending ? 'busy' : 'idle'} className="mt-7">
+                <PillButton status={mutation.isPending ? 'busy' : 'idle'} className="mt-4 lg:mt-7">
                   Create account
                 </PillButton>
               </motion.form>
@@ -392,7 +392,7 @@ const RegisterPage = () => {
           )}
 
           {step === 'done' && (
-            <motion.div key="done" variants={riseContainer} initial="hidden" animate="show" role="status">
+            <motion.div key="done" variants={riseContainer} initial="hidden" animate="show" role="status" className="pt-[18px] lg:pt-0">
               <motion.div
                 {...checkPop}
                 className="flex h-[68px] w-[68px] items-center justify-center rounded-full bg-primary-light text-ink"

@@ -12,9 +12,9 @@ import { cn } from '../../lib/utils';
  */
 
 const INPUT_CLASS =
-  'h-[54px] rounded-[14px] border-white/15 bg-ink-stage px-4 py-0 text-base text-white shadow-none md:text-base ' +
+  'h-[52px] rounded-[14px] border-white/15 bg-ink-stage px-4 py-0 text-base text-white shadow-none md:text-base ' +
   'placeholder:text-white/40 transition-[border-color,box-shadow] duration-200 hover:border-white/30 ' +
-  'focus-visible:border-primary-light focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-light/20 ' +
+  'lg:h-[54px] focus-visible:border-primary-light focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary-light/20 ' +
   'aria-[invalid=true]:border-primary-tint/70';
 
 const AuthField = forwardRef(function AuthField(

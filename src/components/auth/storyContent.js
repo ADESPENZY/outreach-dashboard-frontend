@@ -33,7 +33,6 @@ export const LOGIN_STORY = {
     bars: [92, 78, 44], // % widths of the placeholder reply lines
     stopped: 'Follow-ups stopped',
   },
-  compactReply: 'Reply in your inbox',
 };
 
 /** Which caption (and progress segment) a login phase belongs to. */

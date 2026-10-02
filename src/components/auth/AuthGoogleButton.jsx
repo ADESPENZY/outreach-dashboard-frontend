@@ -20,7 +20,9 @@ export default function AuthGoogleButton({ onSuccess, onError }) {
   }, []);
 
   return (
-    <div ref={ref} className="flex min-h-[52px] w-full items-center">
+    // Google draws its button 40px tall; the slot is 44px on phone (tap minimum)
+    // and 52px on desktop.
+    <div ref={ref} className="flex min-h-11 w-full items-center lg:min-h-[52px]">
       <GoogleSignInSlot>
         <GoogleLogin
           onSuccess={onSuccess}

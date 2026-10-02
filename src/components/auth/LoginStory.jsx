@@ -144,7 +144,11 @@ export default function LoginStory() {
   );
 }
 
-/** Phone: caption, the four-dot timeline (labels only), and the reply row. */
+/**
+ * Phone: caption and the four-dot timeline (labels only), about 124px tall.
+ * Height is the content's; the caption reserves two lines so the card never
+ * jumps when a shorter caption comes in.
+ */
 export function LoginStoryCompact({ className }) {
   const phase = useLoginPhase();
 
@@ -152,25 +156,19 @@ export function LoginStoryCompact({ className }) {
     <div
       data-story-phase={phase}
       className={cn(
-        'flex h-[226px] flex-col justify-between overflow-hidden rounded-[18px] border border-white/[0.07] bg-ink-stage p-5',
+        'rounded-[18px] border border-white/[0.07] bg-ink-stage p-4',
         className,
       )}
     >
       <StoryCaption
         captions={S.captions}
         index={loginCaptionIndex(phase)}
-        minHeightClass="min-h-[50px]"
-        className="text-[21px] leading-[1.15] tracking-[-0.02em]"
+        minHeightClass="min-h-[2.4em] text-[17px]"
+        className="text-[17px] leading-[1.2] tracking-[-0.01em]"
       />
-      <FollowUpTimeline phase={phase} compact />
-      <motion.p
-        initial={false}
-        animate={{ opacity: phase >= 5 ? 1 : 0 }}
-        transition={storyFade}
-        className="flex items-center gap-2 text-sm text-white/80"
-      >
-        <Dot />{S.compactReply}
-      </motion.p>
+      <div className="mt-3">
+        <FollowUpTimeline phase={phase} compact />
+      </div>
     </div>
   );
 }

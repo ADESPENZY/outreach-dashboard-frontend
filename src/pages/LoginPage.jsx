@@ -102,13 +102,14 @@ const LoginPage = () => {
 
       <AuthShell headerRight={<InstallButton />} story={<LoginStory />}>
         <motion.div variants={riseContainer} initial="hidden" animate="show">
-          {/* Phone only: the story, compact, above the h1. */}
-          <motion.div variants={riseItem} className="mb-8 lg:hidden">
+          {/* Phone only: the story, compact, above the h1. Dropped on short
+              screens (under 680px tall) so the form fits without scrolling. */}
+          <motion.div variants={riseItem} className="mt-3.5 lg:hidden [@media(max-height:679.98px)]:hidden">
             <LoginStoryCompact />
           </motion.div>
 
           <motion.div variants={riseItem}>
-            <h1 className="text-[38px] font-bold leading-[1.04] tracking-[-0.03em] lg:text-[52px] lg:leading-[1.02] lg:tracking-[-0.032em]">
+            <h1 className="mt-[18px] text-[32px] font-bold leading-[1.05] tracking-[-0.03em] lg:mt-0 lg:text-[52px] lg:leading-[1.02] lg:tracking-[-0.032em]">
               Welcome back.
             </h1>
             <p className="mt-3 hidden text-[17px] leading-normal text-white/70 lg:block">
@@ -120,9 +121,9 @@ const LoginPage = () => {
             variants={riseItem}
             onSubmit={handleSubmit(onValid, onInvalid)}
             noValidate
-            className="mt-8 lg:mt-10"
+            className="mt-4 lg:mt-10"
           >
-            <div ref={fieldsScope} className="flex flex-col gap-5">
+            <div ref={fieldsScope} className="flex flex-col gap-3 lg:gap-5">
               <AuthField
                 id="username"
                 label="Username"
@@ -160,12 +161,12 @@ const LoginPage = () => {
               )}
             </div>
 
-            <PillButton status={status} doneLabel="Signed in" className="mt-7">
+            <PillButton status={status} doneLabel="Signed in" className="mt-4 lg:mt-7">
               Sign in
             </PillButton>
           </motion.form>
 
-          <motion.div variants={riseItem} className="my-6 flex items-center gap-3" aria-hidden="true">
+          <motion.div variants={riseItem} className="my-3.5 flex items-center gap-3 lg:my-6" aria-hidden="true">
             <span className="h-px flex-1 bg-white/10" />
             <span className="text-xs uppercase tracking-[0.14em] text-white/60">or</span>
             <span className="h-px flex-1 bg-white/10" />
@@ -178,11 +179,11 @@ const LoginPage = () => {
             />
           </motion.div>
 
-          <motion.p variants={riseItem} className="mt-6 text-[15px] text-white/70">
+          <motion.p variants={riseItem} className="mt-3.5 text-[15px] text-white/70 lg:mt-6">
             New here?{' '}
             <Link
               to="/register"
-              className={`inline-flex min-h-11 items-center rounded-sm font-semibold text-primary-light transition-colors hover:text-primary-tint lg:min-h-0 ${FOCUS_RING}`}
+              className={`-my-3 inline-flex min-h-11 items-center rounded-sm font-semibold text-primary-light transition-colors hover:text-primary-tint lg:my-0 lg:min-h-0 ${FOCUS_RING}`}
             >
               Create an account
             </Link>
