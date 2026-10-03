@@ -5,7 +5,6 @@ import Logo from '../brand/Logo';
 const LINKS = [
   { href: '#how', label: 'How it works' },
   { href: '#why', label: 'Why not auto-apply' },
-  { href: '#pricing', label: 'Pricing' },
   { href: '#faq', label: 'FAQ' },
 ];
 

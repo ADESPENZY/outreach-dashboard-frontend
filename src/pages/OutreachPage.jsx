@@ -45,10 +45,37 @@ function JobLink({ jobId, className = '', children }) {
   );
 }
 
-// Intents the backend will draft a response for (reply_drafter.DRAFTABLE_INTENTS).
-// Anything else — including 'unclear' — gets an empty box the user writes
-// themselves, rather than a guess sent in their name.
-const DRAFTABLE_INTENTS = ['cv_request', 'apply_via_portal', 'wants_to_talk', 'not_a_fit'];
+// Every classified intent now gets a draft (reply_drafter.DRAFTABLE_INTENTS).
+// A reply is only left undrafted for a reason the backend states explicitly in
+// draft_decline_reason, which is what DECLINE_COPY below renders.
+const DRAFTABLE_INTENTS = [
+  'cv_request', 'apply_via_portal', 'wants_to_talk', 'not_a_fit',
+  'wrong_person', 'unclear',
+];
+
+// Why there is no draft, in the user's words. Keyed on the backend's
+// reply_drafter.DECLINE_* values.
+//
+// This replaces a single hard-coded sentence — "their message was not clear
+// enough to guess at" — which the card showed for wrong_person, for unclear,
+// for an unclassified reply AND for a draft that was attempted and refused.
+// Three of those four were something else entirely, and on a card already
+// reading "Wrong contact 90%" the UI was contradicting its own classifier.
+const DECLINE_COPY = {
+  opt_out:   'They asked not to be contacted again, so nothing is drafted here. Replying is up to you.',
+  deletion:  'They asked for their data to be removed, so nothing is drafted here.',
+  auto_reply: 'This is an out-of-office reply, not an answer. Your follow-up is already scheduled for when they are back.',
+  gone_contact: 'This person has left, so there is nobody to reply to. We are finding who hires for this role now.',
+  awaiting_applied: 'Confirm you have applied and we will draft the reply.',
+  no_cue:    'Their message did not quite match how we read it, so we have not guessed. Write whatever fits.',
+  refused:   'We drafted a reply three times and none passed our own checks, so we are not putting words in your mouth. Press Redraft to try again.',
+  verifier_down: 'We could not verify a draft against your CV just now. Press Redraft in a few minutes.',
+  no_body:   'Their reply came through empty, so there is nothing to answer.',
+  no_profile: 'Add your profile details in Settings and we can draft replies for you.',
+  error:     'Something went wrong drafting this one. Press Redraft to try again.',
+};
+
+const DEFAULT_DECLINE_COPY = 'Write your reply. We have not drafted one for this message.';
 
 // Friendly labels for classified reply intents (backend reply_intent → human).
 const REPLY_INTENT_LABEL = {
@@ -739,6 +766,11 @@ function ThreadTimeline({ messages, tone = 'light', title = 'The conversation' }
 // box the user writes themselves beats a guess sent in their name.
 function ReplyComposer({ email, onSent }) {
   const draftable = DRAFTABLE_INTENTS.includes(email.reply_intent);
+  // What to say when the box is empty. A stated reason always wins; the
+  // fallback never speculates about THEIR message, only about ours.
+  const declineCopy = email.draft_decline_reason
+    ? (DECLINE_COPY[email.draft_decline_reason] || DEFAULT_DECLINE_COPY)
+    : DEFAULT_DECLINE_COPY;
   const alreadySent = !!email.responded_at;
 
   const [body, setBody] = useState(email.suggested_reply || '');
@@ -908,11 +940,25 @@ function ReplyComposer({ email, onSent }) {
             onChange={(e) => setBody(e.target.value)}
             rows={6}
             disabled={sending}
-            placeholder={draftable
+            placeholder={email.suggested_reply
               ? 'Your drafted reply appears here. Edit anything before sending.'
-              : 'Write your reply. We did not draft one because their message was not clear enough to guess at.'}
+              : declineCopy}
             className="w-full px-3 py-2 rounded-lg border border-emerald-200 bg-white text-sm text-black-light leading-relaxed outline-none focus:border-emerald-400 focus:ring-2 focus:ring-emerald-200/50 transition-all resize-y disabled:opacity-60"
           />
+
+          {email.reply_intent === 'wrong_person' && email.reply_redirect_name && (
+            <p className="mt-2 text-xs text-emerald-900">
+              They pointed at <span className="font-semibold">{email.reply_redirect_name}</span>
+              {email.reply_redirect_email && (
+                <>{' '}&middot;{' '}
+                  <a href={`mailto:${email.reply_redirect_email}`} className="underline hover:text-emerald-700">
+                    {email.reply_redirect_email}
+                  </a>
+                </>
+              )}
+              . Nothing has been sent to them.
+            </p>
+          )}
 
           {email.suggested_reply_cv_ready && (
             <div className="mt-2 flex items-center gap-3 flex-wrap">

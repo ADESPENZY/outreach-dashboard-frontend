@@ -10,12 +10,10 @@ import { registerLenis } from '../components/landing/hero/smoothScroll';
 import loadMotion from '../components/landing/motion/loadMotion';
 import EmailShowcase from '../components/landing/EmailShowcase';
 import TrustSection from '../components/landing/TrustSection';
-import AudienceSection from '../components/landing/AudienceSection';
-import PricingSection from '../components/landing/PricingSection';
 import FaqSection from '../components/landing/FaqSection';
 import LandingFooter from '../components/landing/LandingFooter';
 import { FAQS } from '../components/landing/faqData';
-import { Section, Eyebrow, Heading, Lead, Reveal } from '../components/landing/primitives';
+import { Section, Heading, Lead, Reveal } from '../components/landing/primitives';
 import { useAuth } from '../context/AuthContext';
 
 const SITE = 'https://applydir.com';
@@ -113,70 +111,6 @@ function useSmoothScroll(enabled) {
   }, [enabled]);
 }
 
-/**
- * The problem, stated once, in the reader's own words.
- *
- * Out of the render since the void hero says this visually. Kept until the
- * redesign is signed off.
- */
-function ProblemSection() {
-  return (
-    <Section tone="ink">
-      <div className="grid gap-10 [&>*]:min-w-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.85fr)] lg:gap-20">
-        <Reveal>
-          <Eyebrow tone="ink">The problem</Eyebrow>
-          <Heading>Applying is a black hole. You already knew that.</Heading>
-        </Reveal>
-        <Reveal delay={90}>
-          <p className="text-[clamp(1rem,1.35vw,1.15rem)] leading-relaxed text-white/65 lg:pt-2">
-            Your CV goes into an applicant tracking system and gets scored on keywords
-            before a person ever reads your name. You do it eighty times and hear
-            nothing &mdash; and the silence does not even tell you whether you were close.
-          </p>
-          <p className="mt-5 text-[clamp(1rem,1.35vw,1.15rem)] leading-relaxed text-white/65">
-            Meanwhile the roles that get filled quietly get filled by someone who knew
-            someone. That is not luck. That is a warm introduction, and it is the only
-            part of hiring that has never been automated well.
-          </p>
-        </Reveal>
-      </div>
-    </Section>
-  );
-}
-
-/** The wedge: fields where the work itself fits inside the email. */
-function NicheSection() {
-  return (
-    <Section tone="paper">
-      <div className="grid gap-10 [&>*]:min-w-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)] lg:gap-20">
-        <Reveal>
-          <Eyebrow>Copywriters and marketers</Eyebrow>
-          <Heading>When your work fits in an email, nobody has to take your word for it.</Heading>
-        </Reveal>
-        <Reveal delay={90}>
-          <p className="text-[clamp(1rem,1.35vw,1.15rem)] leading-relaxed text-[#3A3632] lg:pt-2">
-            A developer has to describe what they built. A copywriter can just write the
-            better headline in the body of the message. There is nothing to verify and
-            no portfolio to click &mdash; a marketing lead reads it in eight seconds and
-            either likes the line or does not.
-          </p>
-          <p className="mt-5 text-[15px] leading-relaxed text-[#57534E]">
-            Reading a prospect&rsquo;s live page and drafting that rewrite is the next
-            thing we ship. Today ApplyDir writes the introduction that gets you read.
-          </p>
-          <a
-            href="#email"
-            className="mt-6 inline-flex items-center gap-2 text-[15px] font-semibold text-primary-dark transition-colors hover:text-primary-light"
-          >
-            See the example
-            <span aria-hidden="true">&rarr;</span>
-          </a>
-        </Reveal>
-      </div>
-    </Section>
-  );
-}
-
 function FinalCta() {
   return (
     <Section tone="ink">
@@ -246,9 +180,6 @@ export default function LandingPage() {
         <ReachSection />
         <EmailShowcase />
         <TrustSection />
-        <AudienceSection />
-        <NicheSection />
-        <PricingSection />
         <FaqSection />
         <FinalCta />
       </main>

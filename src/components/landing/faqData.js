@@ -24,7 +24,7 @@ export const FAQS = [
   },
   {
     q: 'What does it cost?',
-    a: 'Nothing today. It is free while we are in early access, and the tiers shown on this page are placeholders while we work out a fair model.',
+    a: 'Nothing today. ApplyDir is free while we are in early access.',
   },
   {
     q: 'How is this different from an auto-applier?',

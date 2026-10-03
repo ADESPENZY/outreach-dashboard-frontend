@@ -14,7 +14,6 @@ const SOCIALS = [
 const NAV = [
   { label: 'How it works', href: '#how' },
   { label: 'Why not auto-apply', href: '#why' },
-  { label: 'Pricing', href: '#pricing' },
   { label: 'FAQ', href: '#faq' },
 ];
 
